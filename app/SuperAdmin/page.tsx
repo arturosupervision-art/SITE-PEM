@@ -22,6 +22,10 @@ export default function SuperAdministrador() {
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<any>(null);
   const [nuevoQR, setNuevoQR] = useState('');
 
+  // ESTADOS DE FINANZAS (NUEVO)
+  const [historialRetiros, setHistorialRetiros] = useState<any[]>([]);
+  const [cargandoRetiros, setCargandoRetiros] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrInputRef = useRef<HTMLInputElement>(null);
   const nuevoQrInputRef = useRef<HTMLInputElement>(null);
@@ -56,6 +60,26 @@ export default function SuperAdministrador() {
     if (!error && data) setAlumnos(data);
     setCargando(false);
   };
+
+  // NUEVO: Función para cargar la auditoría de retiros
+  const cargarRetiros = async () => {
+    setCargandoRetiros(true);
+    const { data, error } = await supabase
+      .from('movimientos_caja')
+      .select('*')
+      .eq('tipo', 'retiro')
+      .order('created_at', { ascending: false }); // Los más recientes primero
+    
+    if (!error && data) setHistorialRetiros(data);
+    setCargandoRetiros(false);
+  };
+
+  // NUEVO: Cargar los retiros automáticamente cuando se entre a finanzas
+  useEffect(() => {
+    if (pestaña === 'finanzas') {
+      cargarRetiros();
+    }
+  }, [pestaña]);
 
   useEffect(() => {
     if (mostrarModalQR && qrInputRef.current) qrInputRef.current.focus();
@@ -408,11 +432,63 @@ export default function SuperAdministrador() {
               </button>
             </div>
 
-            <div className="md:col-span-3 bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-500 font-medium">
-              <p>
-                Aquí se conectará el historial detallado de tickets y
-                movimientos de caja en la siguiente fase.
-              </p>
+            {/* TABLA DE AUDITORÍA DE RETIROS (NUEVA) */}
+            <div className="md:col-span-3 bg-slate-900 border border-slate-800 rounded-xl shadow-md overflow-hidden">
+              <div className="flex justify-between items-center p-6 border-b border-slate-800">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  💳 Auditoría de Retiros de Caja
+                </h2>
+                <button
+                  onClick={cargarRetiros}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm transition-colors border border-slate-700"
+                >
+                  🔄 Actualizar
+                </button>
+              </div>
+
+              {cargandoRetiros ? (
+                <p className="text-slate-400 p-8 animate-pulse text-center font-medium">
+                  Cargando movimientos encriptados...
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-300">
+                    <thead className="bg-slate-950 text-slate-400 uppercase text-xs">
+                      <tr>
+                        <th className="px-6 py-4 font-bold">Fecha y Hora</th>
+                        <th className="px-6 py-4 font-bold">Concepto / Autorización</th>
+                        <th className="px-6 py-4 font-bold text-right">Monto Extraído</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/50">
+                      {historialRetiros.length > 0 ? (
+                        historialRetiros.map((retiro) => (
+                          <tr key={retiro.id} className="hover:bg-slate-800/30 transition-colors">
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-400">
+                              {new Date(retiro.created_at).toLocaleString('es-MX', {
+                                dateStyle: 'short',
+                                timeStyle: 'short'
+                              })}
+                            </td>
+                            <td className="px-6 py-4 font-medium text-slate-200">
+                              {retiro.concepto}
+                            </td>
+                            <td className="px-6 py-4 text-red-400 font-bold text-right">
+                              - ${retiro.monto.toFixed(2)} MXN
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={3} className="px-6 py-8 text-center text-slate-500 italic">
+                            No hay retiros registrados. La caja está intacta.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
