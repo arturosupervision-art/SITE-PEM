@@ -1,214 +1,183 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase'; // Ruta correcta para Vercel
+import { supabase } from '../lib/supabase'; // CORRECCIÓN PARA VERCEL: Un solo nivel atrás
 
-export default function CajaOperativa() {
-  const [matricula, setMatricula] = useState('');
-  const [alumno, setAlumno] = useState<any>(null);
-  const [montoVenta, setMontoVenta] = useState<number | ''>('');
-  const [mensaje, setMensaje] = useState('');
+export default function CajaPrincipal() {
+  const [busqueda, setBusqueda] = useState('');
+  const [alumnos, setAlumnos] = useState<any[]>([]);
+  const [cargando, setCargando] = useState(false);
   
-  // Estados para Historial en Caja
-  const [mostrarModalHistorial, setMostrarModalHistorial] = useState(false);
-  const [historialCaja, setHistorialCaja] = useState<any[]>([]);
-  const [fechaHistorial, setFechaHistorial] = useState(new Date().toISOString().split('T')[0]);
-  
-  // Estados del Calendario Desplegable
-  const [mostrarCalendario, setMostrarCalendario] = useState(false);
-  const [fechaNavegacion, setFechaNavegacion] = useState(new Date());
-  
-  const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-  const diasEnMes = new Date(fechaNavegacion.getFullYear(), fechaNavegacion.getMonth() + 1, 0).getDate();
-  const primerDiaDelMes = new Date(fechaNavegacion.getFullYear(), fechaNavegacion.getMonth(), 1).getDay();
+  // Estado para manejar la cantidad manual por alumno (ID -> Cantidad)
+  const [cantidades, setCantidades] = useState<{ [key: string]: number }>({});
 
-  const cambiarMes = (direccion: number) => setFechaNavegacion(new Date(fechaNavegacion.getFullYear(), fechaNavegacion.getMonth() + direccion, 1));
-  const seleccionarDia = (dia: number) => {
-    setFechaHistorial(`${fechaNavegacion.getFullYear()}-${String(fechaNavegacion.getMonth() + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`);
-    setMostrarCalendario(false);
-  };
+  const tarifaBoletaje = 20;
 
-  const buscarAlumno = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMensaje('');
-    const { data } = await supabase.from('alumnos').select('*').eq('matricula', matricula).single();
-    if (data) { setAlumno(data); } else { setAlumno(null); setMensaje('❌ Alumno no encontrado'); }
-  };
-
-  const registrarVenta = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!alumno || !montoVenta) return;
+  // Función para buscar alumnos (simulando los "primeros 15" o por búsqueda)
+  const buscarAlumnos = async (termino: string) => {
+    setCargando(true);
+    let query = supabase.from('alumnos').select('*').limit(15);
     
-    const nuevosBoletos = alumno.boletos_disponibles + (Number(montoVenta) / 30);
-    const { error: errorAlumno } = await supabase.from('alumnos')
-      .update({ boletos_disponibles: nuevosBoletos }).eq('id', alumno.id);
-
-    const { error: errorCaja } = await supabase.from('movimientos_caja').insert([{
-      tipo: 'venta',
-      monto: Number(montoVenta),
-      concepto: `Recarga Matrícula: ${alumno.matricula}`
-    }]);
-
-    if (!errorAlumno && !errorCaja) {
-      setMensaje(`✅ Venta Exitosa. Nuevo saldo: ${nuevosBoletos} boletos.`);
-      setMontoVenta('');
-      setMatricula('');
-      setAlumno(null);
-    } else {
-      setMensaje('❌ Error al procesar la venta.');
+    if (termino) {
+      query = query.or(`nombre_completo.ilike.%${termino}%,matricula.ilike.%${termino}%`);
     }
-  };
-
-  const cargarHistorialCaja = async () => {
-    const [y, m, d] = fechaHistorial.split('-').map(Number);
-    const inicioDia = new Date(y, m - 1, d, 0, 0, 0).toISOString();
-    const finDia = new Date(y, m - 1, d, 23, 59, 59).toISOString();
-
-    const { data } = await supabase.from('movimientos_caja').select('*')
-      .gte('created_at', inicioDia).lte('created_at', finDia).order('created_at', { ascending: false });
     
-    if (data) setHistorialCaja(data);
+    const { data } = await query;
+    if (data) {
+      setAlumnos(data);
+      // Inicializar cantidades manuales en 1
+      const instCantidades: { [key: string]: number } = {};
+      data.forEach(a => instCantidades[a.id] = 1);
+      setCantidades(instCantidades);
+    }
+    setCargando(false);
   };
 
   useEffect(() => {
-    if (mostrarModalHistorial) cargarHistorialCaja();
-  }, [fechaHistorial, mostrarModalHistorial]);
+    buscarAlumnos('');
+  }, []);
+
+  const handleCobrar = async (alumno: any, cantidadBoletos: number) => {
+    const montoTotal = cantidadBoletos * tarifaBoletaje;
+    const nuevosBoletos = (alumno.boletos_disponibles || 0) + cantidadBoletos;
+
+    // 1. Actualizar saldo del alumno
+    const { error: errorAlumno } = await supabase.from('alumnos')
+      .update({ boletos_disponibles: nuevosBoletos })
+      .eq('id', alumno.id);
+
+    // 2. Registrar la venta en caja
+    const { error: errorCaja } = await supabase.from('movimientos_caja').insert([{
+      tipo: 'venta',
+      monto: montoTotal,
+      concepto: `Venta ${cantidadBoletos} boletos - Matrícula: ${alumno.matricula}`
+    }]);
+
+    if (!errorAlumno && !errorCaja) {
+      alert(`✅ Venta de $${montoTotal} registrada con éxito.`);
+      buscarAlumnos(busqueda); // Refrescar lista
+    } else {
+      alert('❌ Error al procesar la venta.');
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#030712] p-6 flex flex-col items-center justify-center font-sans">
-      {/* TU DISEÑO ORIGINAL RESTAURADO AQUÍ */}
-      <div className="bg-[#0f172a] p-8 rounded-2xl w-full max-w-[450px]">
-        <h2 className="text-2xl font-bold text-white text-center mb-8">Caja Operativa</h2>
+    <div className="min-h-screen bg-[#020617] p-4 font-sans flex justify-center">
+      <div className="w-full max-w-3xl">
         
-        {mensaje && <div className="mb-4 p-3 rounded-lg text-center font-bold bg-slate-800 text-white">{mensaje}</div>}
-
-        <form onSubmit={buscarAlumno} className="mb-8">
-          <label className="text-slate-300 text-sm font-medium mb-2 block">Matrícula o QR del Alumno:</label>
-          <div className="flex gap-3">
-            <input 
-              type="text" 
-              value={matricula} 
-              onChange={(e) => setMatricula(e.target.value)} 
-              className="flex-1 bg-[#020617] border border-slate-800 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-500 transition-colors" 
-              placeholder="Ej: 2024001" 
-            />
-            <button type="submit" className="bg-[#2563eb] hover:bg-blue-600 text-white font-medium px-6 py-3 rounded-lg transition-colors">
-              Buscar
-            </button>
-          </div>
-        </form>
-
-        {alumno && (
-          <form onSubmit={registrarVenta} className="bg-[#1e293b]/50 p-5 rounded-xl border border-slate-700/50 mb-8 space-y-4">
-            <div className="flex justify-between border-b border-slate-700/50 pb-3">
-              <span className="text-slate-400">Alumno:</span>
-              <span className="text-white font-bold">{alumno.nombre_completo}</span>
+        {/* HEADER */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4 bg-white/5 p-3 rounded-2xl border border-slate-800">
+            {/* Logo Placeholder (Puedes cambiar el src por tu logo real) */}
+            <div className="bg-white p-1.5 rounded-lg">
+              <img src="/logo.png" alt="Logo" className="h-10 w-auto object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
             </div>
-            <div className="flex justify-between border-b border-slate-700/50 pb-3">
-              <span className="text-slate-400">Saldo:</span>
-              <span className="text-emerald-400 font-bold">{alumno.boletos_disponibles} Boletos</span>
-            </div>
-            <div className="pt-2">
-              <label className="text-slate-300 text-sm font-medium block mb-2">Monto a Recargar ($):</label>
-              <input 
-                type="number" 
-                value={montoVenta} 
-                onChange={(e) => setMontoVenta(Number(e.target.value))} 
-                className="w-full bg-[#020617] border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-emerald-500 mb-4" 
-                placeholder="Ej: 150" 
-                required 
-              />
-              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg transition-colors">
-                Procesar Recarga
-              </button>
-            </div>
-          </form>
-        )}
-
-        <button 
-          onClick={() => { 
-            setFechaHistorial(new Date().toISOString().split('T')[0]); 
-            setFechaNavegacion(new Date()); 
-            setMostrarModalHistorial(true); 
-          }} 
-          className="w-full bg-[#1e293b] hover:bg-slate-700 text-white font-medium py-3 rounded-lg transition-colors"
-        >
-          Ver Historial de Caja
-        </button>
-      </div>
-
-      {/* MODAL DE HISTORIAL */}
-      {mostrarModalHistorial && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-[#0f172a] border border-slate-800 p-6 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-white">Historial de Operaciones</h2>
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <button onClick={() => setMostrarCalendario(!mostrarCalendario)} className="flex items-center gap-2 bg-[#0a0f1d] border border-slate-800 rounded-xl px-4 py-2 hover:bg-slate-800 transition-colors">
-                    <span className="text-sm font-bold text-slate-400">Día:</span>
-                    <span className="text-sm text-slate-200 font-medium tracking-wide">{fechaHistorial.split('-').reverse().join('/')}</span>
-                    <span className="text-slate-400 ml-1">📅</span>
-                  </button>
-                  {mostrarCalendario && (
-                    <div className="absolute right-0 mt-2 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4 w-64 z-50">
-                      <div className="flex justify-between items-center mb-4">
-                        <button onClick={() => cambiarMes(-1)} className="text-slate-400 hover:text-white p-1">◀</button>
-                        <span className="text-white font-bold text-sm">{meses[fechaNavegacion.getMonth()]} {fechaNavegacion.getFullYear()}</span>
-                        <button onClick={() => cambiarMes(1)} className="text-slate-400 hover:text-white p-1">▶</button>
-                      </div>
-                      <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-500 mb-2">
-                        <span>Do</span><span>Lu</span><span>Ma</span><span>Mi</span><span>Ju</span><span>Vi</span><span>Sa</span>
-                      </div>
-                      <div className="grid grid-cols-7 gap-1 text-center">
-                        {Array.from({ length: primerDiaDelMes }).map((_, i) => (<div key={`empty-${i}`} className="p-2"></div>))}
-                        {Array.from({ length: diasEnMes }).map((_, i) => {
-                          const dia = i + 1;
-                          const m = String(fechaNavegacion.getMonth() + 1).padStart(2, '0');
-                          const dStr = String(dia).padStart(2, '0');
-                          const estaSeleccionado = `${fechaNavegacion.getFullYear()}-${m}-${dStr}` === fechaHistorial;
-                          return (
-                            <button key={dia} onClick={() => seleccionarDia(dia)} className={`p-1.5 text-sm rounded-lg transition-colors ${estaSeleccionado ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
-                              {dia}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <button onClick={() => setMostrarModalHistorial(false)} className="text-white bg-slate-800 px-3 py-1 rounded-lg hover:bg-red-600 font-bold">&times;</button>
-              </div>
-            </div>
-
-            <div className="overflow-y-auto flex-1 bg-slate-950 rounded-xl border border-slate-800">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-[#0f172a] text-slate-400 uppercase text-xs sticky top-0">
-                  <tr>
-                    <th className="px-6 py-4 font-bold border-b border-slate-800">Hora</th>
-                    <th className="px-6 py-4 font-bold border-b border-slate-800">Tipo</th>
-                    <th className="px-6 py-4 font-bold text-right border-b border-slate-800">Monto</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/50">
-                  {historialCaja.map((mov) => (
-                    <tr key={mov.id}>
-                      <td className="px-6 py-4">{new Date(mov.created_at).toLocaleTimeString('es-MX')}</td>
-                      <td className="px-6 py-4 font-bold">{mov.tipo.toUpperCase()}</td>
-                      <td className={`px-6 py-4 font-bold text-right ${mov.tipo === 'retiro' ? 'text-[#ff5c5c]' : 'text-emerald-400'}`}>
-                        {mov.tipo === 'retiro' ? '-' : '+'}${mov.monto.toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                  {historialCaja.length === 0 && (
-                     <tr><td colSpan={3} className="px-6 py-8 text-center text-slate-500">No hay movimientos en esta fecha.</td></tr>
-                  )}
-                </tbody>
-              </table>
+            <div>
+              <h1 className="text-[#fbbf24] font-black text-2xl tracking-wide">SITE - PEM</h1>
+              <p className="text-emerald-400 text-sm font-bold flex items-center gap-1">
+                ✅ Caja Abierta
+              </p>
             </div>
           </div>
         </div>
-      )}
+
+        {/* BOTONES SUPERIORES */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <button className="bg-[#6366f1] hover:bg-indigo-500 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-1 border border-indigo-500/50">
+            <span className="text-2xl">📜</span>
+            <span className="tracking-wide">Historial</span>
+          </button>
+          
+          <button className="bg-[#f59e0b] hover:bg-amber-400 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-1 border border-amber-500/50">
+            <span className="text-2xl">💸</span>
+            <span className="tracking-wide text-center leading-tight">Retirar<br/>Efectivo</span>
+          </button>
+          
+          <button className="bg-[#ef4444] hover:bg-red-400 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-1 border border-red-500/50">
+            <span className="text-2xl">🔒</span>
+            <span className="tracking-wide text-center leading-tight">Cerrar<br/>Caja</span>
+          </button>
+        </div>
+
+        {/* BUSCADOR Y TARIFA */}
+        <div className="bg-[#0f172a] p-6 rounded-3xl mb-6 shadow-xl border border-slate-800">
+          <div className="relative mb-6">
+            <span className="absolute left-4 top-3.5 text-slate-400 text-lg">🔍</span>
+            <input 
+              type="text" 
+              value={busqueda}
+              onChange={(e) => {
+                setBusqueda(e.target.value);
+                buscarAlumnos(e.target.value);
+              }}
+              placeholder="Buscar por nombre o matrícula..." 
+              className="w-full bg-[#020617] text-slate-200 rounded-xl py-4 pl-12 pr-4 border border-slate-800 outline-none focus:border-indigo-500 transition-colors shadow-inner" 
+            />
+          </div>
+          <div className="flex justify-center items-center gap-4 text-slate-400 font-medium">
+            <span>Tarifa Boletaje:</span>
+            <span className="bg-[#020617] px-8 py-2 rounded-xl border border-slate-800 font-black text-[#fbbf24] text-lg shadow-inner">
+              {tarifaBoletaje}
+            </span>
+          </div>
+        </div>
+
+        {/* LISTA DE ALUMNOS */}
+        <div className="bg-[#0f172a] p-6 rounded-3xl shadow-xl border border-slate-800">
+          <h2 className="text-white font-bold text-lg mb-6">Alumnos (Mostrando primeros 15)</h2>
+          
+          {cargando ? (
+            <p className="text-slate-400 text-center py-8">Cargando alumnos...</p>
+          ) : alumnos.length === 0 ? (
+            <p className="text-slate-500 text-center py-8">No se encontraron alumnos.</p>
+          ) : (
+            alumnos.map((alumno) => (
+              <div key={alumno.id} className="bg-[#020617] rounded-2xl p-6 border border-slate-800 mb-4 shadow-sm hover:border-slate-700 transition-colors">
+                
+                {/* Info Alumno */}
+                <h3 className="text-white font-bold text-xl uppercase mb-2 tracking-wide">{alumno.nombre_completo || 'CARLOS SÁNCHEZ RUIZ'}</h3>
+                <div className="flex items-center gap-4 mb-5">
+                  <span className="text-slate-400 text-sm font-medium">Matrícula: {alumno.matricula || 'MAT-003'}</span>
+                  <button className="bg-[#1e293b] text-slate-300 text-xs px-4 py-1.5 rounded-full border border-slate-700 hover:bg-slate-700 transition-colors font-medium">
+                    Vincular QR Alumno
+                  </button>
+                </div>
+                
+                {/* Saldo */}
+                <div className="bg-emerald-950/40 text-emerald-400 w-fit px-4 py-2 rounded-xl text-sm font-bold border border-emerald-900/50 mb-5 flex items-center gap-2">
+                  <span className="text-base">🎟️</span> Saldo: {alumno.boletos_disponibles || 0} Boletos
+                </div>
+                
+                {/* Botones de Venta */}
+                <div className="flex items-center gap-3 flex-wrap bg-[#0f172a] p-2 rounded-xl border border-slate-800/50">
+                  <button onClick={() => handleCobrar(alumno, 1)} className="bg-[#1e293b] text-slate-200 px-5 py-2.5 rounded-lg border border-slate-700 hover:bg-slate-700 hover:text-white transition-all font-medium whitespace-nowrap">
+                    1 Boleto (${tarifaBoletaje})
+                  </button>
+                  <button onClick={() => handleCobrar(alumno, 5)} className="bg-[#1e293b] text-slate-200 px-5 py-2.5 rounded-lg border border-slate-700 hover:bg-slate-700 hover:text-white transition-all font-medium flex items-center gap-2 whitespace-nowrap">
+                    <span>📦</span> 5 pz
+                  </button>
+                  
+                  <div className="flex-1 flex justify-end gap-3 min-w-[200px]">
+                    <input 
+                      type="number" 
+                      min="1"
+                      value={cantidades[alumno.id] || 1}
+                      onChange={(e) => setCantidades({...cantidades, [alumno.id]: Number(e.target.value)})}
+                      className="w-20 bg-[#1e293b] border border-slate-700 rounded-lg text-center text-white font-bold outline-none focus:border-emerald-500 transition-colors" 
+                    />
+                    <button 
+                      onClick={() => handleCobrar(alumno, cantidades[alumno.id] || 1)}
+                      className="bg-[#10b981] hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-lg transition-colors shadow-lg shadow-emerald-900/20 whitespace-nowrap"
+                    >
+                      Cobrar ${(cantidades[alumno.id] || 1) * tarifaBoletaje}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
