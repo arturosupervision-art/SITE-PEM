@@ -4,12 +4,14 @@ import { Inter } from 'next/font/google';
 
 const inter = Inter({ subsets: ['latin'] });
 
-export const metadata: Metadata = {
-  title: 'SITE-PEM | Transporte Escolar',
-  description:
-    'Sistema Inteligente de Transporte Escolar - Preparatoria Estado de México',
-  manifest: '/manifest.json',
-};
+export const metadata = {
+  title: 'SITE-PEM',
+  description: 'Sistema de Transportes PEM',
+  icons: {
+    icon: '/icon.png',
+    apple: '/apple-icon.png',
+  },
+}
 
 export default function RootLayout({
   children,
