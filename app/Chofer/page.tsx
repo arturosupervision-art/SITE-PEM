@@ -141,6 +141,30 @@ export default function PantallaChofer() {
         },
       ]);
 
+      // -------------------------------------------------------------
+      // NUEVO: DISPARAR CORREO AUTOMÁTICO AL TUTOR
+      // -------------------------------------------------------------
+      // Validamos si la columna existe y tiene un correo
+      if (alumno.correo_tutor) {
+        const horaActual = new Date().toLocaleTimeString('es-MX', { 
+          hour: '2-digit', minute: '2-digit', hour12: true 
+        });
+
+        // Hacemos el fetch sin 'await' para no trabar la pantalla del chofer
+        fetch('/api/enviar-correo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            correoTutor: alumno.correo_tutor,
+            nombreAlumno: alumno.nombre_completo,
+            tipoMovimiento: modoRuta,
+            hora: horaActual,
+            ubicacion: enlaceMaps
+          })
+        }).catch(err => console.error("Error disparando el correo:", err));
+      }
+      // -------------------------------------------------------------
+
       reproducirSonido('EXITO');
       setEstadoPantalla('EXITO');
       setAlumnoActual({ ...alumno, boletos_disponibles: nuevoSaldo });
