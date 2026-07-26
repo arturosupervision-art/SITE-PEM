@@ -1,4 +1,3 @@
-// app/page.tsx
 import Link from 'next/link'
 
 export default function Home() {
@@ -8,19 +7,17 @@ export default function Home() {
         <div className="bg-white p-3 rounded-2xl inline-block mb-6">
           <img src="/logo negro.png" alt="Logo SITE" className="h-16 object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
         </div>
-        <h1 className="text-3xl font-black text-[#fbbf24] mb-2">SITE - Módulos</h1>
-        <p className="text-slate-400 text-sm mb-8">Selecciona el módulo al que deseas acceder:</p>
+        <h1 className="text-3xl font-black text-[#fbbf24] mb-2">SITE - Sistema</h1>
+        <p className="text-slate-400 text-sm mb-8">Sistema de Transporte Escolar Activo 🚌</p>
 
         <div className="space-y-4">
           <Link 
             href="/caja" 
             className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-lg flex items-center justify-between group"
           >
-            <span className="text-lg">🚌 Caja / Venta de Viajes</span>
+            <span className="text-lg">🚌 Ir al Módulo de Caja</span>
             <span className="group-hover:translate-x-1 transition-transform">➔</span>
           </Link>
-          
-          {/* Aquí podrás agregar más botones en el futuro (ej. Alumnos, Reportes, etc.) */}
         </div>
       </div>
 
