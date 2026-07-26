@@ -1,268 +1,370 @@
-'use client';
+'use client'
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
-import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+export default function ModuloFinanzasSuperAdmin() {
+  // ================= ESTADOS DEL DASHBOARD =================
+  const [cargando, setCargando] = useState(true)
+  const [ventasDia, setVentasDia] = useState(0)
+  const [boletosDia, setBoletosDia] = useState(0)
+  const [ventasSemana, setVentasSemana] = useState(0)
+  const [retiros, setRetiros] = useState<any[]>([])
 
-export default function SuperAdministrador() {
-  const [rolActivo, setRolActivo] = useState<'superadmin' | 'admin_finanzas' | null>(null);
-  const [pinIngresado, setPinIngresado] = useState('');
-  const [pestaña, setPestaña] = useState<'alumnos' | 'finanzas'>('alumnos');
-
-  const [alumnos, setAlumnos] = useState<any[]>([]);
-  const [cargando, setCargando] = useState(false);
-
-  const [historialRetiros, setHistorialRetiros] = useState<any[]>([]);
-  const [cargandoRetiros, setCargandoRetiros] = useState(false);
-
-  // Estados para el Dashboard
-  const [ventasHoy, setVentasHoy] = useState(0);
-  const [boletosHoy, setBoletosHoy] = useState(0);
-  const [ventasSemana, setVentasSemana] = useState(0);
-
-  // Historial General
-  const [mostrarModalHistorial, setMostrarModalHistorial] = useState(false);
-  const [historialCompleto, setHistorialCompleto] = useState<any[]>([]);
-  const [fechaHistorial, setFechaHistorial] = useState(new Date().toISOString().split('T')[0]);
-  const [cargandoHistorial, setCargandoHistorial] = useState(false);
-  const [mostrarCalendario, setMostrarCalendario] = useState(false);
-  const [fechaNavegacion, setFechaNavegacion] = useState(new Date());
-
-  // AQUÍ ESTÁN LAS VARIABLES DEL CORTE Z RESTAURADAS (Para que Vercel pase la compilación)
-  const [mostrarModalCorte, setMostrarModalCorte] = useState(false);
-  const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
-  const [datosCorte, setDatosCorte] = useState<any[] | null>(null);
-
-  const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-
-  const diasEnMes = new Date(fechaNavegacion.getFullYear(), fechaNavegacion.getMonth() + 1, 0).getDate();
-  const primerDiaDelMes = new Date(fechaNavegacion.getFullYear(), fechaNavegacion.getMonth(), 1).getDay();
+  // ================= ESTADOS DE MODALES =================
+  const [mostrarCorte, setMostrarCorte] = useState(false)
+  const [fechaCorte, setFechaCorte] = useState(new Date().toLocaleDateString('en-CA')) // YYYY-MM-DD
   
-  const cambiarMes = (d: number) => setFechaNavegacion(new Date(fechaNavegacion.getFullYear(), fechaNavegacion.getMonth() + d, 1));
-  const seleccionarDia = (dia: number) => {
-    setFechaHistorial(`${fechaNavegacion.getFullYear()}-${String(fechaNavegacion.getMonth() + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`);
-    setMostrarCalendario(false);
-  };
+  const [mostrarHistorial, setMostrarHistorial] = useState(false)
+  const [fechaHistorial, setFechaHistorial] = useState(new Date().toLocaleDateString('en-CA'))
+  const [historialUnificado, setHistorialUnificado] = useState<any[]>([])
+  const [statsHistorial, setStatsHistorial] = useState({ ventas: 0, retiros: 0, total: 0 })
 
-  const iniciarSesion = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pinIngresado === '7777') { setRolActivo('superadmin'); setPestaña('alumnos'); cargarAlumnos(); }
-    else if (pinIngresado === '8888') { setRolActivo('admin_finanzas'); setPestaña('finanzas'); }
-    else { alert('PIN Incorrecto'); setPinIngresado(''); }
-  };
-
-  const cerrarSesion = () => { setRolActivo(null); setPinIngresado(''); };
-
-  const cargarAlumnos = async () => {
-    setCargando(true);
-    const { data } = await supabase.from('alumnos').select('*').order('id', { ascending: false });
-    if (data) setAlumnos(data);
-    setCargando(false);
-  };
-
-  const cargarEstadisticasCaja = async () => {
-    const hoy = new Date();
-    const y = hoy.getFullYear(), m = hoy.getMonth(), d = hoy.getDate();
-    const inicioHoy = new Date(y, m, d, 0, 0, 0).toISOString();
-    const finHoy = new Date(y, m, d, 23, 59, 59).toISOString();
-    const inicioSemana = new Date(y, m, d - 7, 0, 0, 0).toISOString();
-
-    const { data: dataHoy } = await supabase.from('movimientos_caja').select('*').gte('created_at', inicioHoy).lte('created_at', finHoy);
-    if (dataHoy) {
-      const ingresosHoy = dataHoy.filter(mov => mov.tipo !== 'retiro');
-      setVentasHoy(ingresosHoy.reduce((acc, curr) => acc + curr.monto, 0));
-      setBoletosHoy(ingresosHoy.length);
-    }
-
-    const { data: dataSemana } = await supabase.from('movimientos_caja').select('monto, tipo').gte('created_at', inicioSemana).lte('created_at', finHoy);
-    if (dataSemana) {
-      const ingresosSemana = dataSemana.filter(mov => mov.tipo !== 'retiro');
-      setVentasSemana(ingresosSemana.reduce((acc, curr) => acc + curr.monto, 0));
-    }
-  };
-
-  const cargarRetiros = async () => {
-    setCargandoRetiros(true);
-    const { data } = await supabase.from('movimientos_caja').select('*').eq('tipo', 'retiro').order('created_at', { ascending: false });
-    if (data) setHistorialRetiros(data);
-    setCargandoRetiros(false);
-  };
-
-  const cargarHistorialPorFecha = async (fechaStr: string) => {
-    setCargandoHistorial(true);
-    const [y, m, d] = fechaStr.split('-').map(Number);
-    const inicioDia = new Date(y, m - 1, d, 0, 0, 0).toISOString();
-    const finDia = new Date(y, m - 1, d, 23, 59, 59).toISOString();
-
-    const { data } = await supabase.from('movimientos_caja').select('*').gte('created_at', inicioDia).lte('created_at', finDia).order('created_at', { ascending: false });
-    if (data) setHistorialCompleto(data);
-    setCargandoHistorial(false);
-  };
-
-  // FUNCIONES DE CORTE Z RESTAURADAS
-  const generarCorteZ = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const [y, m, d] = fechaCorte.split('-').map(Number);
-    const inicioDia = new Date(y, m - 1, d, 0, 0, 0).toISOString();
-    const finDia = new Date(y, m - 1, d, 23, 59, 59).toISOString();
-    const { data } = await supabase.from('movimientos_caja').select('*').gte('created_at', inicioDia).lte('created_at', finDia);
-    if (data) setDatosCorte(data);
-  };
-
-  const imprimirCorte = () => window.print();
+  // ================= ESTADO DEL TICKET =================
+  const [ticketActual, setTicketActual] = useState<any>(null)
 
   useEffect(() => {
-    if (pestaña === 'finanzas') { cargarRetiros(); cargarEstadisticasCaja(); }
-  }, [pestaña]);
+    cargarDatosDashboard()
+  }, [])
 
-  useEffect(() => { 
-    if (mostrarModalHistorial) cargarHistorialPorFecha(fechaHistorial); 
-  }, [fechaHistorial, mostrarModalHistorial]);
+  useEffect(() => {
+    if (mostrarHistorial) cargarHistorialCompleto()
+  }, [fechaHistorial, mostrarHistorial])
 
-  if (!rolActivo) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col justify-between items-center p-6">
-        <div className="w-full"></div>
-        <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center">
-          <h2 className="text-2xl font-black text-white mb-1">SITE-PEM</h2>
-          <p className="text-purple-400 text-xs font-bold uppercase tracking-widest mb-6">Acceso Restringido</p>
-          <form onSubmit={iniciarSesion}>
-            <input type="password" value={pinIngresado} onChange={(e) => setPinIngresado(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center text-white text-2xl tracking-[0.5em] outline-none focus:border-purple-500 mb-6" placeholder="••••" maxLength={4} />
-            <button type="submit" className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(147,51,234,0.3)]">Entrar al Panel</button>
-          </form>
-        </div>
-        <footer className="text-center py-4 w-full"><p className="text-xs text-slate-500 font-medium">SITE-PEM System</p></footer>
-      </div>
-    );
+  // ================= FUNCIONES DE CARGA (CON ZONA HORARIA REPARADA) =================
+  const obtenerLimitesDia = (fechaLocal: string) => {
+    return {
+      inicio: new Date(`${fechaLocal}T00:00:00.000`).toISOString(),
+      fin: new Date(`${fechaLocal}T23:59:59.999`).toISOString()
+    }
   }
 
+  const cargarDatosDashboard = async () => {
+    setCargando(true)
+    const hoyLocal = new Date().toLocaleDateString('en-CA')
+    const limitesHoy = obtenerLimitesDia(hoyLocal)
+
+    // Limites semana (hace 7 días)
+    const fechaSemana = new Date()
+    fechaSemana.setDate(fechaSemana.getDate() - 7)
+    const limitesSemana = obtenerLimitesDia(fechaSemana.toLocaleDateString('en-CA'))
+
+    try {
+      // 1. Ventas de Hoy
+      const { data: vHoy } = await supabase.from('ventas_boletos').select('monto_total, cantidad_boletos').gte('created_at', limitesHoy.inicio).lte('created_at', limitesHoy.fin)
+      const totalVentasHoy = (vHoy || []).reduce((acc, v) => acc + v.monto_total, 0)
+      const totalBoletosHoy = (vHoy || []).reduce((acc, v) => acc + v.cantidad_boletos, 0)
+      
+      // 2. Ventas de la Semana
+      const { data: vSemana } = await supabase.from('ventas_boletos').select('monto_total').gte('created_at', limitesSemana.inicio).lte('created_at', limitesHoy.fin)
+      const totalVentasSemana = (vSemana || []).reduce((acc, v) => acc + v.monto_total, 0)
+
+      // 3. Retiros de Hoy
+      const { data: rHoy } = await supabase.from('movimientos_caja').select('*').gte('created_at', limitesHoy.inicio).lte('created_at', limitesHoy.fin).order('created_at', { ascending: false })
+
+      setVentasDia(totalVentasHoy)
+      setBoletosDia(totalBoletosHoy)
+      setVentasSemana(totalVentasSemana)
+      setRetiros(rHoy || [])
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  const cargarHistorialCompleto = async () => {
+    const limites = obtenerLimitesDia(fechaHistorial)
+
+    const { data: ventas } = await supabase.from('ventas_boletos').select(`id, created_at, monto_total, cantidad_boletos, folio_secuencial, alumnos ( nombre_completo )`).gte('created_at', limites.inicio).lte('created_at', limites.fin)
+    const { data: retirosDb } = await supabase.from('movimientos_caja').select('*').gte('created_at', limites.inicio).lte('created_at', limites.fin)
+
+    // Unificar y ordenar por fecha
+    let unificado: any[] = []
+    let tVentas = 0
+    let tRetiros = 0
+
+    if (ventas) {
+      ventas.forEach(v => {
+        tVentas += v.monto_total
+        unificado.push({ tipo: 'VENTA', id: v.id, fecha: v.created_at, folio: `SITE-${String(v.folio_secuencial).padStart(5,'0')}`, descripcion: `Venta: ${v.alumnos?.nombre_completo} (${v.cantidad_boletos} bts)`, monto: v.monto_total })
+      })
+    }
+
+    if (retirosDb) {
+      retirosDb.forEach(r => {
+        tRetiros += r.monto
+        unificado.push({ tipo: 'RETIRO', id: r.id, fecha: r.created_at, folio: `RET-${r.id.substring(0,5)}`, descripcion: `Retiro: ${r.concepto}`, monto: r.monto })
+      })
+    }
+
+    unificado.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+    
+    setHistorialUnificado(unificado)
+    setStatsHistorial({ ventas: tVentas, retiros: tRetiros, total: tVentas - tRetiros })
+  }
+
+  const generarCorteZ = async () => {
+    const limites = obtenerLimitesDia(fechaCorte)
+    const { data: ventas } = await supabase.from('ventas_boletos').select('monto_total, cantidad_boletos').gte('created_at', limites.inicio).lte('created_at', limites.fin)
+    const { data: retirosDb } = await supabase.from('movimientos_caja').select('monto').gte('created_at', limites.inicio).lte('created_at', limites.fin)
+
+    const vTotales = (ventas || []).reduce((acc, v) => acc + v.monto_total, 0)
+    const bTotales = (ventas || []).reduce((acc, v) => acc + v.cantidad_boletos, 0)
+    const rTotales = (retirosDb || []).reduce((acc, r) => acc + r.monto, 0)
+
+    setTicketActual({
+      tipo: 'CORTE_Z', fechaCorte: fechaCorte, fechaImpresion: new Date().toLocaleString('es-MX'), ventas: vTotales, boletos: bTotales, retiros: rTotales, totalNeto: vTotales - rTotales
+    })
+    setMostrarCorte(false)
+  }
+
+  if (cargando) return <div className="min-h-screen bg-[#020617] flex justify-center items-center text-white font-bold text-xl">Cargando Finanzas...</div>
+
   return (
-    <div className="min-h-screen bg-slate-950 p-6 font-sans text-slate-200 flex flex-col justify-between print:bg-white print:p-0">
-      <div className="max-w-6xl mx-auto w-full print:hidden">
-        
-        {/* ENCABEZADO */}
-        <div className="bg-slate-900 border border-purple-900/50 p-6 rounded-2xl shadow-[0_0_30px_rgba(147,51,234,0.15)] flex justify-between items-center mb-6">
-          <div>
-            <p className="text-xs text-purple-400 font-bold uppercase tracking-wider mb-1">SITE-PEM • {rolActivo === 'superadmin' ? 'Super Administrador' : 'Finanzas'}</p>
-            <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-fuchsia-400">Panel Central</h1>
-          </div>
-          <button onClick={cerrarSesion} className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold py-2 px-4 rounded-lg">Cerrar Sesión</button>
+    <div className="min-h-screen bg-[#020617] text-slate-200 font-sans p-4 md:p-8">
+      
+      {/* HEADER */}
+      <div className="max-w-6xl mx-auto flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
+        <div>
+          <h3 className="text-indigo-400 font-bold text-sm tracking-widest uppercase">SITE-PEM • FINANZAS</h3>
+          <h1 className="text-white font-black text-3xl">Panel Central</h1>
         </div>
-
-        {/* NAVEGACIÓN */}
-        {rolActivo === 'superadmin' && (
-          <div className="flex gap-2 mb-6 bg-slate-900/50 p-2 rounded-xl w-fit border border-slate-800">
-            <button onClick={() => setPestaña('alumnos')} className={`px-6 py-2 rounded-lg text-sm font-bold ${pestaña === 'alumnos' ? 'bg-purple-600 text-white' : 'text-slate-400'}`}>👥 Alumnos</button>
-            <button onClick={() => setPestaña('finanzas')} className={`px-6 py-2 rounded-lg text-sm font-bold ${pestaña === 'finanzas' ? 'bg-purple-600 text-white' : 'text-slate-400'}`}>💰 Finanzas</button>
-          </div>
-        )}
-
-        {/* PESTAÑA: ALUMNOS */}
-        {pestaña === 'alumnos' && (
-           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
-              <h2 className="text-xl font-bold text-white">Gestión de Alumnos</h2>
-              <p className="text-slate-400 mt-2">Alumnos registrados: {alumnos.length}</p>
-           </div>
-        )}
-
-        {/* PESTAÑA: FINANZAS */}
-        {pestaña === 'finanzas' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-slate-900 border border-emerald-900/50 p-6 rounded-2xl flex flex-col justify-center items-center text-center shadow-lg relative overflow-hidden">
-              <div className="absolute top-0 w-full h-1 bg-emerald-500"></div>
-              <span className="text-emerald-500 mb-2 text-3xl">💵</span>
-              <p className="text-slate-400 text-sm font-bold uppercase mb-1">Ventas del Día</p>
-              <h2 className="text-3xl font-black text-white mb-2">${ventasHoy.toFixed(2)}</h2>
-              
-              {/* AQUÍ ESTÁ DE VUELTA EL BOTÓN DE IMPRIMIR CORTE Z */}
-              <button 
-                onClick={() => { setDatosCorte(null); setFechaCorte(new Date().toISOString().split('T')[0]); setMostrarModalCorte(true); }} 
-                className="mt-2 bg-emerald-900/40 border border-emerald-800 text-emerald-400 text-xs py-2 px-4 rounded-lg font-bold hover:bg-emerald-600 hover:text-white transition-all"
-              >
-                🖨️ Imprimir Corte Z
-              </button>
-            </div>
-
-            <div className="bg-slate-900 border border-blue-900/50 p-6 rounded-2xl flex flex-col justify-center items-center text-center shadow-lg relative overflow-hidden">
-              <div className="absolute top-0 w-full h-1 bg-blue-500"></div>
-              <span className="text-blue-500 mb-2 text-3xl">🎟️</span>
-              <p className="text-slate-400 text-sm font-bold uppercase mb-1">Recargas Hoy</p>
-              <h2 className="text-4xl font-black text-white">{boletosHoy}</h2>
-            </div>
-
-            <div className="bg-slate-900 border border-amber-900/50 p-6 rounded-2xl flex flex-col justify-center items-center text-center shadow-lg relative overflow-hidden">
-              <div className="absolute top-0 w-full h-1 bg-amber-500"></div>
-              <span className="text-amber-500 mb-2 text-3xl">📊</span>
-              <p className="text-slate-400 text-sm font-bold uppercase mb-1">Ventas Semanales</p>
-              <h2 className="text-3xl font-black text-white mb-2">${ventasSemana.toFixed(2)}</h2>
-              <button onClick={() => { setFechaHistorial(new Date().toISOString().split('T')[0]); setMostrarModalHistorial(true); }} className="mt-2 bg-slate-800 border border-slate-700 text-slate-300 text-xs py-2 px-4 rounded-lg font-bold hover:bg-slate-700">Ver Historial</button>
-            </div>
-
-            {/* TABLA DE RETIROS */}
-            <div className="md:col-span-3 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="flex justify-between items-center p-6 border-b border-slate-800">
-                <h2 className="text-xl font-bold text-white">💳 Auditoría de Retiros</h2>
-                <button onClick={() => { cargarRetiros(); cargarEstadisticasCaja(); }} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-lg text-sm border border-slate-700">🔄 Actualizar</button>
-              </div>
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-slate-950 text-slate-400 uppercase text-xs border-b border-slate-800">
-                  <tr><th className="px-6 py-4 font-bold">Fecha / Hora</th><th className="px-6 py-4 font-bold">Concepto</th><th className="px-6 py-4 font-bold text-right">Monto</th></tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/50">
-                  {historialRetiros.map((retiro) => (
-                    <tr key={retiro.id} className="hover:bg-slate-800/30">
-                      <td className="px-6 py-4">{new Date(retiro.created_at).toLocaleString('es-MX')}</td>
-                      <td className="px-6 py-4">{retiro.concepto}</td>
-                      <td className="px-6 py-4 text-red-400 font-bold text-right">- ${retiro.monto.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        <button className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl font-bold transition-colors border border-slate-700 text-sm">
+          Cerrar Sesión
+        </button>
       </div>
 
-      {/* --- MODAL DEL CORTE Z (AQUÍ SE USA LA LÓGICA RESTAURADA) --- */}
-      {mostrarModalCorte && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 print:bg-white print:p-0">
-          <div className="bg-[#0f172a] print:bg-white print:text-black border border-slate-800 p-6 rounded-2xl w-full max-w-lg shadow-2xl">
-            <div className="flex justify-between items-center mb-6 print:hidden">
-              <h2 className="text-xl font-bold text-white">🖨️ Generar Corte Z</h2>
-              <button onClick={() => setMostrarModalCorte(false)} className="text-white bg-slate-800 px-3 py-1 rounded-lg hover:bg-red-600 font-bold">&times;</button>
+      {/* DASHBOARD CARDS */}
+      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        
+        {/* Card Ventas Día */}
+        <div className="bg-[#0f172a] rounded-2xl border border-emerald-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
+          <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>
+          <span className="text-3xl mb-2">💵</span>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Ventas del Día</p>
+          <p className="text-white font-black text-4xl mb-4">${ventasDia.toFixed(2)}</p>
+          <button onClick={() => setMostrarCorte(true)} className="bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-400 border border-emerald-800/50 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
+            🖨️ Imprimir Corte Z
+          </button>
+        </div>
+
+        {/* Card Recargas (Boletos) */}
+        <div className="bg-[#0f172a] rounded-2xl border border-pink-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
+          <div className="absolute top-0 left-0 w-full h-1 bg-pink-500"></div>
+          <span className="text-3xl mb-2">🎟️</span>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Recargas Hoy (Viajes)</p>
+          <p className="text-white font-black text-4xl">{boletosDia}</p>
+        </div>
+
+        {/* Card Ventas Semanales */}
+        <div className="bg-[#0f172a] rounded-2xl border border-indigo-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
+          <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
+          <span className="text-3xl mb-2">📊</span>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Ventas Semanales</p>
+          <p className="text-white font-black text-4xl mb-4">${ventasSemana.toFixed(2)}</p>
+          <button onClick={() => setMostrarHistorial(true)} className="bg-slate-800 hover:bg-slate-700 text-white border border-slate-600 px-4 py-2 rounded-lg font-bold text-sm transition-colors">
+            Ver Historial
+          </button>
+        </div>
+
+      </div>
+
+      {/* TABLA: AUDITORÍA DE RETIROS */}
+      <div className="max-w-6xl mx-auto bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+        <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">💳 Auditoría de Retiros (Hoy)</h2>
+          <button onClick={cargarDatosDashboard} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm font-bold transition-colors border border-slate-700">
+            🔄 Actualizar
+          </button>
+        </div>
+        <div className="overflow-x-auto p-2">
+          {retiros.length === 0 ? (
+            <p className="text-center text-slate-500 py-10 font-bold">No se han registrado retiros hoy.</p>
+          ) : (
+            <table className="w-full text-left text-sm">
+              <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
+                <tr>
+                  <th className="px-6 py-4 font-bold">Fecha / Hora</th>
+                  <th className="px-6 py-4 font-bold">Concepto</th>
+                  <th className="px-6 py-4 font-bold text-right">Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {retiros.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
+                    <td className="px-6 py-4 text-slate-300">{new Date(r.created_at).toLocaleString('es-MX')}</td>
+                    <td className="px-6 py-4 text-white font-medium">{r.concepto}</td>
+                    <td className="px-6 py-4 text-right font-black text-red-400">- ${r.monto.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      <div className="text-center mt-10 pb-4 text-slate-600 text-sm">
+        System by <span className="font-bold text-slate-500">Arturo Díaz</span>
+      </div>
+
+      {/* ================= MODAL: GENERAR CORTE Z ================= */}
+      {mostrarCorte && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-8 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">🖨️ Generar Corte Z</h2>
+              <button onClick={() => setMostrarCorte(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
             </div>
             
-            <form onSubmit={generarCorteZ} className="mb-6 print:hidden">
-              <label className="text-slate-400 text-sm font-bold block mb-2">Selecciona la Fecha:</label>
-              <div className="flex gap-2">
-                <input type="date" value={fechaCorte} onChange={(e) => setFechaCorte(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-white" />
-                <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl">Generar</button>
-              </div>
-            </form>
+            <label className="block text-sm font-bold text-slate-400 mb-2">Selecciona la Fecha:</label>
+            <div className="relative mb-6">
+              <input 
+                type="date" 
+                value={fechaCorte} 
+                onChange={(e) => setFechaCorte(e.target.value)} 
+                style={{ colorScheme: 'dark' }}
+                className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl p-4 text-white font-bold outline-none focus:border-indigo-400 cursor-pointer" 
+              />
+            </div>
 
-            {datosCorte && (
-              <div className="border border-slate-700 print:border-black p-4 rounded-xl bg-slate-950 print:bg-white text-center">
-                <h3 className="font-bold text-lg mb-2 print:text-black">Corte de Caja Z</h3>
-                <p className="text-sm text-slate-400 print:text-black mb-4">Fecha: {fechaCorte}</p>
-                <div className="flex justify-between border-b border-slate-800 print:border-black py-2">
-                  <span>Total Ingresos (+):</span>
-                  <span className="font-bold text-emerald-400 print:text-black">${datosCorte.filter(m => m.tipo !== 'retiro').reduce((a, b) => a + b.monto, 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-800 print:border-black py-2">
-                  <span>Total Retiros (-):</span>
-                  <span className="font-bold text-red-400 print:text-black">${datosCorte.filter(m => m.tipo === 'retiro').reduce((a, b) => a + b.monto, 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between py-4 text-xl">
-                  <span className="font-black print:text-black">TOTAL EN CAJA:</span>
-                  <span className="font-black text-blue-400 print:text-black">${(datosCorte.filter(m => m.tipo !== 'retiro').reduce((a, b) => a + b.monto, 0) - datosCorte.filter(m => m.tipo === 'retiro').reduce((a, b) => a + b.monto, 0)).toFixed(2)}</span>
-                </div>
-                <button onClick={imprimirCorte} className="mt-4 w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl print:hidden">Imprimir Documento</button>
-              </div>
-            )}
+            <button onClick={generarCorteZ} className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-bold py-4 rounded-xl transition-colors shadow-lg">
+              Generar y Ver Ticket
+            </button>
           </div>
         </div>
       )}
 
-      {/* MODAL HISTORIAL COMPLETO OMITIDO POR BREVEDAD, SE MANTIENE EL ANTERIOR QUE YA TENÍAS */}
+      {/* ================= MODAL: HISTORIAL COMPLETO ================= */}
+      {mostrarHistorial && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40">
+          <div className="bg-[#0f172a] rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden border border-slate-700 flex flex-col max-h-[90vh]">
+            
+            {/* Header del Historial */}
+            <div className="bg-slate-900 p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-white">Historial Financiero</h2>
+                <div className="mt-2 flex items-center gap-3">
+                  <label className="text-sm font-bold text-slate-400">Consultar fecha:</label>
+                  <input 
+                    type="date" 
+                    value={fechaHistorial} 
+                    onChange={(e) => setFechaHistorial(e.target.value)}
+                    style={{ colorScheme: 'dark' }} 
+                    className="bg-[#020617] border border-indigo-500/50 rounded-lg p-2.5 text-sm text-white font-bold outline-none cursor-pointer" 
+                  />
+                </div>
+              </div>
+              <button onClick={() => setMostrarHistorial(false)} className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-3 rounded-xl font-bold w-full md:w-auto">Cerrar Historial</button>
+            </div>
+
+            <div className="p-4 md:p-6 overflow-y-auto flex-grow bg-[#0f172a]">
+              
+              {/* Dashboard interno de colores */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-emerald-900/20 border border-emerald-900/50 p-4 rounded-xl text-center">
+                  <p className="text-emerald-400/80 text-xs font-bold uppercase mb-1">Total Ingresos</p>
+                  <p className="text-emerald-400 font-black text-2xl">+ ${statsHistorial.ventas.toFixed(2)}</p>
+                </div>
+                <div className="bg-red-900/20 border border-red-900/50 p-4 rounded-xl text-center">
+                  <p className="text-red-400/80 text-xs font-bold uppercase mb-1">Total Retiros</p>
+                  <p className="text-red-400 font-black text-2xl">- ${statsHistorial.retiros.toFixed(2)}</p>
+                </div>
+                <div className="bg-indigo-900/20 border border-indigo-900/50 p-4 rounded-xl text-center">
+                  <p className="text-indigo-400/80 text-xs font-bold uppercase mb-1">Neto en Caja</p>
+                  <p className="text-indigo-400 font-black text-2xl">${statsHistorial.total.toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Tabla Unificada */}
+              {historialUnificado.length === 0 ? (
+                <p className="text-slate-500 text-center py-10 font-bold">No hay movimientos en esta fecha.</p>
+              ) : (
+                <div className="overflow-x-auto bg-[#020617] rounded-xl border border-slate-800 p-2">
+                  <table className="w-full text-left text-sm min-w-[700px]">
+                    <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
+                      <tr>
+                        <th className="px-4 py-3 font-bold">Hora</th>
+                        <th className="px-4 py-3 font-bold">Folio / Tipo</th>
+                        <th className="px-4 py-3 font-bold">Descripción</th>
+                        <th className="px-4 py-3 font-bold text-right">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historialUnificado.map((mov, i) => (
+                        <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+                          <td className="px-4 py-4 text-slate-400">{new Date(mov.fecha).toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})}</td>
+                          <td className="px-4 py-4">
+                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${mov.tipo === 'VENTA' ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-800' : 'bg-red-900/40 text-red-400 border border-red-800'}`}>
+                              {mov.folio}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-white">{mov.descripcion}</td>
+                          <td className={`px-4 py-4 text-right font-black ${mov.tipo === 'VENTA' ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {mov.tipo === 'VENTA' ? '+' : '-'} ${mov.monto.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= TICKET CORTE Z EMERGENTE (80mm) ================= */}
+      {ticketActual && ticketActual.tipo === 'CORTE_Z' && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-[100] p-4 print:p-0 print:bg-white print:block">
+          <style>{`
+            @media print { 
+              @page { margin: 0; size: 80mm auto; } 
+              body { background: white; -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
+            }
+          `}</style>
+          
+          <div className="bg-white text-black p-5 w-full max-w-[320px] print:w-[80mm] print:max-w-[80mm] print:p-2 print:m-0 font-mono shadow-2xl print:shadow-none text-[12px] md:text-[14px] print:text-[12px] flex flex-col rounded-xl print:rounded-none">
+            
+            <div className="flex justify-center mb-3">
+              <img src="/logo negro.png" alt="Logo" className="h-16 w-auto object-contain grayscale" onError={(e) => e.currentTarget.style.display = 'none'} />
+            </div>
+            
+            <div className="text-center font-bold text-lg mb-1">SITE - FINANZAS</div>
+            <div className="text-center mb-4 border-b border-black pb-3 mt-2">
+              <p className="font-bold text-xl uppercase">CORTE Z</p>
+              <p className="text-[11px] mt-1">Impresión: {ticketActual.fechaImpresion}</p>
+            </div>
+
+            <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
+              <p><span className="font-bold">Fecha de Corte:</span> {ticketActual.fechaCorte}</p>
+            </div>
+
+            <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
+              <div className="flex justify-between font-bold"><span>CONCEPTO</span><span>MONTO</span></div>
+              <div className="flex justify-between mt-2"><span>(+) Ventas ({ticketActual.boletos} bts):</span><span>${ticketActual.ventas.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span>(-) Retiros/Gastos:</span><span>${ticketActual.retiros.toFixed(2)}</span></div>
+            </div>
+
+            <div className="space-y-2 mb-8 border-b border-black pb-3">
+              <div className="flex justify-between font-black text-lg"><span>TOTAL NETO:</span><span>${ticketActual.totalNeto.toFixed(2)}</span></div>
+            </div>
+
+            <div className="mt-8 border-t border-black pt-2 text-center w-4/5 mx-auto">
+              <p className="text-[10px] uppercase font-bold">Firma Administración</p>
+            </div>
+            
+            <div className="h-4"></div>
+            
+            {/* Botones de acción para pantalla */}
+            <div className="flex flex-col gap-2 print:hidden mt-6">
+              <button onClick={() => window.print()} className="w-full bg-[#10b981] hover:bg-[#059669] text-white py-4 rounded-xl font-sans font-black text-lg transition-colors shadow-lg">🖨️ IMPRIMIR CORTE Z</button>
+              <button onClick={() => setTicketActual(null)} className="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 py-3 rounded-xl font-sans font-bold text-sm transition-colors">Cerrar Ticket</button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
-  );
+  )
 }
