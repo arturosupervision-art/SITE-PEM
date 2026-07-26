@@ -25,9 +25,10 @@ export default function ModuloFinanzasSuperAdmin() {
   const [fechaFinRango, setFechaFinRango] = useState(new Date().toLocaleDateString('en-CA'))
   const [statsRango, setStatsRango] = useState({ ventas: 0, retiros: 0, total: 0, boletos: 0 })
   const [calculandoRango, setCalculandoRango] = useState(false)
+  const [rangoCalculado, setRangoCalculado] = useState(false)
 
-  // ================= ESTADO DEL TICKET =================
-  const [ticketActual, setTicketActual] = useState<any>(null)
+  // ================= ESTADO DEL TICKET / REPORTE =================
+  const [documentoActual, setDocumentoActual] = useState<any>(null)
 
   useEffect(() => {
     cargarDatosDashboard()
@@ -47,15 +48,11 @@ export default function ModuloFinanzasSuperAdmin() {
 
   const cargarDatosDashboard = async () => {
     setCargando(true)
-    
-    // Límites de Hoy
     const hoyLocal = new Date().toLocaleDateString('en-CA')
     const limitesHoy = obtenerLimitesDia(hoyLocal)
 
-    // Calcular Límites de la Semana (Iniciando el Lunes a las 00:00)
     const fechaActual = new Date()
     const diaSemana = fechaActual.getDay()
-    // Si es domingo (0), restamos 6 días. Si es otro, restamos (día - 1)
     const diff = fechaActual.getDate() - diaSemana + (diaSemana === 0 ? -6 : 1) 
     const fechaLunes = new Date(fechaActual.setDate(diff))
     const lunesLocalStr = fechaLunes.toLocaleDateString('en-CA')
@@ -132,11 +129,26 @@ export default function ModuloFinanzasSuperAdmin() {
       const rTotales = (retirosDb || []).reduce((acc, r) => acc + r.monto, 0)
 
       setStatsRango({ ventas: vTotales, boletos: bTotales, retiros: rTotales, total: vTotales - rTotales })
+      setRangoCalculado(true)
     } catch (error) {
       console.error(error)
     } finally {
       setCalculandoRango(false)
     }
+  }
+
+  const generarDocumentoRango = () => {
+    setDocumentoActual({
+      tipo: 'REPORTE_RANGO',
+      fechaInicio: fechaInicioRango,
+      fechaFin: fechaFinRango,
+      fechaImpresion: new Date().toLocaleString('es-MX'),
+      ventas: statsRango.ventas,
+      boletos: statsRango.boletos,
+      retiros: statsRango.retiros,
+      totalNeto: statsRango.total
+    })
+    setMostrarReporteRango(false)
   }
 
   const generarCorteZ = async () => {
@@ -148,7 +160,7 @@ export default function ModuloFinanzasSuperAdmin() {
     const bTotales = (ventas || []).reduce((acc, v) => acc + v.cantidad_boletos, 0)
     const rTotales = (retirosDb || []).reduce((acc, r) => acc + r.monto, 0)
 
-    setTicketActual({
+    setDocumentoActual({
       tipo: 'CORTE_Z', fechaCorte: fechaCorte, fechaImpresion: new Date().toLocaleString('es-MX'), ventas: vTotales, boletos: bTotales, retiros: rTotales, totalNeto: vTotales - rTotales
     })
     setMostrarCorte(false)
@@ -166,7 +178,7 @@ export default function ModuloFinanzasSuperAdmin() {
           <h1 className="text-white font-black text-3xl">Panel Central</h1>
         </div>
         <div className="flex gap-3">
-          <button onClick={() => setMostrarReporteRango(true)} className="bg-indigo-900/40 hover:bg-indigo-800/60 text-indigo-400 border border-indigo-800/50 px-5 py-2.5 rounded-xl font-bold transition-colors text-sm flex items-center gap-2">
+          <button onClick={() => { setMostrarReporteRango(true); setRangoCalculado(false); }} className="bg-indigo-900/40 hover:bg-indigo-800/60 text-indigo-400 border border-indigo-800/50 px-5 py-2.5 rounded-xl font-bold transition-colors text-sm flex items-center gap-2">
             📅 Reporte por Rango
           </button>
           <button className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl font-bold transition-colors border border-slate-700 text-sm">
@@ -273,7 +285,7 @@ export default function ModuloFinanzasSuperAdmin() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-emerald-900/20 border border-emerald-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
                 <p className="text-emerald-400/80 text-xs font-bold uppercase mb-1">Ingresos</p>
                 <p className="text-emerald-400 font-black text-2xl">+ ${statsRango.ventas.toFixed(2)}</p>
@@ -291,6 +303,12 @@ export default function ModuloFinanzasSuperAdmin() {
                 <p className="text-indigo-400 font-black text-2xl">${statsRango.total.toFixed(2)}</p>
               </div>
             </div>
+
+            {rangoCalculado && (
+              <button onClick={generarDocumentoRango} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors flex justify-center items-center gap-2">
+                🖨️ Imprimir / Descargar PDF del Reporte
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -400,8 +418,8 @@ export default function ModuloFinanzasSuperAdmin() {
         </div>
       )}
 
-      {/* ================= TICKET CORTE Z EMERGENTE (80mm) ================= */}
-      {ticketActual && ticketActual.tipo === 'CORTE_Z' && (
+      {/* ================= DOCUMENTO PARA IMPRIMIR (CORTE Z O REPORTE) ================= */}
+      {documentoActual && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-[100] p-4 print:p-0 print:bg-white print:block">
           <style>{`
             @media print { 
@@ -410,33 +428,56 @@ export default function ModuloFinanzasSuperAdmin() {
             }
           `}</style>
           <div className="bg-white text-black p-5 w-full max-w-[320px] print:w-[80mm] print:max-w-[80mm] print:p-2 print:m-0 font-mono shadow-2xl print:shadow-none text-[12px] md:text-[14px] print:text-[12px] flex flex-col rounded-xl print:rounded-none">
+            
             <div className="flex justify-center mb-3">
               <img src="/logo negro.png" alt="Logo" className="h-16 w-auto object-contain grayscale" onError={(e) => e.currentTarget.style.display = 'none'} />
             </div>
+            
             <div className="text-center font-bold text-lg mb-1">SITE - FINANZAS</div>
+            
             <div className="text-center mb-4 border-b border-black pb-3 mt-2">
-              <p className="font-bold text-xl uppercase">CORTE Z</p>
-              <p className="text-[11px] mt-1">Impresión: {ticketActual.fechaImpresion}</p>
+              <p className="font-bold text-xl uppercase">
+                {documentoActual.tipo === 'CORTE_Z' ? 'CORTE Z' : 'BALANCE GENERAL'}
+              </p>
+              <p className="text-[11px] mt-1">Impresión: {documentoActual.fechaImpresion}</p>
             </div>
+
             <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
-              <p><span className="font-bold">Fecha de Corte:</span> {ticketActual.fechaCorte}</p>
+              {documentoActual.tipo === 'CORTE_Z' ? (
+                <p><span className="font-bold">Fecha de Corte:</span> {documentoActual.fechaCorte}</p>
+              ) : (
+                <>
+                  <p><span className="font-bold">Del:</span> {documentoActual.fechaInicio}</p>
+                  <p><span className="font-bold">Al:</span> {documentoActual.fechaFin}</p>
+                </>
+              )}
             </div>
+
             <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
               <div className="flex justify-between font-bold"><span>CONCEPTO</span><span>MONTO</span></div>
-              <div className="flex justify-between mt-2"><span>(+) Ventas ({ticketActual.boletos} bts):</span><span>${ticketActual.ventas.toFixed(2)}</span></div>
-              <div className="flex justify-between"><span>(-) Retiros/Gastos:</span><span>${ticketActual.retiros.toFixed(2)}</span></div>
+              <div className="flex justify-between mt-2"><span>(+) Ventas ({documentoActual.boletos} bts):</span><span>${documentoActual.ventas.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span>(-) Retiros/Gastos:</span><span>${documentoActual.retiros.toFixed(2)}</span></div>
             </div>
+
             <div className="space-y-2 mb-8 border-b border-black pb-3">
-              <div className="flex justify-between font-black text-lg"><span>TOTAL NETO:</span><span>${ticketActual.totalNeto.toFixed(2)}</span></div>
+              <div className="flex justify-between font-black text-lg"><span>TOTAL NETO:</span><span>${documentoActual.totalNeto.toFixed(2)}</span></div>
             </div>
+
             <div className="mt-8 border-t border-black pt-2 text-center w-4/5 mx-auto">
               <p className="text-[10px] uppercase font-bold">Firma Administración</p>
             </div>
+            
             <div className="h-4"></div>
+            
             <div className="flex flex-col gap-2 print:hidden mt-6">
-              <button onClick={() => window.print()} className="w-full bg-[#10b981] hover:bg-[#059669] text-white py-4 rounded-xl font-sans font-black text-lg transition-colors shadow-lg">🖨️ IMPRIMIR CORTE Z</button>
-              <button onClick={() => setTicketActual(null)} className="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 py-3 rounded-xl font-sans font-bold text-sm transition-colors">Cerrar Ticket</button>
+              <button onClick={() => window.print()} className="w-full bg-[#10b981] hover:bg-[#059669] text-white py-4 rounded-xl font-sans font-black text-lg transition-colors shadow-lg">
+                🖨️ IMPRIMIR / PDF
+              </button>
+              <button onClick={() => setDocumentoActual(null)} className="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 py-3 rounded-xl font-sans font-bold text-sm transition-colors">
+                Cerrar Ticket
+              </button>
             </div>
+
           </div>
         </div>
       )}
