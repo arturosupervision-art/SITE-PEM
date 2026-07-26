@@ -6,16 +6,16 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { correoTutor, nombreAlumno, tipoMovimiento, hora, ubicacion } = body;
 
-    // 1. Configuramos tu cuenta de Gmail
+    // 1. Configuramos el servicio de correo
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: 'notificaciones@pem.edu.mx', // <-- CAMBIA ESTO POR TU GMAIL
-        pass: 'zuto kvhl aoyf pvxs ' // <-- CAMBIA ESTO POR TU CONTRASEÑA DE APLICACIÓN
+        user: 'notificaciones@pem.edu.mx',
+        pass: 'zuto kvhl aoyf pvxs'
       },
     });
 
-    // 2. Diseñamos el correo
+    // 2. Definimos asunto y color según el movimiento
     const asunto = tipoMovimiento === 'ASCENSO' 
       ? `🚌 ${nombreAlumno} ha abordado el transporte escolar` 
       : `✅ ${nombreAlumno} ha bajado del transporte escolar`;
@@ -28,22 +28,22 @@ export async function POST(request: Request) {
           <h2 style="margin:0;">Aviso de Transporte Escolar</h2>
         </div>
         <div style="padding: 20px;">
-          <p>Hola,</p>
+          <p>Estimado tutor,</p>
           <p>Le informamos que el alumno <strong>${nombreAlumno}</strong> ha registrado un <strong>${tipoMovimiento}</strong> exitoso en nuestra unidad.</p>
           <ul style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; list-style-type: none;">
             <li style="margin-bottom: 10px;">⏰ <strong>Hora:</strong> ${hora}</li>
-            <li>📍 <strong>Ruta/Ubicación:</strong> ${ubicacion}</li>
+            <li>📍 <strong>Ubicación GPS:</strong> <a href="${ubicacion}" target="_blank">Ver en Mapa</a></li>
           </ul>
           <p style="color: #666; font-size: 12px; margin-top: 30px;">
-            Este es un mensaje automático del sistema, por favor no responda a este correo.
+            Este es un mensaje automático del sistema de control de transporte.
           </p>
         </div>
       </div>
     `;
 
-    // 3. Enviamos el correo
+    // 3. Enviamos el mensaje
     await transporter.sendMail({
-      from: '"Transporte Escolar" <notificaciones@pem.edu.mx>', // <-- CAMBIA ESTO POR TU GMAIL
+      from: '"Transporte Escolar" <notificaciones@pem.edu.mx>',
       to: correoTutor,
       subject: asunto,
       html: plantillaHtml,
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ mensaje: 'Correo enviado' }, { status: 200 });
 
   } catch (error) {
-    console.error('Error al enviar:', error);
-    return NextResponse.json({ error: 'Hubo un error' }, { status: 500 });
+    console.error('Error al enviar correo:', error);
+    return NextResponse.json({ error: 'Error al procesar el correo' }, { status: 500 });
   }
 }
