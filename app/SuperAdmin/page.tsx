@@ -17,8 +17,14 @@ export default function ModuloFinanzasSuperAdmin() {
   const [mostrarHistorial, setMostrarHistorial] = useState(false)
   const [fechaHistorial, setFechaHistorial] = useState(new Date().toLocaleDateString('en-CA'))
   const [historialUnificado, setHistorialUnificado] = useState<any[]>([])
-  // AGREGAMOS "boletos" AL ESTADO DEL HISTORIAL
   const [statsHistorial, setStatsHistorial] = useState({ ventas: 0, retiros: 0, total: 0, boletos: 0 })
+
+  // ================= ESTADOS DE REPORTE POR RANGO =================
+  const [mostrarReporteRango, setMostrarReporteRango] = useState(false)
+  const [fechaInicioRango, setFechaInicioRango] = useState(new Date().toLocaleDateString('en-CA'))
+  const [fechaFinRango, setFechaFinRango] = useState(new Date().toLocaleDateString('en-CA'))
+  const [statsRango, setStatsRango] = useState({ ventas: 0, retiros: 0, total: 0, boletos: 0 })
+  const [calculandoRango, setCalculandoRango] = useState(false)
 
   // ================= ESTADO DEL TICKET =================
   const [ticketActual, setTicketActual] = useState<any>(null)
@@ -41,19 +47,30 @@ export default function ModuloFinanzasSuperAdmin() {
 
   const cargarDatosDashboard = async () => {
     setCargando(true)
+    
+    // Límites de Hoy
     const hoyLocal = new Date().toLocaleDateString('en-CA')
     const limitesHoy = obtenerLimitesDia(hoyLocal)
 
-    const fechaSemana = new Date()
-    fechaSemana.setDate(fechaSemana.getDate() - 7)
-    const limitesSemana = obtenerLimitesDia(fechaSemana.toLocaleDateString('en-CA'))
+    // Calcular Límites de la Semana (Iniciando el Lunes a las 00:00)
+    const fechaActual = new Date()
+    const diaSemana = fechaActual.getDay()
+    // Si es domingo (0), restamos 6 días. Si es otro, restamos (día - 1)
+    const diff = fechaActual.getDate() - diaSemana + (diaSemana === 0 ? -6 : 1) 
+    const fechaLunes = new Date(fechaActual.setDate(diff))
+    const lunesLocalStr = fechaLunes.toLocaleDateString('en-CA')
+    
+    const limitesSemana = {
+      inicio: new Date(`${lunesLocalStr}T00:00:00.000`).toISOString(),
+      fin: limitesHoy.fin
+    }
 
     try {
       const { data: vHoy } = await supabase.from('ventas_boletos').select('monto_total, cantidad_boletos').gte('created_at', limitesHoy.inicio).lte('created_at', limitesHoy.fin)
       const totalVentasHoy = (vHoy || []).reduce((acc, v) => acc + v.monto_total, 0)
       const totalBoletosHoy = (vHoy || []).reduce((acc, v) => acc + v.cantidad_boletos, 0)
       
-      const { data: vSemana } = await supabase.from('ventas_boletos').select('monto_total').gte('created_at', limitesSemana.inicio).lte('created_at', limitesHoy.fin)
+      const { data: vSemana } = await supabase.from('ventas_boletos').select('monto_total').gte('created_at', limitesSemana.inicio).lte('created_at', limitesSemana.fin)
       const totalVentasSemana = (vSemana || []).reduce((acc, v) => acc + v.monto_total, 0)
 
       const { data: rHoy } = await supabase.from('movimientos_caja').select('*').gte('created_at', limitesHoy.inicio).lte('created_at', limitesHoy.fin).order('created_at', { ascending: false })
@@ -78,12 +95,12 @@ export default function ModuloFinanzasSuperAdmin() {
     let unificado: any[] = []
     let tVentas = 0
     let tRetiros = 0
-    let tBoletos = 0 // NUEVA VARIABLE PARA CONTAR BOLETOS
+    let tBoletos = 0 
 
     if (ventas) {
       ventas.forEach(v => {
         tVentas += v.monto_total
-        tBoletos += v.cantidad_boletos // SUMAMOS LOS BOLETOS DE CADA VENTA
+        tBoletos += v.cantidad_boletos
         unificado.push({ tipo: 'VENTA', id: v.id, fecha: v.created_at, folio: `SITE-${String(v.folio_secuencial).padStart(5,'0')}`, descripcion: `Venta: ${v.alumnos?.nombre_completo} (${v.cantidad_boletos} bts)`, monto: v.monto_total })
       })
     }
@@ -99,6 +116,27 @@ export default function ModuloFinanzasSuperAdmin() {
     
     setHistorialUnificado(unificado)
     setStatsHistorial({ ventas: tVentas, retiros: tRetiros, total: tVentas - tRetiros, boletos: tBoletos })
+  }
+
+  const calcularRangoFechas = async () => {
+    setCalculandoRango(true)
+    const inicioIso = new Date(`${fechaInicioRango}T00:00:00.000`).toISOString()
+    const finIso = new Date(`${fechaFinRango}T23:59:59.999`).toISOString()
+
+    try {
+      const { data: ventas } = await supabase.from('ventas_boletos').select('monto_total, cantidad_boletos').gte('created_at', inicioIso).lte('created_at', finIso)
+      const { data: retirosDb } = await supabase.from('movimientos_caja').select('monto').gte('created_at', inicioIso).lte('created_at', finIso)
+
+      const vTotales = (ventas || []).reduce((acc, v) => acc + v.monto_total, 0)
+      const bTotales = (ventas || []).reduce((acc, v) => acc + v.cantidad_boletos, 0)
+      const rTotales = (retirosDb || []).reduce((acc, r) => acc + r.monto, 0)
+
+      setStatsRango({ ventas: vTotales, boletos: bTotales, retiros: rTotales, total: vTotales - rTotales })
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setCalculandoRango(false)
+    }
   }
 
   const generarCorteZ = async () => {
@@ -122,14 +160,19 @@ export default function ModuloFinanzasSuperAdmin() {
     <div className="min-h-screen bg-[#020617] text-slate-200 font-sans p-4 md:p-8">
       
       {/* HEADER */}
-      <div className="max-w-6xl mx-auto flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
+      <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-800 pb-4 gap-4">
         <div>
           <h3 className="text-indigo-400 font-bold text-sm tracking-widest uppercase">SITE-PEM • FINANZAS</h3>
           <h1 className="text-white font-black text-3xl">Panel Central</h1>
         </div>
-        <button className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl font-bold transition-colors border border-slate-700 text-sm">
-          Cerrar Sesión
-        </button>
+        <div className="flex gap-3">
+          <button onClick={() => setMostrarReporteRango(true)} className="bg-indigo-900/40 hover:bg-indigo-800/60 text-indigo-400 border border-indigo-800/50 px-5 py-2.5 rounded-xl font-bold transition-colors text-sm flex items-center gap-2">
+            📅 Reporte por Rango
+          </button>
+          <button className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl font-bold transition-colors border border-slate-700 text-sm">
+            Cerrar Sesión
+          </button>
+        </div>
       </div>
 
       {/* DASHBOARD CARDS */}
@@ -154,11 +197,11 @@ export default function ModuloFinanzasSuperAdmin() {
           <p className="text-white font-black text-4xl">{boletosDia}</p>
         </div>
 
-        {/* Card Acumulado Semanal */}
+        {/* Card Acumulado Semanal (LUNES A DOMINGO) */}
         <div className="bg-[#0f172a] rounded-2xl border border-indigo-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
           <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
           <span className="text-3xl mb-2">📊</span>
-          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Acumulado (Últimos 7 días)</p>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Ventas Semanales</p>
           <p className="text-white font-black text-4xl mb-4">${ventasSemana.toFixed(2)}</p>
           <button onClick={() => setMostrarHistorial(true)} className="bg-slate-800 hover:bg-slate-700 text-white border border-slate-600 px-4 py-2 rounded-lg font-bold text-sm transition-colors">
             Ver Historial
@@ -205,6 +248,53 @@ export default function ModuloFinanzasSuperAdmin() {
         System by <span className="font-bold text-slate-500">Arturo Díaz</span>
       </div>
 
+      {/* ================= MODAL: REPORTE POR RANGO ================= */}
+      {mostrarReporteRango && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-50">
+          <div className="bg-[#0f172a] rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-700 p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black text-white flex items-center gap-2">📅 Balance por Rango de Fechas</h2>
+              <button onClick={() => setMostrarReporteRango(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-4 mb-8">
+              <div className="flex-1">
+                <label className="block text-sm font-bold text-slate-400 mb-2">Fecha Inicio:</label>
+                <input type="date" value={fechaInicioRango} onChange={(e) => setFechaInicioRango(e.target.value)} style={{ colorScheme: 'dark' }} className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl p-3 text-white font-bold outline-none focus:border-indigo-400" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-bold text-slate-400 mb-2">Fecha Fin:</label>
+                <input type="date" value={fechaFinRango} onChange={(e) => setFechaFinRango(e.target.value)} style={{ colorScheme: 'dark' }} className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl p-3 text-white font-bold outline-none focus:border-indigo-400" />
+              </div>
+              <div className="flex items-end">
+                <button onClick={calcularRangoFechas} disabled={calculandoRango} className="w-full md:w-auto bg-[#10b981] hover:bg-[#059669] text-white font-bold py-3 px-6 rounded-xl transition-colors">
+                  {calculandoRango ? 'Calculando...' : 'Calcular'}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-emerald-900/20 border border-emerald-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                <p className="text-emerald-400/80 text-xs font-bold uppercase mb-1">Ingresos</p>
+                <p className="text-emerald-400 font-black text-2xl">+ ${statsRango.ventas.toFixed(2)}</p>
+              </div>
+              <div className="bg-pink-900/20 border border-pink-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                <p className="text-pink-400/80 text-[10px] md:text-xs font-bold uppercase mb-1">Boletos</p>
+                <p className="text-pink-400 font-black text-2xl">{statsRango.boletos} bts</p>
+              </div>
+              <div className="bg-red-900/20 border border-red-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                <p className="text-red-400/80 text-xs font-bold uppercase mb-1">Retiros</p>
+                <p className="text-red-400 font-black text-2xl">- ${statsRango.retiros.toFixed(2)}</p>
+              </div>
+              <div className="bg-indigo-900/20 border border-indigo-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                <p className="text-indigo-400/80 text-xs font-bold uppercase mb-1">Neto</p>
+                <p className="text-indigo-400 font-black text-2xl">${statsRango.total.toFixed(2)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ================= MODAL: GENERAR CORTE Z ================= */}
       {mostrarCorte && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
@@ -236,8 +326,6 @@ export default function ModuloFinanzasSuperAdmin() {
       {mostrarHistorial && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40">
           <div className="bg-[#0f172a] rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden border border-slate-700 flex flex-col max-h-[90vh]">
-            
-            {/* Header del Historial */}
             <div className="bg-slate-900 p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
               <div>
                 <h2 className="text-2xl font-black text-white">Historial Financiero</h2>
@@ -256,32 +344,25 @@ export default function ModuloFinanzasSuperAdmin() {
             </div>
 
             <div className="p-4 md:p-6 overflow-y-auto flex-grow bg-[#0f172a]">
-              
-              {/* Dashboard interno de colores AHORA CON 4 CAJAS */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-emerald-900/20 border border-emerald-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
                   <p className="text-emerald-400/80 text-xs font-bold uppercase mb-1">Total Ingresos</p>
                   <p className="text-emerald-400 font-black text-2xl">+ ${statsHistorial.ventas.toFixed(2)}</p>
                 </div>
-                
-                {/* NUEVA CAJA DE BOLETOS VENDIDOS */}
                 <div className="bg-pink-900/20 border border-pink-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
                   <p className="text-pink-400/80 text-[10px] md:text-xs font-bold uppercase mb-1">Boletos Vendidos</p>
                   <p className="text-pink-400 font-black text-2xl">{statsHistorial.boletos} bts</p>
                 </div>
-
                 <div className="bg-red-900/20 border border-red-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
                   <p className="text-red-400/80 text-xs font-bold uppercase mb-1">Total Retiros</p>
                   <p className="text-red-400 font-black text-2xl">- ${statsHistorial.retiros.toFixed(2)}</p>
                 </div>
-                
                 <div className="bg-indigo-900/20 border border-indigo-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
                   <p className="text-indigo-400/80 text-xs font-bold uppercase mb-1">Neto en Caja</p>
                   <p className="text-indigo-400 font-black text-2xl">${statsHistorial.total.toFixed(2)}</p>
                 </div>
               </div>
 
-              {/* Tabla Unificada */}
               {historialUnificado.length === 0 ? (
                 <p className="text-slate-500 text-center py-10 font-bold">No hay movimientos en esta fecha.</p>
               ) : (
@@ -328,49 +409,37 @@ export default function ModuloFinanzasSuperAdmin() {
               body { background: white; -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
             }
           `}</style>
-          
           <div className="bg-white text-black p-5 w-full max-w-[320px] print:w-[80mm] print:max-w-[80mm] print:p-2 print:m-0 font-mono shadow-2xl print:shadow-none text-[12px] md:text-[14px] print:text-[12px] flex flex-col rounded-xl print:rounded-none">
-            
             <div className="flex justify-center mb-3">
               <img src="/logo negro.png" alt="Logo" className="h-16 w-auto object-contain grayscale" onError={(e) => e.currentTarget.style.display = 'none'} />
             </div>
-            
             <div className="text-center font-bold text-lg mb-1">SITE - FINANZAS</div>
             <div className="text-center mb-4 border-b border-black pb-3 mt-2">
               <p className="font-bold text-xl uppercase">CORTE Z</p>
               <p className="text-[11px] mt-1">Impresión: {ticketActual.fechaImpresion}</p>
             </div>
-
             <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
               <p><span className="font-bold">Fecha de Corte:</span> {ticketActual.fechaCorte}</p>
             </div>
-
             <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
               <div className="flex justify-between font-bold"><span>CONCEPTO</span><span>MONTO</span></div>
               <div className="flex justify-between mt-2"><span>(+) Ventas ({ticketActual.boletos} bts):</span><span>${ticketActual.ventas.toFixed(2)}</span></div>
               <div className="flex justify-between"><span>(-) Retiros/Gastos:</span><span>${ticketActual.retiros.toFixed(2)}</span></div>
             </div>
-
             <div className="space-y-2 mb-8 border-b border-black pb-3">
               <div className="flex justify-between font-black text-lg"><span>TOTAL NETO:</span><span>${ticketActual.totalNeto.toFixed(2)}</span></div>
             </div>
-
             <div className="mt-8 border-t border-black pt-2 text-center w-4/5 mx-auto">
               <p className="text-[10px] uppercase font-bold">Firma Administración</p>
             </div>
-            
             <div className="h-4"></div>
-            
-            {/* Botones de acción para pantalla */}
             <div className="flex flex-col gap-2 print:hidden mt-6">
               <button onClick={() => window.print()} className="w-full bg-[#10b981] hover:bg-[#059669] text-white py-4 rounded-xl font-sans font-black text-lg transition-colors shadow-lg">🖨️ IMPRIMIR CORTE Z</button>
               <button onClick={() => setTicketActual(null)} className="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 py-3 rounded-xl font-sans font-bold text-sm transition-colors">Cerrar Ticket</button>
             </div>
-
           </div>
         </div>
       )}
-
     </div>
   )
 }
