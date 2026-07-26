@@ -1,0 +1,21 @@
+{
+  "name": "SITE-PEM | Transpote Escolar",
+  "short_name": "SITE-PEM",
+  "description": "Sistema Inteligente de Transporte Escolar",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/logo-app.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo-app.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
