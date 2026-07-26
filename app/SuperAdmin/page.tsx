@@ -26,10 +26,13 @@ export default function SuperAdministrador() {
   const [historialRetiros, setHistorialRetiros] = useState<any[]>([]);
   const [cargandoRetiros, setCargandoRetiros] = useState(false);
 
-  // NUEVOS ESTADOS: Historial Completo y Corte Z
+  // ESTADOS: Historial Completo con Calendario
   const [mostrarModalHistorial, setMostrarModalHistorial] = useState(false);
   const [historialCompleto, setHistorialCompleto] = useState<any[]>([]);
+  const [fechaHistorial, setFechaHistorial] = useState(new Date().toISOString().split('T')[0]);
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
   
+  // ESTADOS: Corte Z
   const [mostrarModalCorte, setMostrarModalCorte] = useState(false);
   const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
   const [datosCorte, setDatosCorte] = useState<any[] | null>(null);
@@ -82,17 +85,32 @@ export default function SuperAdministrador() {
     setCargandoRetiros(false);
   };
 
-  // Cargar TODO el historial
-  const cargarHistorialCompleto = async () => {
+  // Cargar historial basado en la fecha seleccionada en el modal
+  const cargarHistorialPorFecha = async (fecha: string) => {
+    setCargandoHistorial(true);
     const { data, error } = await supabase
       .from('movimientos_caja')
       .select('*')
+      .gte('created_at', `${fecha}T00:00:00`)
+      .lte('created_at', `${fecha}T23:59:59`)
       .order('created_at', { ascending: false });
     
     if (!error && data) {
       setHistorialCompleto(data);
-      setMostrarModalHistorial(true);
     }
+    setCargandoHistorial(false);
+  };
+
+  // Efecto para actualizar el historial cuando cambia la fecha en el calendario del modal
+  useEffect(() => {
+    if (mostrarModalHistorial) {
+      cargarHistorialPorFecha(fechaHistorial);
+    }
+  }, [fechaHistorial, mostrarModalHistorial]);
+
+  const abrirModalHistorial = () => {
+    setFechaHistorial(new Date().toISOString().split('T')[0]); // Resetear a hoy
+    setMostrarModalHistorial(true);
   };
 
   // Generar datos para el Corte Z del día seleccionado
@@ -372,7 +390,7 @@ export default function SuperAdministrador() {
                 onClick={() => { setDatosCorte(null); setMostrarModalCorte(true); }}
                 className="mt-2 bg-emerald-900/40 border border-emerald-800 text-emerald-400 text-xs py-2 px-4 rounded-lg font-bold hover:bg-emerald-600 hover:text-white transition-all"
               >
-                Imprimir Corte Z
+                🖨️ Imprimir Corte Z
               </button>
             </div>
 
@@ -391,7 +409,7 @@ export default function SuperAdministrador() {
               <p className="text-slate-400 text-sm font-bold uppercase mb-1">Ventas de la Semana</p>
               <h2 className="text-3xl font-black text-white mb-2">$22,400.00</h2>
               <button 
-                onClick={cargarHistorialCompleto}
+                onClick={abrirModalHistorial}
                 className="mt-2 bg-slate-800 border border-slate-700 text-slate-300 text-xs py-2 px-4 rounded-lg font-bold hover:bg-slate-700 transition-all"
               >
                 Ver Historial Completo
@@ -444,48 +462,66 @@ export default function SuperAdministrador() {
         )}
       </div>
 
-      {/* --- MODAL: HISTORIAL COMPLETO --- */}
+      {/* --- MODAL: HISTORIAL COMPLETO CON CALENDARIO --- */}
       {mostrarModalHistorial && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 print:hidden">
           <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
               <h2 className="text-2xl font-bold text-white flex items-center gap-2">📊 Historial Completo de Caja</h2>
-              <button onClick={() => setMostrarModalHistorial(false)} className="text-slate-400 hover:text-white font-bold text-xl">&times;</button>
+              
+              <div className="flex items-center gap-3 bg-slate-950 p-2 rounded-lg border border-slate-800">
+                <label className="text-sm font-bold text-slate-400">Día:</label>
+                <input
+                  type="date"
+                  value={fechaHistorial}
+                  onChange={(e) => setFechaHistorial(e.target.value)}
+                  className="bg-transparent border-none text-white outline-none focus:ring-0 cursor-pointer text-sm"
+                />
+                <button onClick={() => setMostrarModalHistorial(false)} className="text-slate-500 hover:text-white font-black text-xl ml-4 bg-slate-800 hover:bg-red-500 rounded-full w-8 h-8 flex items-center justify-center transition-all">&times;</button>
+              </div>
             </div>
             
             <div className="overflow-y-auto flex-1 bg-slate-950 rounded-xl border border-slate-800">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-slate-900 text-slate-400 uppercase text-xs sticky top-0 shadow-md">
-                  <tr>
-                    <th className="px-4 py-3 font-bold">Fecha / Hora</th>
-                    <th className="px-4 py-3 font-bold">Tipo</th>
-                    <th className="px-4 py-3 font-bold">Concepto</th>
-                    <th className="px-4 py-3 font-bold text-right">Monto</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/50">
-                  {historialCompleto.map((mov) => (
-                    <tr key={mov.id} className="hover:bg-slate-800/50">
-                      <td className="px-4 py-3 whitespace-nowrap text-slate-400">
-                        {new Date(mov.created_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
-                      </td>
-                      <td className="px-4 py-3 font-bold">
-                        {mov.tipo === 'retiro' ? (
-                           <span className="text-red-400 bg-red-900/30 px-2 py-1 rounded text-xs uppercase">Retiro</span>
-                        ) : mov.tipo === 'ingreso' || mov.tipo === 'recarga' ? (
-                           <span className="text-emerald-400 bg-emerald-900/30 px-2 py-1 rounded text-xs uppercase">Ingreso</span>
-                        ) : (
-                           <span className="text-blue-400 bg-blue-900/30 px-2 py-1 rounded text-xs uppercase">{mov.tipo}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-slate-200">{mov.concepto}</td>
-                      <td className={`px-4 py-3 font-bold text-right ${mov.tipo === 'retiro' ? 'text-red-400' : 'text-emerald-400'}`}>
-                        {mov.tipo === 'retiro' ? '-' : '+'}${mov.monto.toFixed(2)}
-                      </td>
+              {cargandoHistorial ? (
+                <p className="text-slate-400 p-8 animate-pulse text-center font-medium">Buscando movimientos del día...</p>
+              ) : (
+                <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-slate-900 text-slate-400 uppercase text-xs sticky top-0 shadow-md">
+                    <tr>
+                      <th className="px-4 py-3 font-bold">Fecha / Hora</th>
+                      <th className="px-4 py-3 font-bold">Tipo</th>
+                      <th className="px-4 py-3 font-bold">Concepto</th>
+                      <th className="px-4 py-3 font-bold text-right">Monto</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {historialCompleto.length > 0 ? (
+                      historialCompleto.map((mov) => (
+                        <tr key={mov.id} className="hover:bg-slate-800/50">
+                          <td className="px-4 py-3 whitespace-nowrap text-slate-400">
+                            {new Date(mov.created_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td className="px-4 py-3 font-bold">
+                            {mov.tipo === 'retiro' ? (
+                               <span className="text-red-400 bg-red-900/30 px-2 py-1 rounded text-xs uppercase">Retiro</span>
+                            ) : mov.tipo === 'ingreso' || mov.tipo === 'recarga' ? (
+                               <span className="text-emerald-400 bg-emerald-900/30 px-2 py-1 rounded text-xs uppercase">Ingreso</span>
+                            ) : (
+                               <span className="text-blue-400 bg-blue-900/30 px-2 py-1 rounded text-xs uppercase">{mov.tipo}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-slate-200">{mov.concepto}</td>
+                          <td className={`px-4 py-3 font-bold text-right ${mov.tipo === 'retiro' ? 'text-red-400' : 'text-emerald-400'}`}>
+                            {mov.tipo === 'retiro' ? '-' : '+'}${mov.monto.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500 italic">No hay movimientos registrados para este día.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
