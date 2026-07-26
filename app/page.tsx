@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+// AQUÍ ESTÁ LA CORRECCIÓN: Solo un nivel hacia atrás (../)
+import { supabase } from '../lib/supabase';
 
 export default function CajaOperativa() {
   const [matricula, setMatricula] = useState('');
@@ -31,7 +32,7 @@ export default function CajaOperativa() {
   const buscarAlumno = async (e: React.FormEvent) => {
     e.preventDefault();
     setMensaje('');
-    const { data, error } = await supabase.from('alumnos').select('*').eq('matricula', matricula).single();
+    const { data } = await supabase.from('alumnos').select('*').eq('matricula', matricula).single();
     if (data) { setAlumno(data); } else { setAlumno(null); setMensaje('❌ Alumno no encontrado'); }
   };
 
@@ -40,11 +41,11 @@ export default function CajaOperativa() {
     if (!alumno || !montoVenta) return;
     
     // 1. Actualizar los boletos del alumno
-    const nuevosBoletos = alumno.boletos_disponibles + (Number(montoVenta) / 30); // Ejemplo: 1 boleto = 30 pesos
+    const nuevosBoletos = alumno.boletos_disponibles + (Number(montoVenta) / 30);
     const { error: errorAlumno } = await supabase.from('alumnos')
       .update({ boletos_disponibles: nuevosBoletos }).eq('id', alumno.id);
 
-    // 2. ¡MUY IMPORTANTE! Registrar la venta en movimientos_caja para que el SuperAdmin lo vea
+    // 2. Registrar la venta en movimientos_caja
     const { error: errorCaja } = await supabase.from('movimientos_caja').insert([{
       tipo: 'venta',
       monto: Number(montoVenta),
@@ -64,7 +65,6 @@ export default function CajaOperativa() {
   // Función corregida por Zona Horaria
   const cargarHistorialCaja = async () => {
     const [y, m, d] = fechaHistorial.split('-').map(Number);
-    // Armamos la hora exacta basándonos en la hora LOCAL, no UTC
     const inicioDia = new Date(y, m - 1, d, 0, 0, 0).toISOString();
     const finDia = new Date(y, m - 1, d, 23, 59, 59).toISOString();
 
