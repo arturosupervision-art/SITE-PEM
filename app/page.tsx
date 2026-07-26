@@ -1,182 +1,328 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase'; // CORRECCIÓN PARA VERCEL: Un solo nivel atrás
+import { supabase } from '../lib/supabase'; // Ruta corregida para Vercel
 
-export default function CajaPrincipal() {
+export default function ModuloCaja() {
+  // ESTADOS PRINCIPALES
+  const [cargando, setCargando] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [alumnos, setAlumnos] = useState<any[]>([]);
-  const [cargando, setCargando] = useState(false);
   
-  // Estado para manejar la cantidad manual por alumno (ID -> Cantidad)
+  // ESTADOS DE CAJA
+  const [cajaAbierta, setCajaAbierta] = useState(false);
+  const [montoInicial, setMontoInicial] = useState('');
+  
+  // ESTADOS DE MODALES
+  const [modalHistorial, setModalHistorial] = useState(false);
+  const [modalRetiro, setModalRetiro] = useState(false);
+  const [modalCierre, setModalCierre] = useState(false);
+  const [montoRetiro, setMontoRetiro] = useState('');
+  
+  // ESTADOS DE QR Y VENTAS
+  const [alumnoVincular, setAlumnoVincular] = useState<any>(null);
+  const [nuevoQr, setNuevoQr] = useState('');
   const [cantidades, setCantidades] = useState<{ [key: string]: number }>({});
 
-  const tarifaBoletaje = 20;
+  const TARIFA_BOLETAJE = 20;
 
-  // Función para buscar alumnos (simulando los "primeros 15" o por búsqueda)
-  const buscarAlumnos = async (termino: string) => {
+  // 1. BUSCAR ALUMNOS
+  const buscarAlumnos = async (termino: string = busqueda) => {
     setCargando(true);
     let query = supabase.from('alumnos').select('*').limit(15);
     
-    if (termino) {
+    if (termino.trim()) {
       query = query.or(`nombre_completo.ilike.%${termino}%,matricula.ilike.%${termino}%`);
     }
     
-    const { data } = await query;
-    if (data) {
+    const { data, error } = await query;
+    if (!error && data) {
       setAlumnos(data);
-      // Inicializar cantidades manuales en 1
-      const instCantidades: { [key: string]: number } = {};
-      data.forEach(a => instCantidades[a.id] = 1);
-      setCantidades(instCantidades);
     }
     setCargando(false);
   };
 
   useEffect(() => {
-    buscarAlumnos('');
+    buscarAlumnos();
   }, []);
 
-  const handleCobrar = async (alumno: any, cantidadBoletos: number) => {
-    const montoTotal = cantidadBoletos * tarifaBoletaje;
-    const nuevosBoletos = (alumno.boletos_disponibles || 0) + cantidadBoletos;
+  // 2. FUNCIÓN PARA IMPRIMIR TICKET
+  const imprimirTicket = (alumno: any, cantidad: number, total: number) => {
+    const fecha = new Date().toLocaleString();
+    const ventanaTicket = window.open('', '_blank', 'width=400,height=600');
+    if (!ventanaTicket) return;
+    
+    ventanaTicket.document.write(`
+      <html>
+        <head>
+          <title>Ticket de Venta</title>
+          <style>
+            body { font-family: monospace; text-align: center; padding: 20px; }
+            h2 { margin: 5px 0; }
+            .divider { border-bottom: 1px dashed #000; margin: 15px 0; }
+            .text-left { text-align: left; }
+          </style>
+        </head>
+        <body>
+          <h2>SITE - PEM</h2>
+          <p>Preparatoria Estado de México</p>
+          <div class="divider"></div>
+          <p class="text-left"><strong>Fecha:</strong> ${fecha}</p>
+          <p class="text-left"><strong>Alumno:</strong> ${alumno.nombre_completo}</p>
+          <p class="text-left"><strong>Matrícula:</strong> ${alumno.matricula || 'N/A'}</p>
+          <div class="divider"></div>
+          <p class="text-left"><strong>Cant. Boletos:</strong> ${cantidad}</p>
+          <p class="text-left"><strong>Precio Unitario:</strong> $${TARIFA_BOLETAJE}</p>
+          <h3 class="text-left">TOTAL: $${total} MXN</h3>
+          <div class="divider"></div>
+          <p>¡Gracias por tu compra!</p>
+          <script>
+            window.print();
+            setTimeout(() => window.close(), 1000);
+          </script>
+        </body>
+      </html>
+    `);
+    ventanaTicket.document.close();
+  };
 
-    // 1. Actualizar saldo del alumno
-    const { error: errorAlumno } = await supabase.from('alumnos')
+  // 3. VENDER BOLETOS
+  const handleCobrar = async (alumno: any, cantidad: number) => {
+    if (!cajaAbierta) {
+      alert("⚠️ Debes abrir la caja primero para realizar ventas.");
+      return;
+    }
+
+    const total = cantidad * TARIFA_BOLETAJE;
+    const confirmacion = window.confirm(`¿Cobrar $${total} por ${cantidad} boletos para ${alumno.nombre_completo}?`);
+    if (!confirmacion) return;
+
+    const nuevosBoletos = (alumno.boletos_disponibles || 0) + cantidad;
+
+    const { error: errorAlumno } = await supabase
+      .from('alumnos')
       .update({ boletos_disponibles: nuevosBoletos })
       .eq('id', alumno.id);
 
-    // 2. Registrar la venta en caja
-    const { error: errorCaja } = await supabase.from('movimientos_caja').insert([{
-      tipo: 'venta',
-      monto: montoTotal,
-      concepto: `Venta ${cantidadBoletos} boletos - Matrícula: ${alumno.matricula}`
-    }]);
+    const { error: errorCaja } = await supabase
+      .from('movimientos_caja')
+      .insert([{ tipo: 'venta', monto: total, concepto: `Venta ${cantidad} boletos - ${alumno.matricula}` }]);
 
     if (!errorAlumno && !errorCaja) {
-      alert(`✅ Venta de $${montoTotal} registrada con éxito.`);
-      buscarAlumnos(busqueda); // Refrescar lista
+      imprimirTicket(alumno, cantidad, total); // Llama al ticket
+      buscarAlumnos(); 
     } else {
-      alert('❌ Error al procesar la venta.');
+      alert('❌ Error al registrar la venta.');
     }
   };
 
+  // 4. VINCULAR QR
+  const guardarNuevoQr = async () => {
+    if (!nuevoQr.trim()) return;
+    const { error } = await supabase
+      .from('alumnos')
+      .update({ codigo_qr_vinculado: nuevoQr.trim() })
+      .eq('id', alumnoVincular.id);
+
+    if (!error) {
+      alert('✅ QR Vinculado exitosamente');
+      setAlumnoVincular(null);
+      setNuevoQr('');
+      buscarAlumnos(); 
+    } else {
+      alert('❌ Error al vincular el QR');
+    }
+  };
+
+  // 5. OPERACIONES DE CAJA
+  const handleAbrirCaja = () => {
+    if(!montoInicial) return;
+    setCajaAbierta(true);
+    // Aquí puedes registrar el movimiento de apertura en base de datos si lo deseas
+  };
+
+  const handleRetiro = () => {
+    alert(`Retiro de $${montoRetiro} registrado.`);
+    setModalRetiro(false);
+    setMontoRetiro('');
+  };
+
+  const handleCerrarCaja = () => {
+    alert("Caja cerrada correctamente.");
+    setCajaAbierta(false);
+    setModalCierre(false);
+  };
+
+  // PANTALLA DE ABRIR CAJA (Bloquea todo si no está abierta)
+  if (!cajaAbierta) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
+        <div className="bg-[#0f172a] p-8 rounded-3xl shadow-2xl border border-slate-800 max-w-md w-full text-center">
+          <div className="bg-white p-3 rounded-2xl inline-block mb-6">
+            <img src="/logo.png" alt="Logo" className="h-16 object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
+          </div>
+          <h1 className="text-[#fbbf24] text-2xl font-black mb-2">SITE - PEM</h1>
+          <p className="text-slate-400 mb-8">Apertura de Caja</p>
+          <input 
+            type="number" 
+            placeholder="Monto inicial en caja ($)" 
+            value={montoInicial}
+            onChange={(e) => setMontoInicial(e.target.value)}
+            className="w-full bg-[#020617] text-white p-4 rounded-xl border border-slate-700 mb-6 text-center text-lg outline-none focus:border-emerald-500"
+          />
+          <button 
+            onClick={handleAbrirCaja}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl transition-colors text-lg shadow-lg"
+          >
+            Abrir Caja
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // DASHBOARD PRINCIPAL
   return (
-    <div className="min-h-screen bg-[#020617] p-4 font-sans flex justify-center">
-      <div className="w-full max-w-3xl">
+    <div className="min-h-screen bg-[#020617] p-4 md:p-8 font-sans flex justify-center text-slate-200">
+      <div className="w-full max-w-4xl">
         
         {/* HEADER */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4 bg-white/5 p-3 rounded-2xl border border-slate-800">
-            {/* Logo Placeholder (Puedes cambiar el src por tu logo real) */}
-            <div className="bg-white p-1.5 rounded-lg">
-              <img src="/logo.png" alt="Logo" className="h-10 w-auto object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
-            </div>
-            <div>
-              <h1 className="text-[#fbbf24] font-black text-2xl tracking-wide">SITE - PEM</h1>
-              <p className="text-emerald-400 text-sm font-bold flex items-center gap-1">
-                ✅ Caja Abierta
-              </p>
-            </div>
+        <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-slate-800 mb-6 w-fit">
+          <div className="bg-white p-1.5 rounded-lg">
+            <img src="/logo.png" alt="Logo" className="h-10 w-auto object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
+          </div>
+          <div>
+            <h1 className="text-[#fbbf24] font-black text-xl tracking-wide">SITE - PEM</h1>
+            <p className="text-emerald-400 text-xs font-bold flex items-center gap-1">✅ Caja Abierta</p>
           </div>
         </div>
 
-        {/* BOTONES SUPERIORES */}
+        {/* BOTONES SUPERIORES DEL DASHBOARD */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <button className="bg-[#6366f1] hover:bg-indigo-500 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-1 border border-indigo-500/50">
-            <span className="text-2xl">📜</span>
-            <span className="tracking-wide">Historial</span>
+          <button onClick={() => setModalHistorial(true)} className="bg-[#6366f1] hover:bg-indigo-500 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-2 border border-indigo-500/50">
+            <span className="text-3xl">📜</span><span>Historial</span>
           </button>
-          
-          <button className="bg-[#f59e0b] hover:bg-amber-400 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-1 border border-amber-500/50">
-            <span className="text-2xl">💸</span>
-            <span className="tracking-wide text-center leading-tight">Retirar<br/>Efectivo</span>
+          <button onClick={() => setModalRetiro(true)} className="bg-[#f59e0b] hover:bg-amber-400 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-2 border border-amber-500/50">
+            <span className="text-3xl">💸</span><span className="text-center leading-tight">Retirar<br/>Efectivo</span>
           </button>
-          
-          <button className="bg-[#ef4444] hover:bg-red-400 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-1 border border-red-500/50">
-            <span className="text-2xl">🔒</span>
-            <span className="tracking-wide text-center leading-tight">Cerrar<br/>Caja</span>
+          <button onClick={() => setModalCierre(true)} className="bg-[#ef4444] hover:bg-red-400 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-2 border border-red-500/50">
+            <span className="text-3xl">🔒</span><span className="text-center leading-tight">Cerrar<br/>Caja</span>
           </button>
         </div>
 
         {/* BUSCADOR Y TARIFA */}
-        <div className="bg-[#0f172a] p-6 rounded-3xl mb-6 shadow-xl border border-slate-800">
+        <div className="bg-[#0f172a] p-6 rounded-2xl mb-6 border border-slate-800">
           <div className="relative mb-6">
-            <span className="absolute left-4 top-3.5 text-slate-400 text-lg">🔍</span>
+            <span className="absolute left-4 top-3.5 text-slate-400">🔍</span>
             <input 
               type="text" 
               value={busqueda}
-              onChange={(e) => {
-                setBusqueda(e.target.value);
-                buscarAlumnos(e.target.value);
-              }}
+              onChange={(e) => { setBusqueda(e.target.value); buscarAlumnos(e.target.value); }}
               placeholder="Buscar por nombre o matrícula..." 
-              className="w-full bg-[#020617] text-slate-200 rounded-xl py-4 pl-12 pr-4 border border-slate-800 outline-none focus:border-indigo-500 transition-colors shadow-inner" 
+              className="w-full bg-[#020617] text-white rounded-xl py-3 pl-12 pr-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" 
             />
           </div>
-          <div className="flex justify-center items-center gap-4 text-slate-400 font-medium">
+          <div className="flex justify-center items-center gap-4 text-slate-400">
             <span>Tarifa Boletaje:</span>
-            <span className="bg-[#020617] px-8 py-2 rounded-xl border border-slate-800 font-black text-[#fbbf24] text-lg shadow-inner">
-              {tarifaBoletaje}
+            <span className="bg-[#020617] px-6 py-1.5 rounded-xl border border-slate-700 font-black text-[#fbbf24] text-lg">
+              {TARIFA_BOLETAJE}
             </span>
           </div>
         </div>
 
         {/* LISTA DE ALUMNOS */}
-        <div className="bg-[#0f172a] p-6 rounded-3xl shadow-xl border border-slate-800">
-          <h2 className="text-white font-bold text-lg mb-6">Alumnos (Mostrando primeros 15)</h2>
-          
-          {cargando ? (
-            <p className="text-slate-400 text-center py-8">Cargando alumnos...</p>
-          ) : alumnos.length === 0 ? (
-            <p className="text-slate-500 text-center py-8">No se encontraron alumnos.</p>
-          ) : (
+        <div className="bg-[#0f172a] p-6 rounded-2xl border border-slate-800">
+          <h2 className="font-bold text-lg mb-6">Alumnos (Mostrando primeros 15)</h2>
+          {cargando ? <p className="text-slate-400 text-center py-4">Buscando...</p> : alumnos.length === 0 ? <p className="text-slate-500 text-center py-4">No hay resultados.</p> : (
             alumnos.map((alumno) => (
-              <div key={alumno.id} className="bg-[#020617] rounded-2xl p-6 border border-slate-800 mb-4 shadow-sm hover:border-slate-700 transition-colors">
-                
-                {/* Info Alumno */}
-                <h3 className="text-white font-bold text-xl uppercase mb-2 tracking-wide">{alumno.nombre_completo || 'CARLOS SÁNCHEZ RUIZ'}</h3>
-                <div className="flex items-center gap-4 mb-5">
-                  <span className="text-slate-400 text-sm font-medium">Matrícula: {alumno.matricula || 'MAT-003'}</span>
-                  <button className="bg-[#1e293b] text-slate-300 text-xs px-4 py-1.5 rounded-full border border-slate-700 hover:bg-slate-700 transition-colors font-medium">
-                    Vincular QR Alumno
-                  </button>
+              <div key={alumno.id} className="bg-[#020617] rounded-xl p-5 border border-slate-800 mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <h3 className="font-bold text-xl uppercase mb-1">{alumno.nombre_completo}</h3>
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-slate-400 text-sm">Matrícula: {alumno.matricula || 'N/A'}</span>
+                    
+                    {/* Botón Vincular QR o Etiqueta de Vinculado */}
+                    {alumno.codigo_qr_vinculado ? (
+                      <span className="text-xs bg-indigo-900/40 text-indigo-300 px-3 py-1 rounded-full border border-indigo-700/50 font-bold">🔗 QR Vinculado</span>
+                    ) : (
+                      <button onClick={() => setAlumnoVincular(alumno)} className="bg-slate-800 text-slate-300 text-xs px-3 py-1 rounded-full border border-slate-600 hover:bg-slate-700 transition-colors font-medium">
+                        Vincular QR Alumno
+                      </button>
+                    )}
+                  </div>
+                  <div className="bg-emerald-900/30 text-emerald-400 w-fit px-3 py-1.5 rounded-lg text-sm font-bold border border-emerald-800/50">
+                    🎟️ Saldo: {alumno.boletos_disponibles || 0} Boletos
+                  </div>
                 </div>
-                
-                {/* Saldo */}
-                <div className="bg-emerald-950/40 text-emerald-400 w-fit px-4 py-2 rounded-xl text-sm font-bold border border-emerald-900/50 mb-5 flex items-center gap-2">
-                  <span className="text-base">🎟️</span> Saldo: {alumno.boletos_disponibles || 0} Boletos
-                </div>
-                
-                {/* Botones de Venta */}
-                <div className="flex items-center gap-3 flex-wrap bg-[#0f172a] p-2 rounded-xl border border-slate-800/50">
-                  <button onClick={() => handleCobrar(alumno, 1)} className="bg-[#1e293b] text-slate-200 px-5 py-2.5 rounded-lg border border-slate-700 hover:bg-slate-700 hover:text-white transition-all font-medium whitespace-nowrap">
-                    1 Boleto (${tarifaBoletaje})
-                  </button>
-                  <button onClick={() => handleCobrar(alumno, 5)} className="bg-[#1e293b] text-slate-200 px-5 py-2.5 rounded-lg border border-slate-700 hover:bg-slate-700 hover:text-white transition-all font-medium flex items-center gap-2 whitespace-nowrap">
-                    <span>📦</span> 5 pz
-                  </button>
-                  
-                  <div className="flex-1 flex justify-end gap-3 min-w-[200px]">
-                    <input 
-                      type="number" 
-                      min="1"
-                      value={cantidades[alumno.id] || 1}
-                      onChange={(e) => setCantidades({...cantidades, [alumno.id]: Number(e.target.value)})}
-                      className="w-20 bg-[#1e293b] border border-slate-700 rounded-lg text-center text-white font-bold outline-none focus:border-emerald-500 transition-colors" 
-                    />
-                    <button 
-                      onClick={() => handleCobrar(alumno, cantidades[alumno.id] || 1)}
-                      className="bg-[#10b981] hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-lg transition-colors shadow-lg shadow-emerald-900/20 whitespace-nowrap"
-                    >
-                      Cobrar ${(cantidades[alumno.id] || 1) * tarifaBoletaje}
-                    </button>
+
+                <div className="flex items-center gap-2 bg-[#0f172a] p-2 rounded-lg border border-slate-800">
+                  <button onClick={() => handleCobrar(alumno, 1)} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-700 border border-slate-700">1 Boleto (${TARIFA_BOLETAJE})</button>
+                  <button onClick={() => handleCobrar(alumno, 5)} className="bg-emerald-900/40 text-emerald-400 px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-900 border border-emerald-800/50 flex gap-1">📦 5 pz</button>
+                  <div className="flex items-center gap-2 ml-2 pl-2 border-l border-slate-700">
+                    <input type="number" min="1" value={cantidades[alumno.id] || 1} onChange={(e) => setCantidades({...cantidades, [alumno.id]: Number(e.target.value)})} className="w-16 bg-slate-800 border border-slate-600 rounded-lg text-center text-white py-1.5 outline-none" />
+                    <button onClick={() => handleCobrar(alumno, cantidades[alumno.id] || 1)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg transition-colors">Cobrar</button>
                   </div>
                 </div>
               </div>
             ))
           )}
         </div>
+
+        {/* MODAL VINCULAR QR */}
+        {alumnoVincular && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+            <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md">
+              <h2 className="text-xl font-bold mb-2">Vincular Código QR</h2>
+              <p className="text-sm text-slate-400 mb-6">Alumno: <span className="text-white font-bold">{alumnoVincular.nombre_completo}</span></p>
+              <input type="text" autoFocus value={nuevoQr} onChange={(e) => setNuevoQr(e.target.value)} placeholder="Escanea el código QR aquí..." className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl px-4 py-3 text-white outline-none mb-6" />
+              <div className="flex justify-end gap-3">
+                <button onClick={() => { setAlumnoVincular(null); setNuevoQr(''); }} className="px-4 py-2 rounded-lg font-bold text-slate-400 hover:text-white">Cancelar</button>
+                <button onClick={guardarNuevoQr} className="px-4 py-2 rounded-lg font-bold bg-indigo-600 hover:bg-indigo-500 text-white">Guardar y Vincular</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL RETIRO */}
+        {modalRetiro && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+            <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-sm">
+              <h2 className="text-xl font-bold mb-4">Retiro de Efectivo</h2>
+              <input type="number" value={montoRetiro} onChange={(e) => setMontoRetiro(e.target.value)} placeholder="Monto a retirar" className="w-full bg-[#020617] border border-slate-700 rounded-xl px-4 py-3 text-white mb-6" />
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setModalRetiro(false)} className="px-4 py-2 rounded-lg font-bold text-slate-400">Cancelar</button>
+                <button onClick={handleRetiro} className="px-4 py-2 rounded-lg font-bold bg-amber-500 text-white">Retirar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL CIERRE */}
+        {modalCierre && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+            <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-sm text-center">
+              <span className="text-5xl mb-4 block">🔒</span>
+              <h2 className="text-xl font-bold mb-2">¿Cerrar Caja?</h2>
+              <p className="text-slate-400 mb-6">Ya no podrás hacer más ventas hasta abrir un nuevo turno.</p>
+              <div className="flex justify-center gap-3">
+                <button onClick={() => setModalCierre(false)} className="px-4 py-2 rounded-lg font-bold text-slate-400">Cancelar</button>
+                <button onClick={handleCerrarCaja} className="px-4 py-2 rounded-lg font-bold bg-red-500 text-white">Confirmar Cierre</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL HISTORIAL */}
+        {modalHistorial && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+            <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md">
+              <h2 className="text-xl font-bold mb-4">Historial Reciente</h2>
+              <p className="text-slate-400 mb-6 text-sm">Aquí se listarán los movimientos de caja...</p>
+              <button onClick={() => setModalHistorial(false)} className="w-full py-2 rounded-lg font-bold bg-slate-800 text-white">Cerrar</button>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
