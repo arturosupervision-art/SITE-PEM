@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase'; // Ruta corregida para Vercel
+import { supabase } from '../lib/supabase'; // Ruta para Vercel
 
 export default function ModuloCaja() {
   // ESTADOS PRINCIPALES
@@ -9,9 +9,12 @@ export default function ModuloCaja() {
   const [busqueda, setBusqueda] = useState('');
   const [alumnos, setAlumnos] = useState<any[]>([]);
   
-  // ESTADOS DE CAJA
+  // ESTADOS DE CAJA Y CORTES
   const [cajaAbierta, setCajaAbierta] = useState(false);
   const [montoInicial, setMontoInicial] = useState('');
+  const [ventasTurno, setVentasTurno] = useState(0);
+  const [retirosTurno, setRetirosTurno] = useState(0);
+  const [fechaApertura, setFechaApertura] = useState('');
   
   // ESTADOS DE MODALES
   const [modalHistorial, setModalHistorial] = useState(false);
@@ -46,47 +49,88 @@ export default function ModuloCaja() {
     buscarAlumnos();
   }, []);
 
-  // 2. FUNCIÓN PARA IMPRIMIR TICKET
-  const imprimirTicket = (alumno: any, cantidad: number, total: number) => {
-    const fecha = new Date().toLocaleString();
+
+  // ==========================================
+  // LÓGICA DE TICKETS (VENTA, RETIRO Y CIERRE)
+  // ==========================================
+  const estilosTicket = `
+    <style>
+      body { font-family: 'Courier New', Courier, monospace; font-size: 14px; color: #000; margin: 0; padding: 15px; width: 300px; }
+      .center { text-align: center; }
+      .left { text-align: left; }
+      .right { text-align: right; }
+      .bold { font-weight: bold; }
+      .divider { border-bottom: 1px dashed #000; margin: 12px 0; }
+      .flex { display: flex; justify-content: space-between; }
+      .text-xl { font-size: 18px; }
+    </style>
+  `;
+
+  const lanzarImpresion = (contenidoHTML: string) => {
     const ventanaTicket = window.open('', '_blank', 'width=400,height=600');
     if (!ventanaTicket) return;
-    
-    ventanaTicket.document.write(`
-      <html>
-        <head>
-          <title>Ticket de Venta</title>
-          <style>
-            body { font-family: monospace; text-align: center; padding: 20px; }
-            h2 { margin: 5px 0; }
-            .divider { border-bottom: 1px dashed #000; margin: 15px 0; }
-            .text-left { text-align: left; }
-          </style>
-        </head>
-        <body>
-          <h2>SITE - PEM</h2>
-          <p>Preparatoria Estado de México</p>
-          <div class="divider"></div>
-          <p class="text-left"><strong>Fecha:</strong> ${fecha}</p>
-          <p class="text-left"><strong>Alumno:</strong> ${alumno.nombre_completo}</p>
-          <p class="text-left"><strong>Matrícula:</strong> ${alumno.matricula || 'N/A'}</p>
-          <div class="divider"></div>
-          <p class="text-left"><strong>Cant. Boletos:</strong> ${cantidad}</p>
-          <p class="text-left"><strong>Precio Unitario:</strong> $${TARIFA_BOLETAJE}</p>
-          <h3 class="text-left">TOTAL: $${total} MXN</h3>
-          <div class="divider"></div>
-          <p>¡Gracias por tu compra!</p>
-          <script>
-            window.print();
-            setTimeout(() => window.close(), 1000);
-          </script>
-        </body>
-      </html>
-    `);
+    ventanaTicket.document.write(`<html><head><title>Impresión de Ticket</title>${estilosTicket}</head><body>${contenidoHTML}<script>window.print(); setTimeout(() => window.close(), 1000);</script></body></html>`);
     ventanaTicket.document.close();
   };
 
-  // 3. VENDER BOLETOS
+  const imprimirTicketVenta = (alumno: any, cantidad: number, total: number) => {
+    const html = `
+      <div class="center bold text-xl">SITE - PEM</div>
+      <div class="center">Preparatoria Estado de México</div>
+      <div class="center" style="margin-top:5px;">TICKET DE VENTA</div>
+      <div class="divider"></div>
+      <div class="left">Fecha: ${new Date().toLocaleString()}</div>
+      <div class="left">Alumno: ${alumno.nombre_completo}</div>
+      <div class="left">Matrícula: ${alumno.matricula || 'N/A'}</div>
+      <div class="divider"></div>
+      <div class="flex"><span>Boletos (${cantidad}x$${TARIFA_BOLETAJE}):</span> <span>$${total}.00</span></div>
+      <div class="divider"></div>
+      <div class="flex bold text-xl"><span>TOTAL:</span> <span>$${total}.00</span></div>
+      <div class="center" style="margin-top:25px;">¡Gracias por tu compra!</div>
+    `;
+    lanzarImpresion(html);
+  };
+
+  const imprimirTicketRetiro = (monto: number) => {
+    const html = `
+      <div class="center bold text-xl">SITE - PEM</div>
+      <div class="center" style="margin-top:5px;">COMPROBANTE DE RETIRO</div>
+      <div class="divider"></div>
+      <div class="left">Fecha: ${new Date().toLocaleString()}</div>
+      <div class="divider"></div>
+      <div class="flex bold text-xl"><span>MONTO RETIRADO:</span> <span>$${monto}.00</span></div>
+      <div class="divider"></div>
+      <div class="center" style="margin-top:60px; border-top:1px solid #000; width:80%; margin-left:auto; margin-right:auto; padding-top:5px;">Firma de Recibido</div>
+    `;
+    lanzarImpresion(html);
+  };
+
+  const imprimirTicketCierre = () => {
+    const fondoInicial = Number(montoInicial) || 0;
+    const efectivoEsperado = fondoInicial + ventasTurno - retirosTurno;
+    
+    const html = `
+      <div class="center bold text-xl">SITE - PEM</div>
+      <div class="center" style="margin-top:5px;">CORTE DE CAJA</div>
+      <div class="divider"></div>
+      <div class="left">Apertura: ${fechaApertura}</div>
+      <div class="left">Cierre: ${new Date().toLocaleString()}</div>
+      <div class="divider"></div>
+      <div class="flex"><span>Fondo Inicial:</span> <span>$${fondoInicial}.00</span></div>
+      <div class="flex"><span>Total Ventas:</span> <span>+$${ventasTurno}.00</span></div>
+      <div class="flex"><span>Total Retiros:</span> <span>-$${retirosTurno}.00</span></div>
+      <div class="divider"></div>
+      <div class="flex bold text-xl"><span>EFECTIVO ESPERADO:</span> <span>$${efectivoEsperado}.00</span></div>
+      <div class="divider"></div>
+      <div class="center" style="margin-top:60px; border-top:1px solid #000; width:80%; margin-left:auto; margin-right:auto; padding-top:5px;">Firma Cajero</div>
+    `;
+    lanzarImpresion(html);
+  };
+
+
+  // ==========================================
+  // OPERACIONES DE SISTEMA
+  // ==========================================
   const handleCobrar = async (alumno: any, cantidad: number) => {
     if (!cajaAbierta) {
       alert("⚠️ Debes abrir la caja primero para realizar ventas.");
@@ -109,14 +153,14 @@ export default function ModuloCaja() {
       .insert([{ tipo: 'venta', monto: total, concepto: `Venta ${cantidad} boletos - ${alumno.matricula}` }]);
 
     if (!errorAlumno && !errorCaja) {
-      imprimirTicket(alumno, cantidad, total); // Llama al ticket
+      setVentasTurno(prev => prev + total); // Sumamos a las ventas del turno
+      imprimirTicketVenta(alumno, cantidad, total);
       buscarAlumnos(); 
     } else {
       alert('❌ Error al registrar la venta.');
     }
   };
 
-  // 4. VINCULAR QR
   const guardarNuevoQr = async () => {
     if (!nuevoQr.trim()) return;
     const { error } = await supabase
@@ -134,26 +178,37 @@ export default function ModuloCaja() {
     }
   };
 
-  // 5. OPERACIONES DE CAJA
   const handleAbrirCaja = () => {
     if(!montoInicial) return;
     setCajaAbierta(true);
-    // Aquí puedes registrar el movimiento de apertura en base de datos si lo deseas
+    setFechaApertura(new Date().toLocaleString());
+    setVentasTurno(0);
+    setRetirosTurno(0);
   };
 
   const handleRetiro = () => {
-    alert(`Retiro de $${montoRetiro} registrado.`);
-    setModalRetiro(false);
-    setMontoRetiro('');
+    const retiroNum = Number(montoRetiro);
+    if(retiroNum > 0) {
+      setRetirosTurno(prev => prev + retiroNum); // Sumamos a retiros
+      imprimirTicketRetiro(retiroNum);
+      alert(`Retiro de $${retiroNum} registrado.`);
+      setModalRetiro(false);
+      setMontoRetiro('');
+    }
   };
 
   const handleCerrarCaja = () => {
+    imprimirTicketCierre();
     alert("Caja cerrada correctamente.");
     setCajaAbierta(false);
     setModalCierre(false);
+    setMontoInicial('');
   };
 
-  // PANTALLA DE ABRIR CAJA (Bloquea todo si no está abierta)
+
+  // ==========================================
+  // RENDER PANTALLA ABRIR CAJA
+  // ==========================================
   if (!cajaAbierta) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
@@ -181,7 +236,10 @@ export default function ModuloCaja() {
     );
   }
 
-  // DASHBOARD PRINCIPAL
+
+  // ==========================================
+  // RENDER DASHBOARD PRINCIPAL
+  // ==========================================
   return (
     <div className="min-h-screen bg-[#020617] p-4 md:p-8 font-sans flex justify-center text-slate-200">
       <div className="w-full max-w-4xl">
@@ -197,7 +255,7 @@ export default function ModuloCaja() {
           </div>
         </div>
 
-        {/* BOTONES SUPERIORES DEL DASHBOARD */}
+        {/* BOTONES SUPERIORES */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           <button onClick={() => setModalHistorial(true)} className="bg-[#6366f1] hover:bg-indigo-500 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-2 border border-indigo-500/50">
             <span className="text-3xl">📜</span><span>Historial</span>
@@ -241,7 +299,6 @@ export default function ModuloCaja() {
                   <div className="flex items-center gap-3 mb-3">
                     <span className="text-slate-400 text-sm">Matrícula: {alumno.matricula || 'N/A'}</span>
                     
-                    {/* Botón Vincular QR o Etiqueta de Vinculado */}
                     {alumno.codigo_qr_vinculado ? (
                       <span className="text-xs bg-indigo-900/40 text-indigo-300 px-3 py-1 rounded-full border border-indigo-700/50 font-bold">🔗 QR Vinculado</span>
                     ) : (
@@ -291,7 +348,7 @@ export default function ModuloCaja() {
               <input type="number" value={montoRetiro} onChange={(e) => setMontoRetiro(e.target.value)} placeholder="Monto a retirar" className="w-full bg-[#020617] border border-slate-700 rounded-xl px-4 py-3 text-white mb-6" />
               <div className="flex justify-end gap-3">
                 <button onClick={() => setModalRetiro(false)} className="px-4 py-2 rounded-lg font-bold text-slate-400">Cancelar</button>
-                <button onClick={handleRetiro} className="px-4 py-2 rounded-lg font-bold bg-amber-500 text-white">Retirar</button>
+                <button onClick={handleRetiro} className="px-4 py-2 rounded-lg font-bold bg-amber-500 text-white">Retirar / Imprimir</button>
               </div>
             </div>
           </div>
@@ -303,10 +360,10 @@ export default function ModuloCaja() {
             <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-sm text-center">
               <span className="text-5xl mb-4 block">🔒</span>
               <h2 className="text-xl font-bold mb-2">¿Cerrar Caja?</h2>
-              <p className="text-slate-400 mb-6">Ya no podrás hacer más ventas hasta abrir un nuevo turno.</p>
+              <p className="text-slate-400 mb-6">Se imprimirá tu corte de caja y ya no podrás hacer más ventas.</p>
               <div className="flex justify-center gap-3">
                 <button onClick={() => setModalCierre(false)} className="px-4 py-2 rounded-lg font-bold text-slate-400">Cancelar</button>
-                <button onClick={handleCerrarCaja} className="px-4 py-2 rounded-lg font-bold bg-red-500 text-white">Confirmar Cierre</button>
+                <button onClick={handleCerrarCaja} className="px-4 py-2 rounded-lg font-bold bg-red-500 text-white">Cerrar e Imprimir</button>
               </div>
             </div>
           </div>
