@@ -26,27 +26,28 @@ export default function SuperAdministrador() {
   const [historialRetiros, setHistorialRetiros] = useState<any[]>([]);
   const [cargandoRetiros, setCargandoRetiros] = useState(false);
 
-  // ESTADOS: Historial Completo con Calendario Personalizado
+  // ESTADOS: Historial Completo con Calendario
   const [mostrarModalHistorial, setMostrarModalHistorial] = useState(false);
   const [historialCompleto, setHistorialCompleto] = useState<any[]>([]);
   const [fechaHistorial, setFechaHistorial] = useState(new Date().toISOString().split('T')[0]);
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
-  
-  // Estados para la "Ventanita" del Calendario
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
   const [fechaNavegacion, setFechaNavegacion] = useState(new Date());
   
-  // ESTADOS: Corte Z
+  // ESTADOS: Corte Z con Calendario
   const [mostrarModalCorte, setMostrarModalCorte] = useState(false);
   const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
   const [datosCorte, setDatosCorte] = useState<any[] | null>(null);
+  const [mostrarCalendarioCorte, setMostrarCalendarioCorte] = useState(false);
+  const [fechaNavegacionCorte, setFechaNavegacionCorte] = useState(new Date());
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrInputRef = useRef<HTMLInputElement>(null);
   const nuevoQrInputRef = useRef<HTMLInputElement>(null);
 
-  // Lógica del Calendario Desplegable
   const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+  // Lógica del Calendario para Historial
   const diasEnMes = new Date(fechaNavegacion.getFullYear(), fechaNavegacion.getMonth() + 1, 0).getDate();
   const primerDiaDelMes = new Date(fechaNavegacion.getFullYear(), fechaNavegacion.getMonth(), 1).getDay();
 
@@ -60,6 +61,22 @@ export default function SuperAdministrador() {
     const d = String(dia).padStart(2, '0');
     setFechaHistorial(`${y}-${m}-${d}`);
     setMostrarCalendario(false);
+  };
+
+  // Lógica del Calendario para Corte Z
+  const diasEnMesCorte = new Date(fechaNavegacionCorte.getFullYear(), fechaNavegacionCorte.getMonth() + 1, 0).getDate();
+  const primerDiaDelMesCorte = new Date(fechaNavegacionCorte.getFullYear(), fechaNavegacionCorte.getMonth(), 1).getDay();
+
+  const cambiarMesCorte = (direccion: number) => {
+    setFechaNavegacionCorte(new Date(fechaNavegacionCorte.getFullYear(), fechaNavegacionCorte.getMonth() + direccion, 1));
+  };
+
+  const seleccionarDiaCorte = (dia: number) => {
+    const y = fechaNavegacionCorte.getFullYear();
+    const m = String(fechaNavegacionCorte.getMonth() + 1).padStart(2, '0');
+    const d = String(dia).padStart(2, '0');
+    setFechaCorte(`${y}-${m}-${d}`);
+    setMostrarCalendarioCorte(false);
   };
 
   // Función de Login
@@ -105,11 +122,8 @@ export default function SuperAdministrador() {
     setCargandoRetiros(false);
   };
 
-  // CORREGIDO: Ahora busca desde las 00:00:00 hasta las 23:59:59 en tu zona horaria local
-  // para que no se pierdan las ventas de la tarde/noche.
   const cargarHistorialPorFecha = async (fechaStr: string) => {
     setCargandoHistorial(true);
-    
     const [y, m, d] = fechaStr.split('-').map(Number);
     const inicioDia = new Date(y, m - 1, d, 0, 0, 0).toISOString();
     const finDia = new Date(y, m - 1, d, 23, 59, 59).toISOString();
@@ -121,16 +135,12 @@ export default function SuperAdministrador() {
       .lte('created_at', finDia)
       .order('created_at', { ascending: false });
     
-    if (!error && data) {
-      setHistorialCompleto(data);
-    }
+    if (!error && data) setHistorialCompleto(data);
     setCargandoHistorial(false);
   };
 
   useEffect(() => {
-    if (mostrarModalHistorial) {
-      cargarHistorialPorFecha(fechaHistorial);
-    }
+    if (mostrarModalHistorial) cargarHistorialPorFecha(fechaHistorial);
   }, [fechaHistorial, mostrarModalHistorial]);
 
   const abrirModalHistorial = () => {
@@ -139,11 +149,10 @@ export default function SuperAdministrador() {
     const m = String(hoy.getMonth() + 1).padStart(2, '0');
     const d = String(hoy.getDate()).padStart(2, '0');
     setFechaHistorial(`${y}-${m}-${d}`);
-    setFechaNavegacion(hoy); // Resetea el calendario al mes actual
+    setFechaNavegacion(hoy);
     setMostrarModalHistorial(true);
   };
 
-  // ... (El resto de funciones como generarCorteZ, imprimirCorte, guardarAlumno quedan igual)
   const generarCorteZ = async (e: React.FormEvent) => {
     e.preventDefault();
     const [y, m, d] = fechaCorte.split('-').map(Number);
@@ -156,9 +165,7 @@ export default function SuperAdministrador() {
       .gte('created_at', inicioDia)
       .lte('created_at', finDia);
 
-    if (!error && data) {
-      setDatosCorte(data);
-    }
+    if (!error && data) setDatosCorte(data);
   };
 
   const imprimirCorte = () => window.print();
@@ -166,10 +173,6 @@ export default function SuperAdministrador() {
   useEffect(() => {
     if (pestaña === 'finanzas') cargarRetiros();
   }, [pestaña]);
-
-  useEffect(() => {
-    if (mostrarModalQR && qrInputRef.current) qrInputRef.current.focus();
-  }, [mostrarModalQR]);
 
   const descargarPlantilla = () => {
     const csvContent = 'data:text/csv;charset=utf-8,nombre_completo,matricula,codigo_qr_vinculado\nJuan Perez,2024001,QR12345';
@@ -208,24 +211,6 @@ export default function SuperAdministrador() {
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
-  };
-
-  const guardarAlumno = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nombre || !matricula) return;
-    const { error } = await supabase.from('alumnos').insert([{ nombre_completo: nombre, matricula: matricula, codigo_qr_vinculado: qr || null, boletos_disponibles: 0 }]);
-    if (!error) {
-      setMostrarModal(false); setNombre(''); setMatricula(''); setQr(''); cargarAlumnos();
-    }
-  };
-
-  const guardarVinculacionQR = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nuevoQR || !alumnoSeleccionado) return;
-    const { error } = await supabase.from('alumnos').update({ codigo_qr_vinculado: nuevoQR }).eq('id', alumnoSeleccionado.id);
-    if (!error) {
-      setMostrarModalQR(false); setNuevoQR(''); cargarAlumnos();
-    }
   };
 
   const eliminarAlumno = async (id: number, nombreAlumno: string) => {
@@ -311,7 +296,7 @@ export default function SuperAdministrador() {
           </div>
         )}
 
-        {/* PESTAÑA: ALUMNOS (SE MANTIENE IGUAL) */}
+        {/* PESTAÑA: ALUMNOS */}
         {pestaña === 'alumnos' && rolActivo === 'superadmin' && (
            <>
            <div className="flex flex-wrap gap-3 items-center justify-end mb-4">
@@ -372,7 +357,12 @@ export default function SuperAdministrador() {
               <span className="text-emerald-500 mb-2 text-3xl">💵</span>
               <p className="text-slate-400 text-sm font-bold uppercase mb-1">Ventas del Día (Corte)</p>
               <h2 className="text-3xl font-black text-white mb-2">$4,500.00</h2>
-              <button onClick={() => { setDatosCorte(null); setMostrarModalCorte(true); }} className="mt-2 bg-emerald-900/40 border border-emerald-800 text-emerald-400 text-xs py-2 px-4 rounded-lg font-bold hover:bg-emerald-600 hover:text-white transition-all">
+              <button onClick={() => { 
+                setDatosCorte(null);
+                setFechaCorte(new Date().toISOString().split('T')[0]);
+                setFechaNavegacionCorte(new Date());
+                setMostrarModalCorte(true); 
+              }} className="mt-2 bg-emerald-900/40 border border-emerald-800 text-emerald-400 text-xs py-2 px-4 rounded-lg font-bold hover:bg-emerald-600 hover:text-white transition-all">
                 🖨️ Imprimir Corte Z
               </button>
             </div>
@@ -444,35 +434,23 @@ export default function SuperAdministrador() {
       {mostrarModalHistorial && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 print:hidden">
           <div className="bg-[#0f172a] border border-slate-800 p-6 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-[0_10px_40px_rgba(0,0,0,0.8)]">
-            
-            {/* ENCABEZADO ESTILO CAPTURA */}
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white flex items-center gap-3">
                 📊 Historial Completo de Caja
               </h2>
-              
               <div className="flex items-center gap-2">
                 <div className="relative">
-                  {/* BOTÓN DEL CALENDARIO */}
-                  <button 
-                    onClick={() => setMostrarCalendario(!mostrarCalendario)}
-                    className="flex items-center gap-2 bg-[#0a0f1d] border border-slate-800 rounded-xl px-4 py-2 hover:bg-slate-800 transition-colors"
-                  >
+                  <button onClick={() => setMostrarCalendario(!mostrarCalendario)} className="flex items-center gap-2 bg-[#0a0f1d] border border-slate-800 rounded-xl px-4 py-2 hover:bg-slate-800 transition-colors">
                     <span className="text-sm font-bold text-slate-400">Día:</span>
-                    <span className="text-sm text-slate-200 font-medium tracking-wide">
-                      {fechaHistorial.split('-').reverse().join('/')}
-                    </span>
+                    <span className="text-sm text-slate-200 font-medium tracking-wide">{fechaHistorial.split('-').reverse().join('/')}</span>
                     <span className="text-slate-400 ml-1">📅</span>
                   </button>
 
-                  {/* LA "VENTANITA" DEL CALENDARIO */}
                   {mostrarCalendario && (
                     <div className="absolute right-0 mt-2 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4 w-64 z-50">
                       <div className="flex justify-between items-center mb-4">
                         <button onClick={() => cambiarMes(-1)} className="text-slate-400 hover:text-white p-1">◀</button>
-                        <span className="text-white font-bold text-sm">
-                          {meses[fechaNavegacion.getMonth()]} {fechaNavegacion.getFullYear()}
-                        </span>
+                        <span className="text-white font-bold text-sm">{meses[fechaNavegacion.getMonth()]} {fechaNavegacion.getFullYear()}</span>
                         <button onClick={() => cambiarMes(1)} className="text-slate-400 hover:text-white p-1">▶</button>
                       </div>
                       
@@ -481,18 +459,10 @@ export default function SuperAdministrador() {
                       </div>
                       
                       <div className="grid grid-cols-7 gap-1 text-center">
-                        {/* Espacios vacíos antes del primer día */}
-                        {Array.from({ length: primerDiaDelMes }).map((_, i) => (
-                          <div key={`empty-${i}`} className="p-2"></div>
-                        ))}
-                        {/* Días del mes */}
+                        {Array.from({ length: primerDiaDelMes }).map((_, i) => (<div key={`empty-${i}`} className="p-2"></div>))}
                         {Array.from({ length: diasEnMes }).map((_, i) => {
                           const dia = i + 1;
-                          const esHoy = 
-                            dia === new Date().getDate() && 
-                            fechaNavegacion.getMonth() === new Date().getMonth() &&
-                            fechaNavegacion.getFullYear() === new Date().getFullYear();
-                            
+                          const esHoy = dia === new Date().getDate() && fechaNavegacion.getMonth() === new Date().getMonth() && fechaNavegacion.getFullYear() === new Date().getFullYear();
                           const m = String(fechaNavegacion.getMonth() + 1).padStart(2, '0');
                           const dStr = String(dia).padStart(2, '0');
                           const fechaCompleta = `${fechaNavegacion.getFullYear()}-${m}-${dStr}`;
@@ -502,13 +472,7 @@ export default function SuperAdministrador() {
                             <button
                               key={dia}
                               onClick={() => seleccionarDia(dia)}
-                              className={`p-1.5 text-sm rounded-lg transition-colors ${
-                                estaSeleccionado 
-                                  ? 'bg-blue-600 text-white font-bold shadow-md' 
-                                  : esHoy 
-                                    ? 'bg-slate-800 text-blue-400 font-bold hover:bg-slate-700' 
-                                    : 'text-slate-300 hover:bg-slate-700'
-                              }`}
+                              className={`p-1.5 text-sm rounded-lg transition-colors ${estaSeleccionado ? 'bg-blue-600 text-white font-bold shadow-md' : esHoy ? 'bg-slate-800 text-blue-400 font-bold hover:bg-slate-700' : 'text-slate-300 hover:bg-slate-700'}`}
                             >
                               {dia}
                             </button>
@@ -520,9 +484,7 @@ export default function SuperAdministrador() {
                 </div>
 
                 <button onClick={() => setMostrarModalHistorial(false)} className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl w-10 h-10 flex items-center justify-center transition-all">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
             </div>
@@ -570,31 +532,19 @@ export default function SuperAdministrador() {
               )}
             </div>
 
-            {/* RESUMEN DEL DÍA */}
             {!cargandoHistorial && historialCompleto.length > 0 && (
               <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-800 pt-5">
                 <div className="bg-[#0a0f1d] border border-emerald-900/30 p-4 rounded-xl text-center">
                   <p className="text-emerald-500/70 text-xs font-bold uppercase mb-1">Total Ingresos / Ventas</p>
-                  <p className="text-emerald-400 font-black text-2xl">
-                    +${historialCompleto.filter(m => m.tipo !== 'retiro').reduce((acc, curr) => acc + curr.monto, 0).toFixed(2)}
-                  </p>
+                  <p className="text-emerald-400 font-black text-2xl">+${historialCompleto.filter(m => m.tipo !== 'retiro').reduce((acc, curr) => acc + curr.monto, 0).toFixed(2)}</p>
                 </div>
-                
                 <div className="bg-[#0a0f1d] border border-[#522525] p-4 rounded-xl text-center">
                   <p className="text-[#ff5c5c]/70 text-xs font-bold uppercase mb-1">Total Retiros</p>
-                  <p className="text-[#ff5c5c] font-black text-2xl">
-                    -${historialCompleto.filter(m => m.tipo === 'retiro').reduce((acc, curr) => acc + curr.monto, 0).toFixed(2)}
-                  </p>
+                  <p className="text-[#ff5c5c] font-black text-2xl">-${historialCompleto.filter(m => m.tipo === 'retiro').reduce((acc, curr) => acc + curr.monto, 0).toFixed(2)}</p>
                 </div>
-                
                 <div className="bg-[#0a0f1d] border border-blue-900/30 p-4 rounded-xl text-center">
                   <p className="text-blue-500/70 text-xs font-bold uppercase mb-1">Balance Neto del Día</p>
-                  <p className="text-blue-400 font-black text-2xl">
-                    ${(
-                      historialCompleto.filter(m => m.tipo !== 'retiro').reduce((acc, curr) => acc + curr.monto, 0) -
-                      historialCompleto.filter(m => m.tipo === 'retiro').reduce((acc, curr) => acc + curr.monto, 0)
-                    ).toFixed(2)}
-                  </p>
+                  <p className="text-blue-400 font-black text-2xl">${(historialCompleto.filter(m => m.tipo !== 'retiro').reduce((acc, curr) => acc + curr.monto, 0) - historialCompleto.filter(m => m.tipo === 'retiro').reduce((acc, curr) => acc + curr.monto, 0)).toFixed(2)}</p>
                 </div>
               </div>
             )}
@@ -602,21 +552,72 @@ export default function SuperAdministrador() {
         </div>
       )}
 
-      {/* --- MODAL: GENERADOR DE CORTE Z --- */}
+      {/* --- MODAL: GENERADOR DE CORTE Z CON CALENDARIO --- */}
       {mostrarModalCorte && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 print:hidden">
-          <div className="bg-slate-900 border border-emerald-800 p-6 rounded-2xl w-full max-w-md shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
+          <div className="bg-slate-900 border border-emerald-800 p-6 rounded-2xl w-full max-w-md shadow-2xl relative">
+            <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-white">🖨️ Generar Corte Z</h2>
               <button onClick={() => setMostrarModalCorte(false)} className="text-slate-400 hover:text-white font-bold">&times;</button>
             </div>
             
-            <form onSubmit={generarCorteZ} className="space-y-4">
+            <form onSubmit={generarCorteZ} className="space-y-6">
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Selecciona la fecha del corte:</label>
-                <input type="date" value={fechaCorte} onChange={(e) => setFechaCorte(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500" required />
+                <label className="block text-sm text-slate-400 mb-2">Selecciona la fecha del corte:</label>
+                
+                {/* CALENDARIO PARA CORTE Z */}
+                <div className="relative">
+                  <button 
+                    type="button"
+                    onClick={() => setMostrarCalendarioCorte(!mostrarCalendarioCorte)} 
+                    className="w-full flex items-center justify-between bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 hover:border-emerald-500 transition-colors"
+                  >
+                    <span className="text-slate-200 font-medium tracking-wide">
+                      {fechaCorte.split('-').reverse().join('/')}
+                    </span>
+                    <span className="text-slate-400">📅</span>
+                  </button>
+
+                  {mostrarCalendarioCorte && (
+                    <div className="absolute left-0 top-full mt-2 bg-slate-800 border border-emerald-900/50 rounded-xl shadow-2xl p-4 w-full z-50">
+                      <div className="flex justify-between items-center mb-4">
+                        <button type="button" onClick={() => cambiarMesCorte(-1)} className="text-slate-400 hover:text-white p-1">◀</button>
+                        <span className="text-white font-bold text-sm">{meses[fechaNavegacionCorte.getMonth()]} {fechaNavegacionCorte.getFullYear()}</span>
+                        <button type="button" onClick={() => cambiarMesCorte(1)} className="text-slate-400 hover:text-white p-1">▶</button>
+                      </div>
+                      
+                      <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 mb-2">
+                        <span>Do</span><span>Lu</span><span>Ma</span><span>Mi</span><span>Ju</span><span>Vi</span><span>Sa</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-7 gap-1 text-center">
+                        {Array.from({ length: primerDiaDelMesCorte }).map((_, i) => (<div key={`empty-corte-${i}`} className="p-2"></div>))}
+                        {Array.from({ length: diasEnMesCorte }).map((_, i) => {
+                          const dia = i + 1;
+                          const esHoy = dia === new Date().getDate() && fechaNavegacionCorte.getMonth() === new Date().getMonth() && fechaNavegacionCorte.getFullYear() === new Date().getFullYear();
+                          const m = String(fechaNavegacionCorte.getMonth() + 1).padStart(2, '0');
+                          const dStr = String(dia).padStart(2, '0');
+                          const fechaCompleta = `${fechaNavegacionCorte.getFullYear()}-${m}-${dStr}`;
+                          const estaSeleccionado = fechaCompleta === fechaCorte;
+
+                          return (
+                            <button
+                              key={`corte-${dia}`}
+                              type="button"
+                              onClick={() => seleccionarDiaCorte(dia)}
+                              className={`p-1.5 text-sm rounded-lg transition-colors ${estaSeleccionado ? 'bg-emerald-600 text-white font-bold shadow-md' : esHoy ? 'bg-slate-900 text-emerald-400 font-bold hover:bg-slate-700' : 'text-slate-300 hover:bg-slate-700'}`}
+                            >
+                              {dia}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-lg transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+
+              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]">
                 Procesar Datos
               </button>
             </form>
@@ -633,13 +634,13 @@ export default function SuperAdministrador() {
         </div>
       )}
 
-      {/* TICKET DE IMPRESIÓN (Igual que antes) */}
+      {/* TICKET DE IMPRESIÓN */}
       {datosCorte && (
         <div className="hidden print:block text-black bg-white p-4 font-mono text-sm w-full max-w-xs mx-auto">
           <div className="text-center border-b border-black pb-4 mb-4">
             <h1 className="font-black text-xl">SITE-PEM</h1>
             <p>CORTE Z CAJA</p>
-            <p>Fecha: {fechaCorte}</p>
+            <p>Fecha: {fechaCorte.split('-').reverse().join('/')}</p>
           </div>
           
           <div className="mb-4">
