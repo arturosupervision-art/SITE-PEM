@@ -12,12 +12,13 @@ export default function ModuloFinanzasSuperAdmin() {
 
   // ================= ESTADOS DE MODALES =================
   const [mostrarCorte, setMostrarCorte] = useState(false)
-  const [fechaCorte, setFechaCorte] = useState(new Date().toLocaleDateString('en-CA')) // YYYY-MM-DD
+  const [fechaCorte, setFechaCorte] = useState(new Date().toLocaleDateString('en-CA'))
   
   const [mostrarHistorial, setMostrarHistorial] = useState(false)
   const [fechaHistorial, setFechaHistorial] = useState(new Date().toLocaleDateString('en-CA'))
   const [historialUnificado, setHistorialUnificado] = useState<any[]>([])
-  const [statsHistorial, setStatsHistorial] = useState({ ventas: 0, retiros: 0, total: 0 })
+  // AGREGAMOS "boletos" AL ESTADO DEL HISTORIAL
+  const [statsHistorial, setStatsHistorial] = useState({ ventas: 0, retiros: 0, total: 0, boletos: 0 })
 
   // ================= ESTADO DEL TICKET =================
   const [ticketActual, setTicketActual] = useState<any>(null)
@@ -30,7 +31,7 @@ export default function ModuloFinanzasSuperAdmin() {
     if (mostrarHistorial) cargarHistorialCompleto()
   }, [fechaHistorial, mostrarHistorial])
 
-  // ================= FUNCIONES DE CARGA (CON ZONA HORARIA REPARADA) =================
+  // ================= FUNCIONES DE CARGA =================
   const obtenerLimitesDia = (fechaLocal: string) => {
     return {
       inicio: new Date(`${fechaLocal}T00:00:00.000`).toISOString(),
@@ -43,22 +44,18 @@ export default function ModuloFinanzasSuperAdmin() {
     const hoyLocal = new Date().toLocaleDateString('en-CA')
     const limitesHoy = obtenerLimitesDia(hoyLocal)
 
-    // Limites semana (hace 7 días)
     const fechaSemana = new Date()
     fechaSemana.setDate(fechaSemana.getDate() - 7)
     const limitesSemana = obtenerLimitesDia(fechaSemana.toLocaleDateString('en-CA'))
 
     try {
-      // 1. Ventas de Hoy
       const { data: vHoy } = await supabase.from('ventas_boletos').select('monto_total, cantidad_boletos').gte('created_at', limitesHoy.inicio).lte('created_at', limitesHoy.fin)
       const totalVentasHoy = (vHoy || []).reduce((acc, v) => acc + v.monto_total, 0)
       const totalBoletosHoy = (vHoy || []).reduce((acc, v) => acc + v.cantidad_boletos, 0)
       
-      // 2. Ventas de la Semana
       const { data: vSemana } = await supabase.from('ventas_boletos').select('monto_total').gte('created_at', limitesSemana.inicio).lte('created_at', limitesHoy.fin)
       const totalVentasSemana = (vSemana || []).reduce((acc, v) => acc + v.monto_total, 0)
 
-      // 3. Retiros de Hoy
       const { data: rHoy } = await supabase.from('movimientos_caja').select('*').gte('created_at', limitesHoy.inicio).lte('created_at', limitesHoy.fin).order('created_at', { ascending: false })
 
       setVentasDia(totalVentasHoy)
@@ -78,14 +75,15 @@ export default function ModuloFinanzasSuperAdmin() {
     const { data: ventas } = await supabase.from('ventas_boletos').select(`id, created_at, monto_total, cantidad_boletos, folio_secuencial, alumnos ( nombre_completo )`).gte('created_at', limites.inicio).lte('created_at', limites.fin)
     const { data: retirosDb } = await supabase.from('movimientos_caja').select('*').gte('created_at', limites.inicio).lte('created_at', limites.fin)
 
-    // Unificar y ordenar por fecha
     let unificado: any[] = []
     let tVentas = 0
     let tRetiros = 0
+    let tBoletos = 0 // NUEVA VARIABLE PARA CONTAR BOLETOS
 
     if (ventas) {
       ventas.forEach(v => {
         tVentas += v.monto_total
+        tBoletos += v.cantidad_boletos // SUMAMOS LOS BOLETOS DE CADA VENTA
         unificado.push({ tipo: 'VENTA', id: v.id, fecha: v.created_at, folio: `SITE-${String(v.folio_secuencial).padStart(5,'0')}`, descripcion: `Venta: ${v.alumnos?.nombre_completo} (${v.cantidad_boletos} bts)`, monto: v.monto_total })
       })
     }
@@ -100,7 +98,7 @@ export default function ModuloFinanzasSuperAdmin() {
     unificado.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
     
     setHistorialUnificado(unificado)
-    setStatsHistorial({ ventas: tVentas, retiros: tRetiros, total: tVentas - tRetiros })
+    setStatsHistorial({ ventas: tVentas, retiros: tRetiros, total: tVentas - tRetiros, boletos: tBoletos })
   }
 
   const generarCorteZ = async () => {
@@ -137,30 +135,30 @@ export default function ModuloFinanzasSuperAdmin() {
       {/* DASHBOARD CARDS */}
       <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         
-        {/* Card Ventas Día */}
+        {/* Card Ingresos Acumulados Día */}
         <div className="bg-[#0f172a] rounded-2xl border border-emerald-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
           <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>
           <span className="text-3xl mb-2">💵</span>
-          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Ventas del Día</p>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Ingresos Acumulados (Hoy)</p>
           <p className="text-white font-black text-4xl mb-4">${ventasDia.toFixed(2)}</p>
           <button onClick={() => setMostrarCorte(true)} className="bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-400 border border-emerald-800/50 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
             🖨️ Imprimir Corte Z
           </button>
         </div>
 
-        {/* Card Recargas (Boletos) */}
+        {/* Card Boletos Vendidos */}
         <div className="bg-[#0f172a] rounded-2xl border border-pink-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
           <div className="absolute top-0 left-0 w-full h-1 bg-pink-500"></div>
           <span className="text-3xl mb-2">🎟️</span>
-          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Recargas Hoy (Viajes)</p>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Boletos Vendidos (Hoy)</p>
           <p className="text-white font-black text-4xl">{boletosDia}</p>
         </div>
 
-        {/* Card Ventas Semanales */}
+        {/* Card Acumulado Semanal */}
         <div className="bg-[#0f172a] rounded-2xl border border-indigo-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
           <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
           <span className="text-3xl mb-2">📊</span>
-          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Ventas Semanales</p>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Acumulado (Últimos 7 días)</p>
           <p className="text-white font-black text-4xl mb-4">${ventasSemana.toFixed(2)}</p>
           <button onClick={() => setMostrarHistorial(true)} className="bg-slate-800 hover:bg-slate-700 text-white border border-slate-600 px-4 py-2 rounded-lg font-bold text-sm transition-colors">
             Ver Historial
@@ -259,17 +257,25 @@ export default function ModuloFinanzasSuperAdmin() {
 
             <div className="p-4 md:p-6 overflow-y-auto flex-grow bg-[#0f172a]">
               
-              {/* Dashboard interno de colores */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-emerald-900/20 border border-emerald-900/50 p-4 rounded-xl text-center">
+              {/* Dashboard interno de colores AHORA CON 4 CAJAS */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-emerald-900/20 border border-emerald-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
                   <p className="text-emerald-400/80 text-xs font-bold uppercase mb-1">Total Ingresos</p>
                   <p className="text-emerald-400 font-black text-2xl">+ ${statsHistorial.ventas.toFixed(2)}</p>
                 </div>
-                <div className="bg-red-900/20 border border-red-900/50 p-4 rounded-xl text-center">
+                
+                {/* NUEVA CAJA DE BOLETOS VENDIDOS */}
+                <div className="bg-pink-900/20 border border-pink-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                  <p className="text-pink-400/80 text-[10px] md:text-xs font-bold uppercase mb-1">Boletos Vendidos</p>
+                  <p className="text-pink-400 font-black text-2xl">{statsHistorial.boletos} bts</p>
+                </div>
+
+                <div className="bg-red-900/20 border border-red-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
                   <p className="text-red-400/80 text-xs font-bold uppercase mb-1">Total Retiros</p>
                   <p className="text-red-400 font-black text-2xl">- ${statsHistorial.retiros.toFixed(2)}</p>
                 </div>
-                <div className="bg-indigo-900/20 border border-indigo-900/50 p-4 rounded-xl text-center">
+                
+                <div className="bg-indigo-900/20 border border-indigo-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
                   <p className="text-indigo-400/80 text-xs font-bold uppercase mb-1">Neto en Caja</p>
                   <p className="text-indigo-400 font-black text-2xl">${statsHistorial.total.toFixed(2)}</p>
                 </div>
