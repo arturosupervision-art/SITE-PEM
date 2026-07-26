@@ -71,7 +71,7 @@ export default function ModuloCajaViajes() {
       if (alumnosDb) setAlumnos(alumnosDb)
     } catch (error) {
       console.error(error)
-    } fontally {
+    } finally {
       setCargando(false)
     }
   }
@@ -302,7 +302,7 @@ export default function ModuloCajaViajes() {
         <div className="bg-[#0f172a] p-6 rounded-2xl mb-6 border border-slate-800 flex flex-col gap-4 shadow-lg">
           <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
             <div className="w-full md:w-2/3 flex gap-2">
-              <input type="text" placeholder="Escanear QR o teclear alumno/matrícula..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full bg-[#020617] text-white rounded-xl py-3 px-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" autoFocus />
+              <input type="text" placeholder="Escanear QR o teclea alumno/matrícula..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full bg-[#020617] text-white rounded-xl py-3 px-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" autoFocus />
               <button onClick={() => setEscanearVenta(!escanearVenta)} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 rounded-xl flex items-center justify-center shadow-md transition-colors whitespace-nowrap">
                 {escanearVenta ? '❌ Cerrar' : '📷 Cámara'}
               </button>
