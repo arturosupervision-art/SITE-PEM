@@ -461,9 +461,18 @@ export default function ModuloCajaViajes() {
               <div>
                 <h2 className="text-2xl font-black text-white">Historial de Viajes (Ventas)</h2>
                 <div className="mt-2 flex items-center gap-3">
-                  <label htmlFor="fechaFiltro" className="text-sm font-bold text-slate-400 cursor-pointer">Consultar fecha:</label>
-                  <input id="fechaFiltro" type="date" value={fechaFiltro} onChange={(e) => setFechaFiltro(e.target.value)} className="bg-[#020617] border border-indigo-500/50 rounded-lg p-2.5 text-sm text-white font-bold outline-none focus:border-indigo-400 shadow-sm cursor-pointer" />
-                </div>
+  <label htmlFor="fechaFiltro" className="text-sm font-bold text-slate-400 cursor-pointer">Consultar fecha:</label>
+  <div className="relative">
+    <input 
+      id="fechaFiltro" 
+      type="date" 
+      value={fechaFiltro} 
+      onChange={(e) => setFechaFiltro(e.target.value)} 
+      style={{ colorScheme: 'dark' }}
+      className="bg-[#020617] border border-indigo-500/50 rounded-lg p-2.5 pr-3 text-sm text-white font-bold outline-none focus:border-indigo-400 shadow-sm cursor-pointer hover:border-indigo-400 transition-colors" 
+    />
+  </div>
+</div>
               </div>
               <button onClick={() => setMostrarHistorial(false)} className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-2 rounded-xl font-bold w-full md:w-auto">Volver a Caja</button>
             </div>
