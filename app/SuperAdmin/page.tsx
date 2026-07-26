@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 
 export default function SuperAdministrador() {
@@ -10,18 +10,11 @@ export default function SuperAdministrador() {
 
   const [alumnos, setAlumnos] = useState<any[]>([]);
   const [cargando, setCargando] = useState(false);
-  const [mostrarModal, setMostrarModal] = useState(false);
-  const [nombre, setNombre] = useState('');
-  const [matricula, setMatricula] = useState('');
-  const [qr, setQr] = useState('');
-  const [mostrarModalQR, setMostrarModalQR] = useState(false);
-  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<any>(null);
-  const [nuevoQR, setNuevoQR] = useState('');
 
   const [historialRetiros, setHistorialRetiros] = useState<any[]>([]);
   const [cargandoRetiros, setCargandoRetiros] = useState(false);
 
-  // NUEVO: Estados para el Dashboard dinámico
+  // Estados para el Dashboard dinámico
   const [ventasHoy, setVentasHoy] = useState(0);
   const [boletosHoy, setBoletosHoy] = useState(0);
   const [ventasSemana, setVentasSemana] = useState(0);
@@ -30,18 +23,10 @@ export default function SuperAdministrador() {
   const [historialCompleto, setHistorialCompleto] = useState<any[]>([]);
   const [fechaHistorial, setFechaHistorial] = useState(new Date().toISOString().split('T')[0]);
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
+  
+  // Estados de Calendario
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
   const [fechaNavegacion, setFechaNavegacion] = useState(new Date());
-  
-  const [mostrarModalCorte, setMostrarModalCorte] = useState(false);
-  const [fechaCorte, setFechaCorte] = useState(new Date().toISOString().split('T')[0]);
-  const [datosCorte, setDatosCorte] = useState<any[] | null>(null);
-  const [mostrarCalendarioCorte, setMostrarCalendarioCorte] = useState(false);
-  const [fechaNavegacionCorte, setFechaNavegacionCorte] = useState(new Date());
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const qrInputRef = useRef<HTMLInputElement>(null);
-  const nuevoQrInputRef = useRef<HTMLInputElement>(null);
 
   const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -52,14 +37,6 @@ export default function SuperAdministrador() {
   const seleccionarDia = (dia: number) => {
     setFechaHistorial(`${fechaNavegacion.getFullYear()}-${String(fechaNavegacion.getMonth() + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`);
     setMostrarCalendario(false);
-  };
-
-  const diasEnMesCorte = new Date(fechaNavegacionCorte.getFullYear(), fechaNavegacionCorte.getMonth() + 1, 0).getDate();
-  const primerDiaDelMesCorte = new Date(fechaNavegacionCorte.getFullYear(), fechaNavegacionCorte.getMonth(), 1).getDay();
-  const cambiarMesCorte = (d: number) => setFechaNavegacionCorte(new Date(fechaNavegacionCorte.getFullYear(), fechaNavegacionCorte.getMonth() + d, 1));
-  const seleccionarDiaCorte = (dia: number) => {
-    setFechaCorte(`${fechaNavegacionCorte.getFullYear()}-${String(fechaNavegacionCorte.getMonth() + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`);
-    setMostrarCalendarioCorte(false);
   };
 
   const iniciarSesion = (e: React.FormEvent) => {
@@ -78,7 +55,6 @@ export default function SuperAdministrador() {
     setCargando(false);
   };
 
-  // NUEVO: Función para calcular las tarjetas del Dashboard
   const cargarEstadisticasCaja = async () => {
     const hoy = new Date();
     const y = hoy.getFullYear();
@@ -92,18 +68,15 @@ export default function SuperAdministrador() {
     // Inicio de la semana (Hace 7 días)
     const inicioSemana = new Date(y, m, d - 7, 0, 0, 0).toISOString();
 
-    // Consultamos movimientos de hoy
     const { data: dataHoy } = await supabase.from('movimientos_caja')
       .select('*').gte('created_at', inicioHoy).lte('created_at', finHoy);
 
     if (dataHoy) {
       const ingresosHoy = dataHoy.filter(mov => mov.tipo !== 'retiro');
       setVentasHoy(ingresosHoy.reduce((acc, curr) => acc + curr.monto, 0));
-      // Asumimos que el concepto puede traer info de los boletos, o calculamos 1 movimiento = 1 operación
-      setBoletosHoy(ingresosHoy.length); // Ajusta esto si tienes la cantidad exacta de boletos guardada
+      setBoletosHoy(ingresosHoy.length);
     }
 
-    // Consultamos movimientos de la semana
     const { data: dataSemana } = await supabase.from('movimientos_caja')
       .select('monto, tipo').gte('created_at', inicioSemana).lte('created_at', finHoy);
 
@@ -140,7 +113,9 @@ export default function SuperAdministrador() {
     }
   }, [pestaña]);
 
-  useEffect(() => { if (mostrarModalHistorial) cargarHistorialPorFecha(fechaHistorial); }, [fechaHistorial, mostrarModalHistorial]);
+  useEffect(() => { 
+    if (mostrarModalHistorial) cargarHistorialPorFecha(fechaHistorial); 
+  }, [fechaHistorial, mostrarModalHistorial]);
 
   const abrirModalHistorial = () => {
     const hoy = new Date();
@@ -148,17 +123,6 @@ export default function SuperAdministrador() {
     setFechaNavegacion(hoy);
     setMostrarModalHistorial(true);
   };
-
-  const generarCorteZ = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const [y, m, d] = fechaCorte.split('-').map(Number);
-    const inicioDia = new Date(y, m - 1, d, 0, 0, 0).toISOString();
-    const finDia = new Date(y, m - 1, d, 23, 59, 59).toISOString();
-    const { data } = await supabase.from('movimientos_caja').select('*').gte('created_at', inicioDia).lte('created_at', finDia);
-    if (data) setDatosCorte(data);
-  };
-
-  const imprimirCorte = () => window.print();
 
   if (!rolActivo) {
     return (
@@ -209,6 +173,20 @@ export default function SuperAdministrador() {
           </div>
         )}
 
+        {/* PESTAÑA: ALUMNOS (Mensaje Temporal si no está la lógica) */}
+        {pestaña === 'alumnos' && (
+           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl text-center shadow-lg">
+             {cargando ? (
+               <p className="text-slate-400">Cargando alumnos...</p>
+             ) : (
+               <div>
+                  <h2 className="text-xl font-bold text-white mb-4">Gestión de Alumnos</h2>
+                  <p className="text-slate-400">Total de alumnos en base de datos: {alumnos.length}</p>
+               </div>
+             )}
+           </div>
+        )}
+
         {/* PESTAÑA: FINANZAS (CON DASHBOARD DINÁMICO) */}
         {pestaña === 'finanzas' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -217,7 +195,6 @@ export default function SuperAdministrador() {
               <span className="text-emerald-500 mb-2 text-3xl">💵</span>
               <p className="text-slate-400 text-sm font-bold uppercase mb-1">Ventas del Día (Ingresos)</p>
               <h2 className="text-3xl font-black text-white mb-2">${ventasHoy.toFixed(2)}</h2>
-              <button onClick={() => { setDatosCorte(null); setFechaCorte(new Date().toISOString().split('T')[0]); setFechaNavegacionCorte(new Date()); setMostrarModalCorte(true); }} className="mt-2 bg-emerald-900/40 border border-emerald-800 text-emerald-400 text-xs py-2 px-4 rounded-lg font-bold hover:bg-emerald-600 hover:text-white transition-all">🖨️ Imprimir Corte Z</button>
             </div>
 
             <div className="bg-slate-900 border border-blue-900/50 p-6 rounded-2xl flex flex-col justify-center items-center text-center shadow-lg relative overflow-hidden">
@@ -235,11 +212,13 @@ export default function SuperAdministrador() {
               <button onClick={abrirModalHistorial} className="mt-2 bg-slate-800 border border-slate-700 text-slate-300 text-xs py-2 px-4 rounded-lg font-bold hover:bg-slate-700 transition-all">Ver Historial Completo</button>
             </div>
 
-            {/* TABLA DE RETIROS (Resto de tu tabla normal aquí abajo) */}
+            {/* TABLA DE RETIROS */}
             <div className="md:col-span-3 bg-slate-900 border border-slate-800 rounded-xl shadow-md overflow-hidden">
               <div className="flex justify-between items-center p-6 border-b border-slate-800">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">💳 Auditoría de Retiros de Caja</h2>
-                <button onClick={() => { cargarRetiros(); cargarEstadisticasCaja(); }} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm transition-colors border border-slate-700 flex items-center gap-2">🔄 Actualizar</button>
+                <button onClick={() => { cargarRetiros(); cargarEstadisticasCaja(); }} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm transition-colors border border-slate-700 flex items-center gap-2">
+                  {cargandoRetiros ? 'Cargando...' : '🔄 Actualizar'}
+                </button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-slate-300">
