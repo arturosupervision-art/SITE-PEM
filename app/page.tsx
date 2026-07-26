@@ -8,6 +8,7 @@ export default function ModuloCajaViajes() {
   const [cargando, setCargando] = useState(true)
   const [alumnos, setAlumnos] = useState<any[]>([])
   const [busqueda, setBusqueda] = useState('')
+  const [escanearVenta, setEscanearVenta] = useState(false)
   const [precioBoleto, setPrecioBoleto] = useState(20)
 
   // ================= ESTADOS DE CAJA =================
@@ -301,6 +302,32 @@ export default function ModuloCajaViajes() {
         <div className="bg-[#0f172a] p-6 rounded-2xl mb-6 border border-slate-800 flex flex-col md:flex-row gap-4 justify-between items-center shadow-lg">
           <div className="relative w-full md:w-2/3">
             <span className="absolute left-4 top-3.5 text-slate-400">🔍</span>
+            {/* ================= BOTÓN Y CÁMARA DE CREDENCIALES ================= */}
+<div className="mb-4">
+  <button
+    onClick={() => setEscanearVenta(!escanearVenta)}
+    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 mb-3 shadow-md transition-colors"
+  >
+    {escanearVenta ? '❌ Cancelar Escaneo' : '📷 Escanear Credencial (QR)'}
+  </button>
+
+  {escanearVenta && (
+    <div className="w-full max-w-sm rounded-xl overflow-hidden border-2 border-indigo-500 shadow-lg mb-4 bg-black">
+      <Scanner
+        onScan={(result) => {
+          if (result && result.length > 0) {
+            // Escribe automáticamente el QR en la barra de búsqueda
+            setBusqueda(result[0].rawValue);
+            // Apaga la cámara para ahorrar recursos
+            setEscanearVenta(false); 
+          }
+        }}
+        onError={(error) => console.log("Error de cámara:", error)}
+      />
+    </div>
+  )}
+</div>
+{/* ==================================================================== */}
             <input type="text" placeholder="Escanear QR o teclear alumno/matrícula..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full bg-[#020617] text-white rounded-xl py-3 pl-12 pr-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" autoFocus />
           </div>
           <div className="flex items-center gap-3 bg-[#020617] px-4 py-2 rounded-xl border border-slate-700">
