@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-// AQUÍ ESTÁ LA CORRECCIÓN: Solo un nivel hacia atrás (../)
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase'; // Ruta correcta para Vercel
 
 export default function CajaOperativa() {
   const [matricula, setMatricula] = useState('');
@@ -15,7 +14,7 @@ export default function CajaOperativa() {
   const [historialCaja, setHistorialCaja] = useState<any[]>([]);
   const [fechaHistorial, setFechaHistorial] = useState(new Date().toISOString().split('T')[0]);
   
-  // Estados del Calendario Desplegable (Caja)
+  // Estados del Calendario Desplegable
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
   const [fechaNavegacion, setFechaNavegacion] = useState(new Date());
   
@@ -40,12 +39,10 @@ export default function CajaOperativa() {
     e.preventDefault();
     if (!alumno || !montoVenta) return;
     
-    // 1. Actualizar los boletos del alumno
     const nuevosBoletos = alumno.boletos_disponibles + (Number(montoVenta) / 30);
     const { error: errorAlumno } = await supabase.from('alumnos')
       .update({ boletos_disponibles: nuevosBoletos }).eq('id', alumno.id);
 
-    // 2. Registrar la venta en movimientos_caja
     const { error: errorCaja } = await supabase.from('movimientos_caja').insert([{
       tipo: 'venta',
       monto: Number(montoVenta),
@@ -62,7 +59,6 @@ export default function CajaOperativa() {
     }
   };
 
-  // Función corregida por Zona Horaria
   const cargarHistorialCaja = async () => {
     const [y, m, d] = fechaHistorial.split('-').map(Number);
     const inicioDia = new Date(y, m - 1, d, 0, 0, 0).toISOString();
@@ -79,50 +75,75 @@ export default function CajaOperativa() {
   }, [fechaHistorial, mostrarModalHistorial]);
 
   return (
-    <div className="min-h-screen bg-slate-950 p-6 flex flex-col items-center justify-center">
-      <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl max-w-lg w-full">
-        <h2 className="text-2xl font-black text-white text-center mb-6">Caja Operativa</h2>
+    <div className="min-h-screen bg-[#030712] p-6 flex flex-col items-center justify-center font-sans">
+      {/* TU DISEÑO ORIGINAL RESTAURADO AQUÍ */}
+      <div className="bg-[#0f172a] p-8 rounded-2xl w-full max-w-[450px]">
+        <h2 className="text-2xl font-bold text-white text-center mb-8">Caja Operativa</h2>
         
         {mensaje && <div className="mb-4 p-3 rounded-lg text-center font-bold bg-slate-800 text-white">{mensaje}</div>}
 
-        <form onSubmit={buscarAlumno} className="mb-6">
-          <label className="text-slate-400 text-sm font-bold">Matrícula o QR del Alumno:</label>
-          <div className="flex gap-2 mt-2">
-            <input type="text" value={matricula} onChange={(e) => setMatricula(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-white outline-none focus:border-blue-500" placeholder="Ej: 2024001" />
-            <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2 rounded-xl">Buscar</button>
+        <form onSubmit={buscarAlumno} className="mb-8">
+          <label className="text-slate-300 text-sm font-medium mb-2 block">Matrícula o QR del Alumno:</label>
+          <div className="flex gap-3">
+            <input 
+              type="text" 
+              value={matricula} 
+              onChange={(e) => setMatricula(e.target.value)} 
+              className="flex-1 bg-[#020617] border border-slate-800 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-500 transition-colors" 
+              placeholder="Ej: 2024001" 
+            />
+            <button type="submit" className="bg-[#2563eb] hover:bg-blue-600 text-white font-medium px-6 py-3 rounded-lg transition-colors">
+              Buscar
+            </button>
           </div>
         </form>
 
         {alumno && (
-          <form onSubmit={registrarVenta} className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4">
-            <p className="text-white font-bold">Alumno: <span className="text-blue-400">{alumno.nombre_completo}</span></p>
-            <p className="text-white font-bold">Saldo Actual: <span className="text-emerald-400">{alumno.boletos_disponibles} Boletos</span></p>
-            <div>
-              <label className="text-slate-400 text-sm font-bold">Monto a Recargar ($):</label>
-              <input type="number" value={montoVenta} onChange={(e) => setMontoVenta(Number(e.target.value))} className="w-full mt-1 bg-slate-950 border border-slate-600 rounded-lg px-4 py-2 text-white" placeholder="Ej: 150" required />
+          <form onSubmit={registrarVenta} className="bg-[#1e293b]/50 p-5 rounded-xl border border-slate-700/50 mb-8 space-y-4">
+            <div className="flex justify-between border-b border-slate-700/50 pb-3">
+              <span className="text-slate-400">Alumno:</span>
+              <span className="text-white font-bold">{alumno.nombre_completo}</span>
             </div>
-            <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)]">Procesar Recarga</button>
+            <div className="flex justify-between border-b border-slate-700/50 pb-3">
+              <span className="text-slate-400">Saldo:</span>
+              <span className="text-emerald-400 font-bold">{alumno.boletos_disponibles} Boletos</span>
+            </div>
+            <div className="pt-2">
+              <label className="text-slate-300 text-sm font-medium block mb-2">Monto a Recargar ($):</label>
+              <input 
+                type="number" 
+                value={montoVenta} 
+                onChange={(e) => setMontoVenta(Number(e.target.value))} 
+                className="w-full bg-[#020617] border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-emerald-500 mb-4" 
+                placeholder="Ej: 150" 
+                required 
+              />
+              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg transition-colors">
+                Procesar Recarga
+              </button>
+            </div>
           </form>
         )}
 
-        <button onClick={() => { 
-          setFechaHistorial(new Date().toISOString().split('T')[0]); 
-          setFechaNavegacion(new Date()); 
-          setMostrarModalHistorial(true); 
-        }} className="mt-8 w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl border border-slate-700">
+        <button 
+          onClick={() => { 
+            setFechaHistorial(new Date().toISOString().split('T')[0]); 
+            setFechaNavegacion(new Date()); 
+            setMostrarModalHistorial(true); 
+          }} 
+          className="w-full bg-[#1e293b] hover:bg-slate-700 text-white font-medium py-3 rounded-lg transition-colors"
+        >
           Ver Historial de Caja
         </button>
       </div>
 
-      {/* MODAL DE HISTORIAL EN CAJA (CON CALENDARIO) */}
+      {/* MODAL DE HISTORIAL */}
       {mostrarModalHistorial && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-[#0f172a] border border-slate-800 p-6 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-white">Historial de Operaciones</h2>
-              
               <div className="flex items-center gap-2">
-                {/* CALENDARIO */}
                 <div className="relative">
                   <button onClick={() => setMostrarCalendario(!mostrarCalendario)} className="flex items-center gap-2 bg-[#0a0f1d] border border-slate-800 rounded-xl px-4 py-2 hover:bg-slate-800 transition-colors">
                     <span className="text-sm font-bold text-slate-400">Día:</span>
@@ -143,11 +164,11 @@ export default function CajaOperativa() {
                         {Array.from({ length: primerDiaDelMes }).map((_, i) => (<div key={`empty-${i}`} className="p-2"></div>))}
                         {Array.from({ length: diasEnMes }).map((_, i) => {
                           const dia = i + 1;
-                          const esHoy = dia === new Date().getDate() && fechaNavegacion.getMonth() === new Date().getMonth() && fechaNavegacion.getFullYear() === new Date().getFullYear();
                           const m = String(fechaNavegacion.getMonth() + 1).padStart(2, '0');
                           const dStr = String(dia).padStart(2, '0');
+                          const estaSeleccionado = `${fechaNavegacion.getFullYear()}-${m}-${dStr}` === fechaHistorial;
                           return (
-                            <button key={dia} onClick={() => seleccionarDia(dia)} className={`p-1.5 text-sm rounded-lg transition-colors ${`${fechaNavegacion.getFullYear()}-${m}-${dStr}` === fechaHistorial ? 'bg-blue-600 text-white' : esHoy ? 'bg-slate-800 text-blue-400' : 'text-slate-300 hover:bg-slate-700'}`}>
+                            <button key={dia} onClick={() => seleccionarDia(dia)} className={`p-1.5 text-sm rounded-lg transition-colors ${estaSeleccionado ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
                               {dia}
                             </button>
                           );
@@ -179,6 +200,9 @@ export default function CajaOperativa() {
                       </td>
                     </tr>
                   ))}
+                  {historialCaja.length === 0 && (
+                     <tr><td colSpan={3} className="px-6 py-8 text-center text-slate-500">No hay movimientos en esta fecha.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
