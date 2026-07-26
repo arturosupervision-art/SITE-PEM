@@ -82,7 +82,7 @@ export default function SuperAdministrador() {
     setCargandoRetiros(false);
   };
 
-  // NUEVO: Cargar TODO el historial
+  // Cargar TODO el historial
   const cargarHistorialCompleto = async () => {
     const { data, error } = await supabase
       .from('movimientos_caja')
@@ -95,10 +95,9 @@ export default function SuperAdministrador() {
     }
   };
 
-  // NUEVO: Generar datos para el Corte Z del día seleccionado
+  // Generar datos para el Corte Z del día seleccionado
   const generarCorteZ = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Consultamos los movimientos de ese día en específico
     const { data, error } = await supabase
       .from('movimientos_caja')
       .select('*')
@@ -255,7 +254,6 @@ export default function SuperAdministrador() {
 
   return (
     <div className="min-h-screen bg-slate-950 p-6 font-sans text-slate-200 flex flex-col justify-between print:bg-white print:p-0">
-      {/* Añadimos print:hidden al contenedor principal para que no salga al imprimir */}
       <div className="max-w-6xl mx-auto w-full print:hidden">
         {/* ENCABEZADO SUPER ADMIN */}
         <div className="bg-slate-900 border border-purple-900/50 p-6 rounded-2xl shadow-[0_0_30px_rgba(147,51,234,0.15)] flex flex-col md:flex-row justify-between items-center mb-6 gap-4 relative overflow-hidden">
@@ -364,36 +362,39 @@ export default function SuperAdministrador() {
         {/* PESTAÑA: FINANZAS */}
         {pestaña === 'finanzas' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {/* TARJETA 1: VENTAS DEL DÍA */}
             <div className="bg-slate-900 border border-emerald-900/50 p-6 rounded-2xl flex flex-col justify-center items-center text-center shadow-lg relative overflow-hidden">
               <div className="absolute top-0 w-full h-1 bg-emerald-500"></div>
               <span className="text-emerald-500 mb-2 text-3xl">💵</span>
-              <p className="text-slate-400 text-sm font-bold uppercase mb-1">Corte del Día y Reportes</p>
-              <h2 className="text-2xl font-black text-white mb-2">Impresión</h2>
+              <p className="text-slate-400 text-sm font-bold uppercase mb-1">Ventas del Día (Corte)</p>
+              <h2 className="text-3xl font-black text-white mb-2">$4,500.00</h2>
               <button 
                 onClick={() => { setDatosCorte(null); setMostrarModalCorte(true); }}
-                className="mt-2 bg-emerald-900/40 border border-emerald-800 text-emerald-400 text-xs py-2 px-4 rounded-lg font-bold hover:bg-emerald-600 hover:text-white transition-all w-full"
+                className="mt-2 bg-emerald-900/40 border border-emerald-800 text-emerald-400 text-xs py-2 px-4 rounded-lg font-bold hover:bg-emerald-600 hover:text-white transition-all"
               >
-                🖨️ Generar y Imprimir Corte Z
+                Imprimir Corte Z
               </button>
             </div>
 
+            {/* TARJETA 2: BOLETOS RECARGADOS */}
             <div className="bg-slate-900 border border-blue-900/50 p-6 rounded-2xl flex flex-col justify-center items-center text-center shadow-lg relative overflow-hidden">
               <div className="absolute top-0 w-full h-1 bg-blue-500"></div>
               <span className="text-blue-500 mb-2 text-3xl">🎟️</span>
-              <p className="text-slate-400 text-sm font-bold uppercase mb-1">Boletos Recargados</p>
-              <h2 className="text-4xl font-black text-white">Activos</h2>
+              <p className="text-slate-400 text-sm font-bold uppercase mb-1">Boletos Recargados Hoy</p>
+              <h2 className="text-4xl font-black text-white">150</h2>
             </div>
 
+            {/* TARJETA 3: VENTAS DE LA SEMANA */}
             <div className="bg-slate-900 border border-amber-900/50 p-6 rounded-2xl flex flex-col justify-center items-center text-center shadow-lg relative overflow-hidden">
               <div className="absolute top-0 w-full h-1 bg-amber-500"></div>
               <span className="text-amber-500 mb-2 text-3xl">📊</span>
-              <p className="text-slate-400 text-sm font-bold uppercase mb-1">Flujo Histórico</p>
-              <h2 className="text-2xl font-black text-white mb-2">Auditoría Total</h2>
+              <p className="text-slate-400 text-sm font-bold uppercase mb-1">Ventas de la Semana</p>
+              <h2 className="text-3xl font-black text-white mb-2">$22,400.00</h2>
               <button 
                 onClick={cargarHistorialCompleto}
-                className="mt-2 bg-slate-800 border border-slate-700 text-slate-300 text-xs py-2 px-4 rounded-lg font-bold hover:bg-slate-700 transition-all w-full"
+                className="mt-2 bg-slate-800 border border-slate-700 text-slate-300 text-xs py-2 px-4 rounded-lg font-bold hover:bg-slate-700 transition-all"
               >
-                👀 Ver Historial Completo
+                Ver Historial Completo
               </button>
             </div>
 
@@ -401,19 +402,19 @@ export default function SuperAdministrador() {
             <div className="md:col-span-3 bg-slate-900 border border-slate-800 rounded-xl shadow-md overflow-hidden">
               <div className="flex justify-between items-center p-6 border-b border-slate-800">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  💳 Auditoría de Retiros de Caja (Alertas)
+                  💳 Auditoría de Retiros de Caja
                 </h2>
-                <button onClick={cargarRetiros} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm transition-colors border border-slate-700">
+                <button onClick={cargarRetiros} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm transition-colors border border-slate-700 flex items-center gap-2">
                   🔄 Actualizar
                 </button>
               </div>
 
               {cargandoRetiros ? (
-                <p className="text-slate-400 p-8 animate-pulse text-center font-medium">Cargando movimientos encriptados...</p>
+                <p className="text-slate-400 p-8 animate-pulse text-center font-medium">Cargando movimientos...</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm text-slate-300">
-                    <thead className="bg-slate-950 text-slate-400 uppercase text-xs">
+                    <thead className="bg-slate-950 text-slate-400 uppercase text-xs border-b border-slate-800">
                       <tr>
                         <th className="px-6 py-4 font-bold">Fecha y Hora</th>
                         <th className="px-6 py-4 font-bold">Concepto / Autorización</th>
@@ -432,7 +433,7 @@ export default function SuperAdministrador() {
                           </tr>
                         ))
                       ) : (
-                        <tr><td colSpan={3} className="px-6 py-8 text-center text-slate-500 italic">No hay retiros registrados. La caja está intacta.</td></tr>
+                        <tr><td colSpan={3} className="px-6 py-8 text-center text-slate-500 italic">No hay retiros registrados.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -443,7 +444,7 @@ export default function SuperAdministrador() {
         )}
       </div>
 
-      {/* --- NUEVO MODAL: HISTORIAL COMPLETO --- */}
+      {/* --- MODAL: HISTORIAL COMPLETO --- */}
       {mostrarModalHistorial && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 print:hidden">
           <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
@@ -490,7 +491,7 @@ export default function SuperAdministrador() {
         </div>
       )}
 
-      {/* --- NUEVO MODAL: GENERADOR DE CORTE Z --- */}
+      {/* --- MODAL: GENERADOR DE CORTE Z --- */}
       {mostrarModalCorte && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 print:hidden">
           <div className="bg-slate-900 border border-emerald-800 p-6 rounded-2xl w-full max-w-md shadow-2xl">
