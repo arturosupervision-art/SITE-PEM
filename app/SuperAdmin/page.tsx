@@ -26,11 +26,15 @@ export default function SuperAdministrador() {
   const [historialRetiros, setHistorialRetiros] = useState<any[]>([]);
   const [cargandoRetiros, setCargandoRetiros] = useState(false);
 
-  // ESTADOS: Historial Completo con Calendario
+  // ESTADOS: Historial Completo con Calendario Personalizado
   const [mostrarModalHistorial, setMostrarModalHistorial] = useState(false);
   const [historialCompleto, setHistorialCompleto] = useState<any[]>([]);
   const [fechaHistorial, setFechaHistorial] = useState(new Date().toISOString().split('T')[0]);
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
+  
+  // Estados para la "Ventanita" del Calendario
+  const [mostrarCalendario, setMostrarCalendario] = useState(false);
+  const [fechaNavegacion, setFechaNavegacion] = useState(new Date());
   
   // ESTADOS: Corte Z
   const [mostrarModalCorte, setMostrarModalCorte] = useState(false);
@@ -40,6 +44,23 @@ export default function SuperAdministrador() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrInputRef = useRef<HTMLInputElement>(null);
   const nuevoQrInputRef = useRef<HTMLInputElement>(null);
+
+  // Lógica del Calendario Desplegable
+  const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  const diasEnMes = new Date(fechaNavegacion.getFullYear(), fechaNavegacion.getMonth() + 1, 0).getDate();
+  const primerDiaDelMes = new Date(fechaNavegacion.getFullYear(), fechaNavegacion.getMonth(), 1).getDay();
+
+  const cambiarMes = (direccion: number) => {
+    setFechaNavegacion(new Date(fechaNavegacion.getFullYear(), fechaNavegacion.getMonth() + direccion, 1));
+  };
+
+  const seleccionarDia = (dia: number) => {
+    const y = fechaNavegacion.getFullYear();
+    const m = String(fechaNavegacion.getMonth() + 1).padStart(2, '0');
+    const d = String(dia).padStart(2, '0');
+    setFechaHistorial(`${y}-${m}-${d}`);
+    setMostrarCalendario(false);
+  };
 
   // Función de Login
   const iniciarSesion = (e: React.FormEvent) => {
@@ -72,7 +93,6 @@ export default function SuperAdministrador() {
     setCargando(false);
   };
 
-  // Cargar retiros para la tabla principal de Finanzas
   const cargarRetiros = async () => {
     setCargandoRetiros(true);
     const { data, error } = await supabase
@@ -85,14 +105,20 @@ export default function SuperAdministrador() {
     setCargandoRetiros(false);
   };
 
-  // Cargar historial basado en la fecha seleccionada en el modal
-  const cargarHistorialPorFecha = async (fecha: string) => {
+  // CORREGIDO: Ahora busca desde las 00:00:00 hasta las 23:59:59 en tu zona horaria local
+  // para que no se pierdan las ventas de la tarde/noche.
+  const cargarHistorialPorFecha = async (fechaStr: string) => {
     setCargandoHistorial(true);
+    
+    const [y, m, d] = fechaStr.split('-').map(Number);
+    const inicioDia = new Date(y, m - 1, d, 0, 0, 0).toISOString();
+    const finDia = new Date(y, m - 1, d, 23, 59, 59).toISOString();
+
     const { data, error } = await supabase
       .from('movimientos_caja')
       .select('*')
-      .gte('created_at', `${fecha}T00:00:00`)
-      .lte('created_at', `${fecha}T23:59:59`)
+      .gte('created_at', inicioDia)
+      .lte('created_at', finDia)
       .order('created_at', { ascending: false });
     
     if (!error && data) {
@@ -101,7 +127,6 @@ export default function SuperAdministrador() {
     setCargandoHistorial(false);
   };
 
-  // Efecto para actualizar el historial cuando cambia la fecha en el calendario del modal
   useEffect(() => {
     if (mostrarModalHistorial) {
       cargarHistorialPorFecha(fechaHistorial);
@@ -109,33 +134,37 @@ export default function SuperAdministrador() {
   }, [fechaHistorial, mostrarModalHistorial]);
 
   const abrirModalHistorial = () => {
-    setFechaHistorial(new Date().toISOString().split('T')[0]); // Resetear a hoy
+    const hoy = new Date();
+    const y = hoy.getFullYear();
+    const m = String(hoy.getMonth() + 1).padStart(2, '0');
+    const d = String(hoy.getDate()).padStart(2, '0');
+    setFechaHistorial(`${y}-${m}-${d}`);
+    setFechaNavegacion(hoy); // Resetea el calendario al mes actual
     setMostrarModalHistorial(true);
   };
 
-  // Generar datos para el Corte Z del día seleccionado
+  // ... (El resto de funciones como generarCorteZ, imprimirCorte, guardarAlumno quedan igual)
   const generarCorteZ = async (e: React.FormEvent) => {
     e.preventDefault();
+    const [y, m, d] = fechaCorte.split('-').map(Number);
+    const inicioDia = new Date(y, m - 1, d, 0, 0, 0).toISOString();
+    const finDia = new Date(y, m - 1, d, 23, 59, 59).toISOString();
+
     const { data, error } = await supabase
       .from('movimientos_caja')
       .select('*')
-      .gte('created_at', `${fechaCorte}T00:00:00`)
-      .lte('created_at', `${fechaCorte}T23:59:59`);
+      .gte('created_at', inicioDia)
+      .lte('created_at', finDia);
 
     if (!error && data) {
       setDatosCorte(data);
     }
   };
 
-  // Imprimir el corte (llama a la función nativa del navegador)
-  const imprimirCorte = () => {
-    window.print();
-  };
+  const imprimirCorte = () => window.print();
 
   useEffect(() => {
-    if (pestaña === 'finanzas') {
-      cargarRetiros();
-    }
+    if (pestaña === 'finanzas') cargarRetiros();
   }, [pestaña]);
 
   useEffect(() => {
@@ -143,8 +172,7 @@ export default function SuperAdministrador() {
   }, [mostrarModalQR]);
 
   const descargarPlantilla = () => {
-    const csvContent =
-      'data:text/csv;charset=utf-8,nombre_completo,matricula,codigo_qr_vinculado\nJuan Perez,2024001,QR12345';
+    const csvContent = 'data:text/csv;charset=utf-8,nombre_completo,matricula,codigo_qr_vinculado\nJuan Perez,2024001,QR12345';
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
@@ -161,20 +189,13 @@ export default function SuperAdministrador() {
     reader.onload = async (evento) => {
       const texto = evento.target?.result as string;
       const lineas = texto.split('\n').slice(1);
-      const nuevosAlumnos = lineas
-        .map((linea) => {
+      const nuevosAlumnos = lineas.map((linea) => {
           const [nombre_completo, matricula, codigo_qr_vinculado] = linea.split(',');
           if (nombre_completo && matricula) {
-            return {
-              nombre_completo: nombre_completo.trim(),
-              matricula: matricula.trim(),
-              codigo_qr_vinculado: codigo_qr_vinculado ? codigo_qr_vinculado.trim() : null,
-              boletos_disponibles: 0,
-            };
+            return { nombre_completo: nombre_completo.trim(), matricula: matricula.trim(), codigo_qr_vinculado: codigo_qr_vinculado ? codigo_qr_vinculado.trim() : null, boletos_disponibles: 0 };
           }
           return null;
-        })
-        .filter(Boolean);
+        }).filter(Boolean);
 
       if (nuevosAlumnos.length > 0) {
         setCargando(true);
@@ -192,36 +213,18 @@ export default function SuperAdministrador() {
   const guardarAlumno = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre || !matricula) return;
-    const { error } = await supabase
-      .from('alumnos')
-      .insert([
-        {
-          nombre_completo: nombre,
-          matricula: matricula,
-          codigo_qr_vinculado: qr || null,
-          boletos_disponibles: 0,
-        },
-      ]);
+    const { error } = await supabase.from('alumnos').insert([{ nombre_completo: nombre, matricula: matricula, codigo_qr_vinculado: qr || null, boletos_disponibles: 0 }]);
     if (!error) {
-      setMostrarModal(false);
-      setNombre('');
-      setMatricula('');
-      setQr('');
-      cargarAlumnos();
+      setMostrarModal(false); setNombre(''); setMatricula(''); setQr(''); cargarAlumnos();
     }
   };
 
   const guardarVinculacionQR = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nuevoQR || !alumnoSeleccionado) return;
-    const { error } = await supabase
-      .from('alumnos')
-      .update({ codigo_qr_vinculado: nuevoQR })
-      .eq('id', alumnoSeleccionado.id);
+    const { error } = await supabase.from('alumnos').update({ codigo_qr_vinculado: nuevoQR }).eq('id', alumnoSeleccionado.id);
     if (!error) {
-      setMostrarModalQR(false);
-      setNuevoQR('');
-      cargarAlumnos();
+      setMostrarModalQR(false); setNuevoQR(''); cargarAlumnos();
     }
   };
 
@@ -253,10 +256,7 @@ export default function SuperAdministrador() {
               placeholder="••••"
               maxLength={4}
             />
-            <button
-              type="submit"
-              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(147,51,234,0.3)]"
-            >
+            <button type="submit" className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(147,51,234,0.3)]">
               Entrar al Panel
             </button>
           </form>
@@ -294,10 +294,7 @@ export default function SuperAdministrador() {
             </div>
           </div>
 
-          <button
-            onClick={cerrarSesion}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold py-2 px-4 rounded-lg border border-slate-700 transition-colors"
-          >
+          <button onClick={cerrarSesion} className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold py-2 px-4 rounded-lg border border-slate-700 transition-colors">
             Cerrar Sesión
           </button>
         </div>
@@ -305,26 +302,16 @@ export default function SuperAdministrador() {
         {/* NAVEGACIÓN DE PESTAÑAS */}
         {rolActivo === 'superadmin' && (
           <div className="flex gap-2 mb-6 bg-slate-900/50 p-2 rounded-xl w-fit border border-slate-800">
-            <button
-              onClick={() => setPestaña('alumnos')}
-              className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${
-                pestaña === 'alumnos' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'
-              }`}
-            >
+            <button onClick={() => setPestaña('alumnos')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${pestaña === 'alumnos' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
               👥 Gestión de Alumnos
             </button>
-            <button
-              onClick={() => setPestaña('finanzas')}
-              className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${
-                pestaña === 'finanzas' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'
-              }`}
-            >
+            <button onClick={() => setPestaña('finanzas')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${pestaña === 'finanzas' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
               💰 Reportes y Finanzas
             </button>
           </div>
         )}
 
-        {/* PESTAÑA: ALUMNOS */}
+        {/* PESTAÑA: ALUMNOS (SE MANTIENE IGUAL) */}
         {pestaña === 'alumnos' && rolActivo === 'superadmin' && (
            <>
            <div className="flex flex-wrap gap-3 items-center justify-end mb-4">
@@ -380,21 +367,16 @@ export default function SuperAdministrador() {
         {/* PESTAÑA: FINANZAS */}
         {pestaña === 'finanzas' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            {/* TARJETA 1: VENTAS DEL DÍA */}
             <div className="bg-slate-900 border border-emerald-900/50 p-6 rounded-2xl flex flex-col justify-center items-center text-center shadow-lg relative overflow-hidden">
               <div className="absolute top-0 w-full h-1 bg-emerald-500"></div>
               <span className="text-emerald-500 mb-2 text-3xl">💵</span>
               <p className="text-slate-400 text-sm font-bold uppercase mb-1">Ventas del Día (Corte)</p>
               <h2 className="text-3xl font-black text-white mb-2">$4,500.00</h2>
-              <button 
-                onClick={() => { setDatosCorte(null); setMostrarModalCorte(true); }}
-                className="mt-2 bg-emerald-900/40 border border-emerald-800 text-emerald-400 text-xs py-2 px-4 rounded-lg font-bold hover:bg-emerald-600 hover:text-white transition-all"
-              >
+              <button onClick={() => { setDatosCorte(null); setMostrarModalCorte(true); }} className="mt-2 bg-emerald-900/40 border border-emerald-800 text-emerald-400 text-xs py-2 px-4 rounded-lg font-bold hover:bg-emerald-600 hover:text-white transition-all">
                 🖨️ Imprimir Corte Z
               </button>
             </div>
 
-            {/* TARJETA 2: BOLETOS RECARGADOS */}
             <div className="bg-slate-900 border border-blue-900/50 p-6 rounded-2xl flex flex-col justify-center items-center text-center shadow-lg relative overflow-hidden">
               <div className="absolute top-0 w-full h-1 bg-blue-500"></div>
               <span className="text-blue-500 mb-2 text-3xl">🎟️</span>
@@ -402,21 +384,17 @@ export default function SuperAdministrador() {
               <h2 className="text-4xl font-black text-white">150</h2>
             </div>
 
-            {/* TARJETA 3: VENTAS DE LA SEMANA */}
             <div className="bg-slate-900 border border-amber-900/50 p-6 rounded-2xl flex flex-col justify-center items-center text-center shadow-lg relative overflow-hidden">
               <div className="absolute top-0 w-full h-1 bg-amber-500"></div>
               <span className="text-amber-500 mb-2 text-3xl">📊</span>
               <p className="text-slate-400 text-sm font-bold uppercase mb-1">Ventas de la Semana</p>
               <h2 className="text-3xl font-black text-white mb-2">$22,400.00</h2>
-              <button 
-                onClick={abrirModalHistorial}
-                className="mt-2 bg-slate-800 border border-slate-700 text-slate-300 text-xs py-2 px-4 rounded-lg font-bold hover:bg-slate-700 transition-all"
-              >
+              <button onClick={abrirModalHistorial} className="mt-2 bg-slate-800 border border-slate-700 text-slate-300 text-xs py-2 px-4 rounded-lg font-bold hover:bg-slate-700 transition-all">
                 Ver Historial Completo
               </button>
             </div>
 
-            {/* TABLA DE AUDITORÍA DE RETIROS */}
+            {/* TABLA PRINCIPAL (Retiros) */}
             <div className="md:col-span-3 bg-slate-900 border border-slate-800 rounded-xl shadow-md overflow-hidden">
               <div className="flex justify-between items-center p-6 border-b border-slate-800">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -462,67 +440,164 @@ export default function SuperAdministrador() {
         )}
       </div>
 
-      {/* --- MODAL: HISTORIAL COMPLETO CON CALENDARIO --- */}
+      {/* --- MODAL: HISTORIAL COMPLETO (VENTAS Y RETIROS) CON CALENDARIO DESPLEGABLE --- */}
       {mostrarModalHistorial && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 print:hidden">
-          <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-2">📊 Historial Completo de Caja</h2>
+          <div className="bg-[#0f172a] border border-slate-800 p-6 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-[0_10px_40px_rgba(0,0,0,0.8)]">
+            
+            {/* ENCABEZADO ESTILO CAPTURA */}
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                📊 Historial Completo de Caja
+              </h2>
               
-              <div className="flex items-center gap-3 bg-slate-950 p-2 rounded-lg border border-slate-800">
-                <label className="text-sm font-bold text-slate-400">Día:</label>
-                <input
-                  type="date"
-                  value={fechaHistorial}
-                  onChange={(e) => setFechaHistorial(e.target.value)}
-                  className="bg-transparent border-none text-white outline-none focus:ring-0 cursor-pointer text-sm"
-                />
-                <button onClick={() => setMostrarModalHistorial(false)} className="text-slate-500 hover:text-white font-black text-xl ml-4 bg-slate-800 hover:bg-red-500 rounded-full w-8 h-8 flex items-center justify-center transition-all">&times;</button>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  {/* BOTÓN DEL CALENDARIO */}
+                  <button 
+                    onClick={() => setMostrarCalendario(!mostrarCalendario)}
+                    className="flex items-center gap-2 bg-[#0a0f1d] border border-slate-800 rounded-xl px-4 py-2 hover:bg-slate-800 transition-colors"
+                  >
+                    <span className="text-sm font-bold text-slate-400">Día:</span>
+                    <span className="text-sm text-slate-200 font-medium tracking-wide">
+                      {fechaHistorial.split('-').reverse().join('/')}
+                    </span>
+                    <span className="text-slate-400 ml-1">📅</span>
+                  </button>
+
+                  {/* LA "VENTANITA" DEL CALENDARIO */}
+                  {mostrarCalendario && (
+                    <div className="absolute right-0 mt-2 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4 w-64 z-50">
+                      <div className="flex justify-between items-center mb-4">
+                        <button onClick={() => cambiarMes(-1)} className="text-slate-400 hover:text-white p-1">◀</button>
+                        <span className="text-white font-bold text-sm">
+                          {meses[fechaNavegacion.getMonth()]} {fechaNavegacion.getFullYear()}
+                        </span>
+                        <button onClick={() => cambiarMes(1)} className="text-slate-400 hover:text-white p-1">▶</button>
+                      </div>
+                      
+                      <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-500 mb-2">
+                        <span>Do</span><span>Lu</span><span>Ma</span><span>Mi</span><span>Ju</span><span>Vi</span><span>Sa</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-7 gap-1 text-center">
+                        {/* Espacios vacíos antes del primer día */}
+                        {Array.from({ length: primerDiaDelMes }).map((_, i) => (
+                          <div key={`empty-${i}`} className="p-2"></div>
+                        ))}
+                        {/* Días del mes */}
+                        {Array.from({ length: diasEnMes }).map((_, i) => {
+                          const dia = i + 1;
+                          const esHoy = 
+                            dia === new Date().getDate() && 
+                            fechaNavegacion.getMonth() === new Date().getMonth() &&
+                            fechaNavegacion.getFullYear() === new Date().getFullYear();
+                            
+                          const m = String(fechaNavegacion.getMonth() + 1).padStart(2, '0');
+                          const dStr = String(dia).padStart(2, '0');
+                          const fechaCompleta = `${fechaNavegacion.getFullYear()}-${m}-${dStr}`;
+                          const estaSeleccionado = fechaCompleta === fechaHistorial;
+
+                          return (
+                            <button
+                              key={dia}
+                              onClick={() => seleccionarDia(dia)}
+                              className={`p-1.5 text-sm rounded-lg transition-colors ${
+                                estaSeleccionado 
+                                  ? 'bg-blue-600 text-white font-bold shadow-md' 
+                                  : esHoy 
+                                    ? 'bg-slate-800 text-blue-400 font-bold hover:bg-slate-700' 
+                                    : 'text-slate-300 hover:bg-slate-700'
+                              }`}
+                            >
+                              {dia}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button onClick={() => setMostrarModalHistorial(false)} className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl w-10 h-10 flex items-center justify-center transition-all">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
             </div>
             
             <div className="overflow-y-auto flex-1 bg-slate-950 rounded-xl border border-slate-800">
               {cargandoHistorial ? (
-                <p className="text-slate-400 p-8 animate-pulse text-center font-medium">Buscando movimientos del día...</p>
+                <p className="text-slate-400 p-8 animate-pulse text-center font-medium">Buscando ventas y retiros del día...</p>
               ) : (
                 <table className="w-full text-left text-sm text-slate-300">
-                  <thead className="bg-slate-900 text-slate-400 uppercase text-xs sticky top-0 shadow-md">
+                  <thead className="bg-[#0f172a] text-slate-400 uppercase text-xs sticky top-0 shadow-md">
                     <tr>
-                      <th className="px-4 py-3 font-bold">Fecha / Hora</th>
-                      <th className="px-4 py-3 font-bold">Tipo</th>
-                      <th className="px-4 py-3 font-bold">Concepto</th>
-                      <th className="px-4 py-3 font-bold text-right">Monto</th>
+                      <th className="px-6 py-4 font-bold border-b border-slate-800">Fecha / Hora</th>
+                      <th className="px-6 py-4 font-bold border-b border-slate-800">Tipo</th>
+                      <th className="px-6 py-4 font-bold border-b border-slate-800">Concepto</th>
+                      <th className="px-6 py-4 font-bold text-right border-b border-slate-800">Monto</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50">
                     {historialCompleto.length > 0 ? (
                       historialCompleto.map((mov) => (
-                        <tr key={mov.id} className="hover:bg-slate-800/50">
-                          <td className="px-4 py-3 whitespace-nowrap text-slate-400">
+                        <tr key={mov.id} className="hover:bg-slate-800/30">
+                          <td className="px-6 py-4 whitespace-nowrap text-slate-400">
                             {new Date(mov.created_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
                           </td>
-                          <td className="px-4 py-3 font-bold">
+                          <td className="px-6 py-4 font-bold">
                             {mov.tipo === 'retiro' ? (
-                               <span className="text-red-400 bg-red-900/30 px-2 py-1 rounded text-xs uppercase">Retiro</span>
-                            ) : mov.tipo === 'ingreso' || mov.tipo === 'recarga' ? (
-                               <span className="text-emerald-400 bg-emerald-900/30 px-2 py-1 rounded text-xs uppercase">Ingreso</span>
+                               <span className="text-[#ff5c5c] bg-[#3a1a1a] px-2 py-1 rounded text-xs uppercase border border-[#522525]">Retiro</span>
+                            ) : (mov.tipo === 'ingreso' || mov.tipo === 'recarga' || mov.tipo === 'venta') ? (
+                               <span className="text-emerald-400 bg-emerald-900/30 px-2 py-1 rounded text-xs uppercase border border-emerald-900/50">Ingreso / Venta</span>
                             ) : (
                                <span className="text-blue-400 bg-blue-900/30 px-2 py-1 rounded text-xs uppercase">{mov.tipo}</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-slate-200">{mov.concepto}</td>
-                          <td className={`px-4 py-3 font-bold text-right ${mov.tipo === 'retiro' ? 'text-red-400' : 'text-emerald-400'}`}>
+                          <td className="px-6 py-4 text-slate-200">{mov.concepto}</td>
+                          <td className={`px-6 py-4 font-bold text-right ${mov.tipo === 'retiro' ? 'text-[#ff5c5c]' : 'text-emerald-400'}`}>
                             {mov.tipo === 'retiro' ? '-' : '+'}${mov.monto.toFixed(2)}
                           </td>
                         </tr>
                       ))
                     ) : (
-                      <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500 italic">No hay movimientos registrados para este día.</td></tr>
+                      <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500 italic">No hay ventas ni retiros registrados para este día.</td></tr>
                     )}
                   </tbody>
                 </table>
               )}
             </div>
+
+            {/* RESUMEN DEL DÍA */}
+            {!cargandoHistorial && historialCompleto.length > 0 && (
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-800 pt-5">
+                <div className="bg-[#0a0f1d] border border-emerald-900/30 p-4 rounded-xl text-center">
+                  <p className="text-emerald-500/70 text-xs font-bold uppercase mb-1">Total Ingresos / Ventas</p>
+                  <p className="text-emerald-400 font-black text-2xl">
+                    +${historialCompleto.filter(m => m.tipo !== 'retiro').reduce((acc, curr) => acc + curr.monto, 0).toFixed(2)}
+                  </p>
+                </div>
+                
+                <div className="bg-[#0a0f1d] border border-[#522525] p-4 rounded-xl text-center">
+                  <p className="text-[#ff5c5c]/70 text-xs font-bold uppercase mb-1">Total Retiros</p>
+                  <p className="text-[#ff5c5c] font-black text-2xl">
+                    -${historialCompleto.filter(m => m.tipo === 'retiro').reduce((acc, curr) => acc + curr.monto, 0).toFixed(2)}
+                  </p>
+                </div>
+                
+                <div className="bg-[#0a0f1d] border border-blue-900/30 p-4 rounded-xl text-center">
+                  <p className="text-blue-500/70 text-xs font-bold uppercase mb-1">Balance Neto del Día</p>
+                  <p className="text-blue-400 font-black text-2xl">
+                    ${(
+                      historialCompleto.filter(m => m.tipo !== 'retiro').reduce((acc, curr) => acc + curr.monto, 0) -
+                      historialCompleto.filter(m => m.tipo === 'retiro').reduce((acc, curr) => acc + curr.monto, 0)
+                    ).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -539,13 +614,7 @@ export default function SuperAdministrador() {
             <form onSubmit={generarCorteZ} className="space-y-4">
               <div>
                 <label className="block text-sm text-slate-400 mb-1">Selecciona la fecha del corte:</label>
-                <input
-                  type="date"
-                  value={fechaCorte}
-                  onChange={(e) => setFechaCorte(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500"
-                  required
-                />
+                <input type="date" value={fechaCorte} onChange={(e) => setFechaCorte(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500" required />
               </div>
               <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-lg transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]">
                 Procesar Datos
@@ -564,7 +633,7 @@ export default function SuperAdministrador() {
         </div>
       )}
 
-      {/* --- TICKET DE IMPRESIÓN (Solo visible al presionar Ctrl+P o Imprimir) --- */}
+      {/* TICKET DE IMPRESIÓN (Igual que antes) */}
       {datosCorte && (
         <div className="hidden print:block text-black bg-white p-4 font-mono text-sm w-full max-w-xs mx-auto">
           <div className="text-center border-b border-black pb-4 mb-4">
@@ -600,45 +669,6 @@ export default function SuperAdministrador() {
           </div>
         </div>
       )}
-
-      {/* MODALES MANUALES (Alumnos) */}
-      {mostrarModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 print:hidden">
-          <div className="bg-slate-900 border border-purple-800 p-6 rounded-2xl w-full max-w-md shadow-2xl">
-            <h2 className="text-2xl font-bold text-white mb-4">👤 Agregar Alumno</h2>
-            <form onSubmit={guardarAlumno} className="space-y-4">
-              <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none" placeholder="Nombre Completo" required />
-              <input type="text" value={matricula} onChange={(e) => setMatricula(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none" placeholder="Matrícula" required />
-              <input type="text" value={qr} onChange={(e) => setQr(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none font-mono" placeholder="QR (Opcional)" />
-              <div className="flex justify-end gap-3 mt-6">
-                <button type="button" onClick={() => setMostrarModal(false)} className="text-slate-400 font-bold">Cancelar</button>
-                <button type="submit" className="bg-purple-600 text-white px-6 py-2 rounded-lg font-bold">Guardar</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {mostrarModalQR && alumnoSeleccionado && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 print:hidden">
-          <div className="bg-slate-900 border border-indigo-500 p-6 rounded-2xl w-full max-w-md">
-            <h2 className="text-xl font-bold text-white mb-4">🔗 Vincular QR a {alumnoSeleccionado.nombre_completo}</h2>
-            <form onSubmit={guardarVinculacionQR} className="space-y-4">
-              <input ref={qrInputRef} type="text" value={nuevoQR} onChange={(e) => setNuevoQR(e.target.value)} className="w-full bg-slate-950 border border-indigo-500/50 rounded-lg px-4 py-3 text-white text-center font-mono outline-none" placeholder="Lectura láser..." />
-              <div className="flex justify-end gap-3 mt-4">
-                <button type="button" onClick={() => setMostrarModalQR(false)} className="text-slate-400 font-bold">Cancelar</button>
-                <button type="submit" className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold">Guardar</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      <footer className="text-center py-6 mt-auto print:hidden">
-        <p className="text-xs text-slate-500 font-medium tracking-wide">
-          SITE-PEM System by <span className="text-slate-400 font-bold">Arturo Diaz</span>
-        </p>
-      </footer>
     </div>
   );
 }
