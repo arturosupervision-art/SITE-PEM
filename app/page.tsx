@@ -1,419 +1,550 @@
-'use client';
+'use client'
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase'; // Ruta para Vercel
+export default function ModuloCajaViajes() {
+  // ================= ESTADOS GENERALES =================
+  const [cargando, setCargando] = useState(true)
+  const [alumnos, setAlumnos] = useState<any[]>([])
+  const [busqueda, setBusqueda] = useState('')
+  const [precioBoleto, setPrecioBoleto] = useState(20)
 
-export default function ModuloCaja() {
-  // ESTADOS PRINCIPALES
-  const [cargando, setCargando] = useState(false);
-  const [busqueda, setBusqueda] = useState('');
-  const [alumnos, setAlumnos] = useState<any[]>([]);
+  // ================= ESTADOS DE CAJA =================
+  const [turnoActual, setTurnoActual] = useState<any>(null)
+  const [fondoApertura, setFondoApertura] = useState(500)
   
-  // ESTADOS DE CAJA Y CORTES
-  const [cajaAbierta, setCajaAbierta] = useState(false);
-  const [montoInicial, setMontoInicial] = useState('');
-  const [ventasTurno, setVentasTurno] = useState(0);
-  const [retirosTurno, setRetirosTurno] = useState(0);
-  const [fechaApertura, setFechaApertura] = useState('');
-  
-  // ESTADOS DE MODALES
-  const [modalHistorial, setModalHistorial] = useState(false);
-  const [modalRetiro, setModalRetiro] = useState(false);
-  const [modalCierre, setModalCierre] = useState(false);
-  const [montoRetiro, setMontoRetiro] = useState('');
-  
-  // ESTADOS DE QR Y VENTAS
-  const [alumnoVincular, setAlumnoVincular] = useState<any>(null);
-  const [nuevoQr, setNuevoQr] = useState('');
-  const [cantidades, setCantidades] = useState<{ [key: string]: number }>({});
+  // ================= MODALES DE OPERACIÓN =================
+  const [mostrarRetiro, setMostrarRetiro] = useState(false)
+  const [montoRetiro, setMontoRetiro] = useState('')
+  const [conceptoRetiro, setConceptoRetiro] = useState('')
 
-  const TARIFA_BOLETAJE = 20;
+  const [mostrarCierre, setMostrarCierre] = useState(false)
+  const [resumenCierre, setResumenCierre] = useState<any>(null)
+  const [efectivoCajon, setEfectivoCajon] = useState('')
 
-  // 1. BUSCAR ALUMNOS
-  const buscarAlumnos = async (termino: string = busqueda) => {
-    setCargando(true);
-    let query = supabase.from('alumnos').select('*').limit(15);
-    
-    if (termino.trim()) {
-      query = query.or(`nombre_completo.ilike.%${termino}%,matricula.ilike.%${termino}%`);
-    }
-    
-    const { data, error } = await query;
-    if (!error && data) {
-      setAlumnos(data);
-    }
-    setCargando(false);
-  };
+  const [mostrarHistorial, setMostrarHistorial] = useState(false)
+  const [ventasDia, setVentasDia] = useState<any[]>([])
+  const [fechaFiltro, setFechaFiltro] = useState(new Date().toISOString().split('T')[0])
+  const [cargandoHistorial, setCargandoHistorial] = useState(false)
+
+  const [alumnoVincular, setAlumnoVincular] = useState<any>(null)
+  const [nuevoQr, setNuevoQr] = useState('')
+
+  // ================= CONTROL DE TICKETS =================
+  // Este es el estado mágico. Si tiene datos, muestra el ticket EN LA MISMA PANTALLA.
+  const [ticketActual, setTicketActual] = useState<any>(null)
 
   useEffect(() => {
-    buscarAlumnos();
-  }, []);
+    verificarTurnoYAlumnos()
+  }, [])
 
+  useEffect(() => {
+    if (mostrarHistorial) cargarHistorialVentas()
+  }, [fechaFiltro, mostrarHistorial])
 
-  // ==========================================
-  // LÓGICA DE TICKETS VISUALES (VENTA, RETIRO Y CIERRE)
-  // ==========================================
-  const estilosTicket = `
-    <style>
-      body { font-family: 'Courier New', Courier, monospace; font-size: 14px; color: #000; margin: 0 auto; padding: 20px; max-width: 320px; background: #fff; }
-      .center { text-align: center; }
-      .left { text-align: left; }
-      .right { text-align: right; }
-      .bold { font-weight: bold; }
-      .divider { border-bottom: 1px dashed #000; margin: 15px 0; }
-      .flex { display: flex; justify-content: space-between; }
-      .text-xl { font-size: 18px; }
-      
-      /* Botones que aparecen en la ventana pero NO se imprimen */
-      .botones-accion { margin-top: 30px; display: flex; justify-content: center; gap: 10px; }
-      .btn { padding: 12px 15px; font-weight: bold; font-family: sans-serif; cursor: pointer; border: none; border-radius: 8px; font-size: 14px; transition: 0.2s; }
-      .btn-imprimir { background-color: #10b981; color: white; }
-      .btn-imprimir:hover { background-color: #059669; }
-      .btn-cerrar { background-color: #ef4444; color: white; }
-      .btn-cerrar:hover { background-color: #dc2626; }
-      
-      @media print { 
-        .no-print { display: none !important; } 
-        body { padding: 0; margin: 0; max-width: 100%; }
-      }
-    </style>
-  `;
-
-  const lanzarImpresion = (contenidoHTML: string) => {
-    const ventanaTicket = window.open('', '_blank', 'width=450,height=700');
-    if (!ventanaTicket) {
-      alert("⚠️ Tu navegador bloqueó la ventana del ticket. Por favor permite las ventanas emergentes.");
-      return;
+  const verificarTurnoYAlumnos = async () => {
+    setCargando(true)
+    try {
+      const { data: turno } = await supabase.from('turnos_caja').select('*').eq('estado', 'abierta').maybeSingle()
+      if (turno) setTurnoActual(turno)
+      const { data: alumnosDb } = await supabase.from('alumnos').select('*').order('nombre_completo', { ascending: true })
+      if (alumnosDb) setAlumnos(alumnosDb)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setCargando(false)
     }
-    
-    // Aquí está la corrección: Se agregan botones reales y se quita el cierre automático
-    ventanaTicket.document.write(`
-      <html>
-        <head>
-          <title>Visor de Ticket</title>
-          ${estilosTicket}
-        </head>
-        <body>
-          ${contenidoHTML}
-          
-          <div class="botones-accion no-print">
-            <button class="btn btn-imprimir" onclick="window.print()">🖨️ Imprimir Ticket</button>
-            <button class="btn btn-cerrar" onclick="window.close()">❌ Cerrar</button>
-          </div>
-        </body>
-      </html>
-    `);
-    ventanaTicket.document.close();
-  };
+  }
 
-  const imprimirTicketVenta = (alumno: any, cantidad: number, total: number) => {
-    const html = `
-      <div class="center bold text-xl">SITE - PEM</div>
-      <div class="center">Preparatoria Estado de México</div>
-      <div class="center" style="margin-top:5px;">TICKET DE VENTA</div>
-      <div class="divider"></div>
-      <div class="left">Fecha: ${new Date().toLocaleString()}</div>
-      <div class="left">Alumno: ${alumno.nombre_completo}</div>
-      <div class="left">Matrícula: ${alumno.matricula || 'N/A'}</div>
-      <div class="divider"></div>
-      <div class="flex"><span>Boletos (${cantidad}x$${TARIFA_BOLETAJE}):</span> <span>$${total}.00</span></div>
-      <div class="divider"></div>
-      <div class="flex bold text-xl"><span>TOTAL:</span> <span>$${total}.00</span></div>
-      <div class="center" style="margin-top:25px;">¡Gracias por tu compra!</div>
-    `;
-    lanzarImpresion(html);
-  };
+  // ================= FUNCIONES DE CAJA =================
+  const abrirCaja = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (fondoApertura < 0) return alert('El fondo no puede ser negativo')
+    const { data, error } = await supabase.from('turnos_caja').insert([{ fondo_inicial: fondoApertura }]).select().single()
+    if (error) alert('Error al abrir la caja')
+    else setTurnoActual(data)
+  }
 
-  const imprimirTicketRetiro = (monto: number) => {
-    const html = `
-      <div class="center bold text-xl">SITE - PEM</div>
-      <div class="center" style="margin-top:5px;">COMPROBANTE DE RETIRO</div>
-      <div class="divider"></div>
-      <div class="left">Fecha: ${new Date().toLocaleString()}</div>
-      <div class="divider"></div>
-      <div class="flex bold text-xl"><span>MONTO RETIRADO:</span> <span>$${monto}.00</span></div>
-      <div class="divider"></div>
-      <div class="center" style="margin-top:60px; border-top:1px solid #000; width:80%; margin-left:auto; margin-right:auto; padding-top:5px;">Firma de Recibido</div>
-    `;
-    lanzarImpresion(html);
-  };
+  const realizarRetiro = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!turnoActual) return
+    const monto = parseFloat(montoRetiro)
+    if (monto <= 0 || !conceptoRetiro) return alert('Datos inválidos para el retiro')
 
-  const imprimirTicketCierre = () => {
-    const fondoInicial = Number(montoInicial) || 0;
-    const efectivoEsperado = fondoInicial + ventasTurno - retirosTurno;
-    
-    const html = `
-      <div class="center bold text-xl">SITE - PEM</div>
-      <div class="center" style="margin-top:5px;">CORTE DE CAJA</div>
-      <div class="divider"></div>
-      <div class="left">Apertura: ${fechaApertura}</div>
-      <div class="left">Cierre: ${new Date().toLocaleString()}</div>
-      <div class="divider"></div>
-      <div class="flex"><span>Fondo Inicial:</span> <span>$${fondoInicial}.00</span></div>
-      <div class="flex"><span>Total Ventas:</span> <span>+$${ventasTurno}.00</span></div>
-      <div class="flex"><span>Total Retiros:</span> <span>-$${retirosTurno}.00</span></div>
-      <div class="divider"></div>
-      <div class="flex bold text-xl"><span>EFECTIVO ESPERADO:</span> <span>$${efectivoEsperado}.00</span></div>
-      <div class="divider"></div>
-      <div class="center" style="margin-top:60px; border-top:1px solid #000; width:80%; margin-left:auto; margin-right:auto; padding-top:5px;">Firma Cajero</div>
-    `;
-    lanzarImpresion(html);
-  };
-
-
-  // ==========================================
-  // OPERACIONES DE SISTEMA
-  // ==========================================
-  const handleCobrar = async (alumno: any, cantidad: number) => {
-    if (!cajaAbierta) {
-      alert("⚠️ Debes abrir la caja primero para realizar ventas.");
-      return;
-    }
-
-    const total = cantidad * TARIFA_BOLETAJE;
-    const confirmacion = window.confirm(`¿Cobrar $${total} por ${cantidad} boletos para ${alumno.nombre_completo}?`);
-    if (!confirmacion) return;
-
-    const nuevosBoletos = (alumno.boletos_disponibles || 0) + cantidad;
-
-    const { error: errorAlumno } = await supabase
-      .from('alumnos')
-      .update({ boletos_disponibles: nuevosBoletos })
-      .eq('id', alumno.id);
-
-    const { error: errorCaja } = await supabase
-      .from('movimientos_caja')
-      .insert([{ tipo: 'venta', monto: total, concepto: `Venta ${cantidad} boletos - ${alumno.matricula}` }]);
-
-    if (!errorAlumno && !errorCaja) {
-      setVentasTurno(prev => prev + total);
-      imprimirTicketVenta(alumno, cantidad, total); // Abre la ventana del ticket
-      buscarAlumnos(); 
+    const { error } = await supabase.from('movimientos_caja').insert([{ turno_id: turnoActual.id, monto, concepto: conceptoRetiro }])
+    if (!error) {
+      setTicketActual({ tipo: 'RETIRO', folio: `RET-${Date.now().toString().slice(-5)}`, monto: monto, concepto: conceptoRetiro, fecha: new Date().toLocaleString('es-MX') })
+      setMostrarRetiro(false); setMontoRetiro(''); setConceptoRetiro('')
     } else {
-      alert('❌ Error al registrar la venta.');
+      alert('Error al registrar retiro')
     }
-  };
+  }
+
+  const prepararCierre = async () => {
+    if (!turnoActual) return
+    const { data: ventas } = await supabase.from('ventas_boletos').select('monto_total').gte('created_at', turnoActual.fecha_apertura)
+    const totalVentas = (ventas || []).reduce((acc, v) => acc + v.monto_total, 0)
+
+    const { data: retiros } = await supabase.from('movimientos_caja').select('monto').eq('turno_id', turnoActual.id)
+    const totalRetiros = (retiros || []).reduce((acc, r) => acc + r.monto, 0)
+
+    setResumenCierre({ fondo: Number(turnoActual.fondo_inicial), ventas: totalVentas, retiros: totalRetiros, esperado: Number(turnoActual.fondo_inicial) + totalVentas - totalRetiros })
+    setMostrarCierre(true)
+  }
+
+  const procesarCierre = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const efectivoReal = parseFloat(efectivoCajon)
+    if (isNaN(efectivoReal)) return alert('Ingresa un monto válido')
+    const diferencia = efectivoReal - resumenCierre.esperado
+
+    if (!window.confirm(`¿Seguro que deseas cerrar la caja?\n\nEfectivo Declarado: $${efectivoReal}\nDiferencia: $${diferencia}`)) return
+
+    const { error } = await supabase.from('turnos_caja').update({
+      estado: 'cerrada', fecha_cierre: new Date().toISOString(), total_ventas: resumenCierre.ventas, efectivo_esperado: resumenCierre.esperado, efectivo_entregado: efectivoReal, diferencia_corte: diferencia
+    }).eq('id', turnoActual.id)
+
+    if (!error) {
+      setTicketActual({ tipo: 'CIERRE', fechaApertura: new Date(turnoActual.fecha_apertura).toLocaleString('es-MX'), fechaCierre: new Date().toLocaleString('es-MX'), fondo: resumenCierre.fondo, ventas: resumenCierre.ventas, retiros: resumenCierre.retiros, esperado: resumenCierre.esperado, real: efectivoReal, diferencia: diferencia })
+      setTurnoActual(null); setMostrarCierre(false); setEfectivoCajon('')
+    } else {
+      alert('Error al cerrar la caja')
+    }
+  }
+
+  // ================= FUNCIONES DE VIAJES Y VENTAS =================
+  const venderBoletos = async (alumno: any, cantidadAgregar: number, concepto: string) => {
+    if (!turnoActual) return alert('Debes abrir la caja primero')
+    if (cantidadAgregar <= 0) return
+
+    const nuevoSaldo = (alumno.boletos_disponibles || 0) + cantidadAgregar
+    const totalCobrado = cantidadAgregar * precioBoleto
+
+    const { error: errAlumno } = await supabase.from('alumnos').update({ boletos_disponibles: nuevoSaldo }).eq('id', alumno.id)
+    const { data: dataVenta, error: errVenta } = await supabase.from('ventas_boletos').insert([{ alumno_id: alumno.id, cantidad_boletos: cantidadAgregar, monto_total: totalCobrado }]).select()
+
+    if (errAlumno || errVenta || !dataVenta) {
+      alert('❌ Error al procesar la venta.')
+    } else {
+      // ESTO ABRE EL TICKET EN LA MISMA PANTALLA INMEDIATAMENTE
+      setTicketActual({
+        tipo: 'VENTA', folio: `SITE-${String(dataVenta[0].folio_secuencial).padStart(5, '0')}`, nombre: alumno.nombre_completo, matricula: alumno.matricula, cantidad: cantidadAgregar, concepto: concepto, total: totalCobrado, nuevoSaldo: nuevoSaldo, fecha: new Date().toLocaleString('es-MX')
+      })
+      setAlumnos(alumnos.map(a => a.id === alumno.id ? {...a, boletos_disponibles: nuevoSaldo} : a))
+    }
+  }
+
+  const cargarHistorialVentas = async () => {
+    setCargandoHistorial(true)
+    const inicioDia = fechaFiltro + 'T00:00:00'
+    const finDia = fechaFiltro + 'T23:59:59'
+
+    const { data, error } = await supabase.from('ventas_boletos').select(`id, created_at, folio_secuencial, cantidad_boletos, monto_total, alumno_id, alumnos ( nombre_completo, matricula )`).gte('created_at', inicioDia).lte('created_at', finDia).order('created_at', { ascending: false })
+    if (!error) setVentasDia(data || [])
+    setCargandoHistorial(false)
+  }
+
+  const cancelarVenta = async (ventaId: string, alumnoId: string, cantidadBoletos: number) => {
+    if (!window.confirm(`⚠️ ¿Seguro de cancelar esta venta?\n\nSe descontarán ${cantidadBoletos} boletos de la cuenta del alumno.`)) return
+    try {
+      const { data: alumno } = await supabase.from('alumnos').select('boletos_disponibles').eq('id', alumnoId).single()
+      const nuevoSaldo = Math.max(0, (alumno?.boletos_disponibles || 0) - cantidadBoletos)
+      
+      await supabase.from('alumnos').update({ boletos_disponibles: nuevoSaldo }).eq('id', alumnoId)
+      await supabase.from('ventas_boletos').delete().eq('id', ventaId)
+
+      alert('✅ Venta cancelada.')
+      cargarHistorialVentas()
+      verificarTurnoYAlumnos()
+    } catch (error) {
+      alert('❌ Error al cancelar la venta.')
+    }
+  }
 
   const guardarNuevoQr = async () => {
     if (!nuevoQr.trim()) return;
-    const { error } = await supabase
-      .from('alumnos')
-      .update({ codigo_qr_vinculado: nuevoQr.trim() })
-      .eq('id', alumnoVincular.id);
-
+    const { error } = await supabase.from('alumnos').update({ codigo_qr_vinculado: nuevoQr.trim() }).eq('id', alumnoVincular.id);
     if (!error) {
       alert('✅ QR Vinculado exitosamente');
       setAlumnoVincular(null);
       setNuevoQr('');
-      buscarAlumnos(); 
+      verificarTurnoYAlumnos(); 
     } else {
       alert('❌ Error al vincular el QR');
     }
   };
 
-  const handleAbrirCaja = () => {
-    if(!montoInicial) return;
-    setCajaAbierta(true);
-    setFechaApertura(new Date().toLocaleString());
-    setVentasTurno(0);
-    setRetirosTurno(0);
-  };
+  const alumnosFiltrados = alumnos.filter(a => a.nombre_completo.toLowerCase().includes(busqueda.toLowerCase()) || (a.matricula && a.matricula.toLowerCase().includes(busqueda.toLowerCase()))).slice(0, 15)
 
-  const handleRetiro = () => {
-    const retiroNum = Number(montoRetiro);
-    if(retiroNum > 0) {
-      setRetirosTurno(prev => prev + retiroNum);
-      imprimirTicketRetiro(retiroNum);
-      alert(`Retiro de $${retiroNum} registrado.`);
-      setModalRetiro(false);
-      setMontoRetiro('');
-    }
-  };
+  if (cargando) return <div className="min-h-screen bg-[#020617] flex justify-center items-center text-white font-bold text-xl">Iniciando Sistema...</div>
 
-  const handleCerrarCaja = () => {
-    imprimirTicketCierre();
-    alert("Caja cerrada correctamente.");
-    setCajaAbierta(false);
-    setModalCierre(false);
-    setMontoInicial('');
-  };
-
-
-  // ==========================================
-  // RENDER PANTALLA ABRIR CAJA
-  // ==========================================
-  if (!cajaAbierta) {
+  // ================= PANTALLA: APERTURA DE CAJA =================
+  if (!turnoActual) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
-        <div className="bg-[#0f172a] p-8 rounded-3xl shadow-2xl border border-slate-800 max-w-md w-full text-center">
-          <div className="bg-white p-3 rounded-2xl inline-block mb-6">
-            <img src="/logo.png" alt="Logo" className="h-16 object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
+        {/* Si acaban de cerrar caja, mostramos el ticket de cierre. Si no, mostramos el formulario de apertura */}
+        {ticketActual?.tipo === 'CIERRE' ? (
+          <RenderTicket ticket={ticketActual} onClose={() => setTicketActual(null)} />
+        ) : (
+          <div className="bg-[#0f172a] p-8 rounded-3xl shadow-2xl border border-slate-800 max-w-md w-full text-center">
+            <div className="bg-white p-3 rounded-2xl inline-block mb-6">
+              <img src="/logo negro.png" alt="Logo" className="h-16 object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
+            </div>
+            <h1 className="text-[#fbbf24] text-2xl font-black mb-2">SITE - VIAJES PEM</h1>
+            <p className="text-slate-400 mb-8">Apertura de Caja (OXXO Style)</p>
+            <form onSubmit={abrirCaja}>
+              <input type="number" required min="0" placeholder="Monto inicial en caja ($)" value={fondoApertura} onChange={(e) => setFondoApertura(Number(e.target.value))} className="w-full bg-[#020617] text-white p-4 rounded-xl border border-slate-700 mb-6 text-center text-lg outline-none focus:border-emerald-500 font-bold" />
+              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl transition-colors text-lg shadow-lg">🔓 Abrir Caja</button>
+            </form>
           </div>
-          <h1 className="text-[#fbbf24] text-2xl font-black mb-2">SITE - PEM</h1>
-          <p className="text-slate-400 mb-8">Apertura de Caja</p>
-          <input 
-            type="number" 
-            placeholder="Monto inicial en caja ($)" 
-            value={montoInicial}
-            onChange={(e) => setMontoInicial(e.target.value)}
-            className="w-full bg-[#020617] text-white p-4 rounded-xl border border-slate-700 mb-6 text-center text-lg outline-none focus:border-emerald-500"
-          />
-          <button 
-            onClick={handleAbrirCaja}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl transition-colors text-lg shadow-lg"
-          >
-            Abrir Caja
-          </button>
-        </div>
+        )}
       </div>
-    );
+    )
   }
 
-
-  // ==========================================
-  // RENDER DASHBOARD PRINCIPAL
-  // ==========================================
+  // ================= PANTALLA: DASHBOARD PRINCIPAL (POS) =================
   return (
-    <div className="min-h-screen bg-[#020617] p-4 md:p-8 font-sans flex justify-center text-slate-200">
-      <div className="w-full max-w-4xl">
+    <div className="min-h-screen bg-[#020617] text-slate-200 font-sans p-4 md:p-8">
+      
+      {/* Todo el Dashboard se OCULTA a la hora de imprimir gracias a 'print:hidden' */}
+      <div className={`max-w-5xl mx-auto ${ticketActual ? 'hidden print:hidden' : 'block print:hidden'}`}>
         
         {/* HEADER */}
-        <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-slate-800 mb-6 w-fit">
-          <div className="bg-white p-1.5 rounded-lg">
-            <img src="/logo.png" alt="Logo" className="h-10 w-auto object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+          <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-slate-800 w-full md:w-fit">
+            <div className="bg-white p-1.5 rounded-lg h-12 w-12 flex items-center justify-center">
+              <img src="/logo negro.png" alt="Logo" className="h-full object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
+            </div>
+            <div>
+              <h1 className="text-[#fbbf24] font-black text-xl tracking-wide">SITE - VIAJES</h1>
+              <p className="text-emerald-400 text-xs font-bold flex items-center gap-1">✅ Caja Abierta en Operación</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-[#fbbf24] font-black text-xl tracking-wide">SITE - PEM</h1>
-            <p className="text-emerald-400 text-xs font-bold flex items-center gap-1">✅ Caja Abierta</p>
+          
+          <div className="flex gap-2 w-full md:w-auto">
+            <button onClick={() => setMostrarHistorial(true)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-indigo-500/50">
+              <span>📜 Historial</span>
+            </button>
+            <button onClick={() => setMostrarRetiro(true)} className="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-amber-500/50">
+              <span>💸 Retirar</span>
+            </button>
+            <button onClick={prepararCierre} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-red-500/50">
+              <span>🔒 Cierre</span>
+            </button>
           </div>
         </div>
 
-        {/* BOTONES SUPERIORES */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <button onClick={() => setModalHistorial(true)} className="bg-[#6366f1] hover:bg-indigo-500 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-2 border border-indigo-500/50">
-            <span className="text-3xl">📜</span><span>Historial</span>
-          </button>
-          <button onClick={() => setModalRetiro(true)} className="bg-[#f59e0b] hover:bg-amber-400 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-2 border border-amber-500/50">
-            <span className="text-3xl">💸</span><span className="text-center leading-tight">Retirar<br/>Efectivo</span>
-          </button>
-          <button onClick={() => setModalCierre(true)} className="bg-[#ef4444] hover:bg-red-400 text-white font-bold py-4 px-2 rounded-2xl shadow-lg transition-colors flex flex-col items-center justify-center gap-2 border border-red-500/50">
-            <span className="text-3xl">🔒</span><span className="text-center leading-tight">Cerrar<br/>Caja</span>
-          </button>
-        </div>
-
-        {/* BUSCADOR Y TARIFA */}
-        <div className="bg-[#0f172a] p-6 rounded-2xl mb-6 border border-slate-800">
-          <div className="relative mb-6">
+        {/* BUSCADOR */}
+        <div className="bg-[#0f172a] p-6 rounded-2xl mb-6 border border-slate-800 flex flex-col md:flex-row gap-4 justify-between items-center shadow-lg">
+          <div className="relative w-full md:w-2/3">
             <span className="absolute left-4 top-3.5 text-slate-400">🔍</span>
-            <input 
-              type="text" 
-              value={busqueda}
-              onChange={(e) => { setBusqueda(e.target.value); buscarAlumnos(e.target.value); }}
-              placeholder="Buscar por nombre o matrícula..." 
-              className="w-full bg-[#020617] text-white rounded-xl py-3 pl-12 pr-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" 
-            />
+            <input type="text" placeholder="Escanear QR o teclear alumno/matrícula..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full bg-[#020617] text-white rounded-xl py-3 pl-12 pr-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" autoFocus />
           </div>
-          <div className="flex justify-center items-center gap-4 text-slate-400">
-            <span>Tarifa Boletaje:</span>
-            <span className="bg-[#020617] px-6 py-1.5 rounded-xl border border-slate-700 font-black text-[#fbbf24] text-lg">
-              {TARIFA_BOLETAJE}
-            </span>
+          <div className="flex items-center gap-3 bg-[#020617] px-4 py-2 rounded-xl border border-slate-700">
+            <span className="text-slate-400 text-sm font-bold">Tarifa Viaje:</span>
+            <span className="font-black text-[#fbbf24] text-xl">${precioBoleto}</span>
           </div>
         </div>
 
-        {/* LISTA DE ALUMNOS */}
-        <div className="bg-[#0f172a] p-6 rounded-2xl border border-slate-800">
-          <h2 className="font-bold text-lg mb-6">Alumnos (Mostrando primeros 15)</h2>
-          {cargando ? <p className="text-slate-400 text-center py-4">Buscando...</p> : alumnos.length === 0 ? <p className="text-slate-500 text-center py-4">No hay resultados.</p> : (
-            alumnos.map((alumno) => (
-              <div key={alumno.id} className="bg-[#020617] rounded-xl p-5 border border-slate-800 mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                  <h3 className="font-bold text-xl uppercase mb-1">{alumno.nombre_completo}</h3>
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="text-slate-400 text-sm">Matrícula: {alumno.matricula || 'N/A'}</span>
+        {/* LISTA DE ALUMNOS (Estilo OXXO) */}
+        <div className="bg-[#0f172a] p-6 rounded-2xl border border-slate-800 shadow-xl">
+          <h2 className="font-bold text-lg mb-6 text-white">{busqueda === '' ? 'Alumnos (Últimos registrados)' : `Resultados de Búsqueda`}</h2>
+          
+          <div className="space-y-4">
+            {alumnosFiltrados.length === 0 ? (
+              <p className="text-slate-500 py-4 text-center">No se encontraron alumnos.</p>
+            ) : (
+              alumnosFiltrados.map((alumno) => (
+                <div key={alumno.id} className="bg-[#020617] p-5 rounded-xl border border-slate-800 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 hover:border-slate-600 transition-colors">
+                  
+                  <div className="flex-1">
+                    <h3 className="font-bold text-xl uppercase text-slate-100 mb-1">{alumno.nombre_completo}</h3>
+                    <div className="flex items-center gap-3 mb-2">
+                      <p className="text-sm text-slate-400">Matrícula: {alumno.matricula || 'N/A'}</p>
+                      {alumno.codigo_qr_vinculado ? (
+                        <span className="text-[10px] bg-indigo-900/40 text-indigo-300 px-2 py-0.5 rounded border border-indigo-700/50 font-bold uppercase tracking-wider">QR OK</span>
+                      ) : (
+                        <button onClick={() => setAlumnoVincular(alumno)} className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-600 hover:bg-slate-700 font-bold uppercase tracking-wider">Vincular QR</button>
+                      )}
+                    </div>
+                    <div className="bg-emerald-900/20 text-emerald-400 w-fit px-3 py-1 rounded-lg text-sm font-bold border border-emerald-900">
+                      🎟️ Saldo: {alumno.boletos_disponibles || 0} Viajes
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 bg-[#0f172a] p-2 rounded-lg border border-slate-800 w-full xl:w-auto">
+                    <button onClick={() => venderBoletos(alumno, 1, '1 Boleto Viaje')} className="flex-1 xl:flex-none bg-slate-800 hover:bg-slate-700 text-white px-4 py-3 rounded-lg font-bold border border-slate-700 transition-colors text-sm">1 Boleto (${1 * precioBoleto})</button>
+                    <button onClick={() => venderBoletos(alumno, 5, 'Paquete 5 Viajes')} className="flex-1 xl:flex-none bg-emerald-900/40 hover:bg-emerald-800 text-emerald-400 border border-emerald-800/50 px-4 py-3 rounded-lg font-bold transition-colors text-sm">📦 5 Viajes</button>
                     
-                    {alumno.codigo_qr_vinculado ? (
-                      <span className="text-xs bg-indigo-900/40 text-indigo-300 px-3 py-1 rounded-full border border-indigo-700/50 font-bold">🔗 QR Vinculado</span>
-                    ) : (
-                      <button onClick={() => setAlumnoVincular(alumno)} className="bg-slate-800 text-slate-300 text-xs px-3 py-1 rounded-full border border-slate-600 hover:bg-slate-700 transition-colors font-medium">
-                        Vincular QR Alumno
-                      </button>
-                    )}
+                    <div className="flex items-center gap-1 flex-1 xl:flex-none mt-2 xl:mt-0 ml-0 xl:ml-2 pl-0 xl:pl-2 xl:border-l border-slate-700 w-full xl:w-auto">
+                      <BotonesPersonalizados onCobrar={(cant) => venderBoletos(alumno, cant, `${cant} Boletos Viaje`)} precio={precioBoleto} />
+                    </div>
                   </div>
-                  <div className="bg-emerald-900/30 text-emerald-400 w-fit px-3 py-1.5 rounded-lg text-sm font-bold border border-emerald-800/50">
-                    🎟️ Saldo: {alumno.boletos_disponibles || 0} Boletos
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-2 bg-[#0f172a] p-2 rounded-lg border border-slate-800">
-                  <button onClick={() => handleCobrar(alumno, 1)} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-700 border border-slate-700">1 Boleto (${TARIFA_BOLETAJE})</button>
-                  <button onClick={() => handleCobrar(alumno, 5)} className="bg-emerald-900/40 text-emerald-400 px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-900 border border-emerald-800/50 flex gap-1">📦 5 pz</button>
-                  <div className="flex items-center gap-2 ml-2 pl-2 border-l border-slate-700">
-                    <input type="number" min="1" value={cantidades[alumno.id] || 1} onChange={(e) => setCantidades({...cantidades, [alumno.id]: Number(e.target.value)})} className="w-16 bg-slate-800 border border-slate-600 rounded-lg text-center text-white py-1.5 outline-none" />
-                    <button onClick={() => handleCobrar(alumno, cantidades[alumno.id] || 1)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg transition-colors">Cobrar</button>
-                  </div>
                 </div>
-              </div>
-            ))
-          )}
+              ))
+            )}
+          </div>
         </div>
+      </div>
 
-        {/* MODAL VINCULAR QR */}
-        {alumnoVincular && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-            <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md">
-              <h2 className="text-xl font-bold mb-2">Vincular Código QR</h2>
-              <p className="text-sm text-slate-400 mb-6">Alumno: <span className="text-white font-bold">{alumnoVincular.nombre_completo}</span></p>
-              <input type="text" autoFocus value={nuevoQr} onChange={(e) => setNuevoQr(e.target.value)} placeholder="Escanea el código QR aquí..." className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl px-4 py-3 text-white outline-none mb-6" />
-              <div className="flex justify-end gap-3">
-                <button onClick={() => { setAlumnoVincular(null); setNuevoQr(''); }} className="px-4 py-2 rounded-lg font-bold text-slate-400 hover:text-white">Cancelar</button>
-                <button onClick={guardarNuevoQr} className="px-4 py-2 rounded-lg font-bold bg-indigo-600 hover:bg-indigo-500 text-white">Guardar y Vincular</button>
+      {/* ================= MODAL VINCULAR QR ================= */}
+      {alumnoVincular && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-40 print:hidden">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md">
+            <h2 className="text-xl font-bold mb-2 text-white">Vincular Código QR</h2>
+            <p className="text-sm text-slate-400 mb-6">Alumno: <span className="text-amber-500 font-bold">{alumnoVincular.nombre_completo}</span></p>
+            <input type="text" autoFocus value={nuevoQr} onChange={(e) => setNuevoQr(e.target.value)} placeholder="Escanea el código QR aquí..." className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl px-4 py-3 text-white outline-none mb-6 font-mono" />
+            <div className="flex justify-end gap-3">
+              <button onClick={() => { setAlumnoVincular(null); setNuevoQr(''); }} className="px-4 py-2 rounded-lg font-bold text-slate-400 hover:text-white">Cancelar</button>
+              <button onClick={guardarNuevoQr} className="px-4 py-2 rounded-lg font-bold bg-indigo-600 hover:bg-indigo-500 text-white">Vincular</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL RETIRO ================= */}
+      {mostrarRetiro && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40 print:hidden">
+          <div className="bg-[#0f172a] border border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-sm">
+            <h2 className="text-2xl font-black text-amber-500 mb-6 text-center">💸 Retiro de Efectivo</h2>
+            <form onSubmit={realizarRetiro} className="space-y-5">
+              <div>
+                <label className="text-sm font-bold text-slate-400">Monto a retirar ($):</label>
+                <input type="number" required min="1" step="0.5" value={montoRetiro} onChange={e => setMontoRetiro(e.target.value)} className="w-full bg-[#020617] border border-slate-600 rounded-xl p-4 text-white mt-1 text-2xl font-bold text-center outline-none focus:border-amber-500" placeholder="0.00" autoFocus />
+              </div>
+              <div>
+                <label className="text-sm font-bold text-slate-400">Concepto / Entregado a:</label>
+                <input type="text" required value={conceptoRetiro} onChange={e => setConceptoRetiro(e.target.value)} className="w-full bg-[#020617] border border-slate-600 rounded-xl p-3 text-white mt-1 outline-none focus:border-amber-500" placeholder="Ej. Entrega Dirección" />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setMostrarRetiro(false)} className="w-1/3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl py-3 font-bold transition-colors">Cancelar</button>
+                <button type="submit" className="w-2/3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl py-3 font-bold transition-colors shadow-lg">Registrar e Imprimir</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL CIERRE ================= */}
+      {mostrarCierre && resumenCierre && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40 print:hidden">
+          <div className="bg-[#0f172a] border border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-md">
+            <h2 className="text-3xl font-black text-red-500 mb-6 text-center">🔒 Cierre de Caja</h2>
+            
+            <div className="bg-[#020617] p-5 rounded-2xl space-y-3 mb-6 border border-slate-800">
+              <div className="flex justify-between text-slate-400 font-medium"><span>Fondo Inicial:</span> <span>${resumenCierre.fondo.toFixed(2)}</span></div>
+              <div className="flex justify-between text-emerald-400 font-medium"><span>+ Ventas de Viajes:</span> <span>${resumenCierre.ventas.toFixed(2)}</span></div>
+              <div className="flex justify-between text-amber-400 font-medium"><span>- Retiros/Entregas:</span> <span>${resumenCierre.retiros.toFixed(2)}</span></div>
+              <div className="border-t border-slate-700 my-2 pt-3 flex justify-between font-black text-xl text-white">
+                <span>Efectivo Esperado:</span> <span>${resumenCierre.esperado.toFixed(2)}</span>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* MODAL RETIRO */}
-        {modalRetiro && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-            <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-sm">
-              <h2 className="text-xl font-bold mb-4">Retiro de Efectivo</h2>
-              <input type="number" value={montoRetiro} onChange={(e) => setMontoRetiro(e.target.value)} placeholder="Monto a retirar" className="w-full bg-[#020617] border border-slate-700 rounded-xl px-4 py-3 text-white mb-6" />
-              <div className="flex justify-end gap-3">
-                <button onClick={() => setModalRetiro(false)} className="px-4 py-2 rounded-lg font-bold text-slate-400">Cancelar</button>
-                <button onClick={handleRetiro} className="px-4 py-2 rounded-lg font-bold bg-amber-500 text-white">Retirar / Imprimir</button>
+            <form onSubmit={procesarCierre} className="space-y-6">
+              <div className="text-center">
+                <label className="text-sm font-bold text-slate-400">¿Cuánto dinero FÍSICO hay en la caja?</label>
+                <input type="number" required step="0.5" min="0" value={efectivoCajon} onChange={e => setEfectivoCajon(e.target.value)} className="w-full bg-[#020617] border border-slate-500 rounded-xl p-4 mt-2 text-3xl text-center font-black text-white focus:border-red-500 outline-none" placeholder="$0.00" autoFocus />
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* MODAL CIERRE */}
-        {modalCierre && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-            <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-sm text-center">
-              <span className="text-5xl mb-4 block">🔒</span>
-              <h2 className="text-xl font-bold mb-2">¿Cerrar Caja?</h2>
-              <p className="text-slate-400 mb-6">Se imprimirá tu corte de caja y ya no podrás hacer más ventas.</p>
-              <div className="flex justify-center gap-3">
-                <button onClick={() => setModalCierre(false)} className="px-4 py-2 rounded-lg font-bold text-slate-400">Cancelar</button>
-                <button onClick={handleCerrarCaja} className="px-4 py-2 rounded-lg font-bold bg-red-500 text-white">Cerrar e Imprimir</button>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setMostrarCierre(false)} className="w-1/3 bg-slate-800 text-white rounded-xl py-4 font-bold hover:bg-slate-700">Cancelar</button>
+                <button type="submit" className="w-2/3 bg-red-600 hover:bg-red-500 text-white rounded-xl py-4 font-bold shadow-lg shadow-red-900/50">Cerrar Caja e Imprimir</button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL HISTORIAL ================= */}
+      {mostrarHistorial && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40 print:hidden">
+          <div className="bg-[#0f172a] rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-700 flex flex-col max-h-[90vh]">
+            <div className="bg-indigo-900/40 p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-white">Historial de Viajes (Ventas)</h2>
+                <div className="mt-2 flex items-center gap-3">
+                  <span className="text-sm font-bold text-slate-400">Consultar fecha:</span>
+                  <input type="date" value={fechaFiltro} onChange={(e) => setFechaFiltro(e.target.value)} className="bg-[#020617] border border-slate-600 rounded-lg p-2 text-sm text-white font-bold outline-none" />
+                </div>
+              </div>
+              <button onClick={() => setMostrarHistorial(false)} className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-2 rounded-xl font-bold w-full md:w-auto">Volver a Caja</button>
+            </div>
+
+            <div className="p-2 md:p-6 overflow-y-auto flex-grow bg-[#0f172a]">
+              {cargandoHistorial ? <p className="text-center text-slate-400 py-10 font-bold">Cargando...</p> : ventasDia.length === 0 ? (
+                <p className="text-slate-500 text-center py-10 font-bold">No hay ventas registradas en esta fecha.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-300 min-w-[600px]">
+                    <thead className="border-b border-slate-700 text-slate-400">
+                      <tr>
+                        <th className="pb-3 px-2">Folio</th>
+                        <th className="pb-3 px-2">Hora</th>
+                        <th className="pb-3 px-2">Alumno</th>
+                        <th className="pb-3 px-2 text-center">Viajes</th>
+                        <th className="pb-3 px-2 text-right">Monto</th>
+                        <th className="pb-3 px-2 text-center">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ventasDia.map((venta) => (
+                        <tr key={venta.id} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
+                          <td className="py-4 px-2 font-mono text-amber-400 font-bold">SITE-{String(venta.folio_secuencial || 0).padStart(5, '0')}</td>
+                          <td className="py-4 px-2">{new Date(venta.created_at).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}</td>
+                          <td className="py-4 px-2 font-bold text-white">{venta.alumnos?.nombre_completo}</td>
+                          <td className="py-4 px-2 text-center font-black text-emerald-400">+{venta.cantidad_boletos}</td>
+                          <td className="py-4 px-2 text-right font-bold text-white">${venta.monto_total}</td>
+                          <td className="py-4 px-2 text-center">
+                            <button onClick={() => cancelarVenta(venta.id, venta.alumno_id, venta.cantidad_boletos)} className="text-xs bg-red-900/30 hover:bg-red-600 text-red-400 hover:text-white px-3 py-2 rounded-lg font-bold border border-red-800/50 transition-colors">
+                              Cancelar Venta
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* MODAL HISTORIAL */}
-        {modalHistorial && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-            <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md">
-              <h2 className="text-xl font-bold mb-4">Historial Reciente</h2>
-              <p className="text-slate-400 mb-6 text-sm">Aquí se listarán los movimientos de caja...</p>
-              <button onClick={() => setModalHistorial(false)} className="w-full py-2 rounded-lg font-bold bg-slate-800 text-white">Cerrar</button>
-            </div>
-          </div>
-        )}
+      {/* ================= TICKET EN LA MISMA PANTALLA (SIN VENTANA EMERGENTE) ================= */}
+      {/* Si ticketActual existe, este componente se sobrepone a todo. Al imprimir, solo se imprime el interior de este div. */}
+      {ticketActual && (
+        <RenderTicket ticket={ticketActual} onClose={() => setTicketActual(null)} />
+      )}
 
+    </div>
+  )
+}
+
+// ================= MINICOMPONENTE DE BOTONES =================
+function BotonesPersonalizados({ onCobrar, precio }: { onCobrar: (cant: number) => void, precio: number }) {
+  const [cant, setCant] = useState(1);
+  return (
+    <div className="flex items-center gap-2 w-full">
+      <input type="number" min="1" value={cant} onChange={(e) => setCant(Math.max(1, parseInt(e.target.value) || 1))} className="w-16 bg-[#020617] rounded-lg p-2 text-center text-sm font-bold text-white border border-slate-600 outline-none" />
+      <button onClick={() => onCobrar(cant)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-3 rounded-lg text-sm transition-colors shadow-lg">Cobrar ${cant * precio}</button>
+    </div>
+  )
+}
+
+// ================= RENDERIZADOR UNIVERSAL DE TICKETS (80mm) =================
+// ESTA ES LA MAGIA: Aparece encima de la app actual, y al imprimir ignora la app y respeta los 80mm.
+function RenderTicket({ ticket, onClose }: { ticket: any, onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-[100] p-4 print:p-0 print:bg-white print:block">
+      {/* Configuración estricta para impresora térmica 80mm */}
+      <style>{`
+        @media print { 
+          @page { margin: 0; size: 80mm auto; } 
+          body { background: white; -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
+        }
+      `}</style>
+
+      {/* Contenedor del ticket que se adapta a pantalla, pero al imprimir fuerza 80mm */}
+      <div className="bg-white text-black p-5 w-full max-w-[320px] print:w-[80mm] print:max-w-[80mm] print:p-2 print:m-0 font-mono shadow-2xl print:shadow-none text-[12px] md:text-[14px] print:text-[12px] flex flex-col rounded-xl print:rounded-none">
+         
+         <div className="flex justify-center mb-3">
+           {/* El logo se debe ver bien en blanco y negro */}
+           <img src="/logo negro.png" alt="Logo" className="h-16 w-auto object-contain grayscale" onError={(e) => e.currentTarget.style.display = 'none'} />
+         </div>
+         <div className="text-center font-bold text-lg mb-1">SITE - VIAJES</div>
+
+         {/* ================= DISEÑO TICKET DE VENTA ================= */}
+         {ticket.tipo === 'VENTA' && (
+           <>
+             <div className="text-center mb-4 border-b border-dashed border-gray-400 pb-3">
+                <p className="text-[11px] font-bold uppercase">Comprobante de Viaje</p>
+                <p className="text-[11px]">{ticket.fecha}</p>
+             </div>
+             <div className="space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3">
+                <p><span className="font-bold">Folio:</span> {ticket.folio}</p>
+                <p className="mt-2 font-bold">Alumno:</p>
+                <p className="leading-tight uppercase text-[11px]">{ticket.nombre}</p>
+                <p><span className="font-bold">Matrícula:</span> {ticket.matricula || 'N/A'}</p>
+             </div>
+             <div className="mb-4 border-b border-dashed border-gray-400 pb-3">
+                <div className="flex justify-between font-bold mb-2"><span>CANT / DESC</span><span>IMPORTE</span></div>
+                <div className="flex justify-between">
+                  <span>{ticket.cantidad}x Viaje</span>
+                  <span>${ticket.total}.00</span>
+                </div>
+             </div>
+             <div className="flex justify-between font-bold mb-4 border-b border-black pb-3 text-base">
+                <span>TOTAL:</span><span>${ticket.total}.00</span>
+             </div>
+             <div className="text-center mb-6 space-y-1 text-[11px]">
+                <p className="inline-block border-2 border-black font-black px-3 py-1 mt-2 text-sm">SALDO: {ticket.nuevoSaldo} VIAJES</p>
+                <p className="mt-4 italic">¡Guarde su comprobante!</p>
+             </div>
+           </>
+         )}
+
+         {/* ================= DISEÑO TICKET DE RETIRO ================= */}
+         {ticket.tipo === 'RETIRO' && (
+           <>
+             <div className="text-center mb-4 border-b border-black pb-3 mt-4">
+                <p className="font-bold text-lg uppercase">Retiro Efectivo</p>
+                <p className="text-[11px]">{ticket.fecha}</p>
+             </div>
+             <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
+                <p><span className="font-bold">Folio Retiro:</span> {ticket.folio}</p>
+                <p><span className="font-bold">Concepto:</span> {ticket.concepto}</p>
+             </div>
+             <div className="flex justify-between font-bold mb-8 border-b border-black pb-3 text-base">
+                <span>MONTO:</span><span>${ticket.monto.toFixed(2)}</span>
+             </div>
+             <div className="mt-16 border-t border-black pt-2 text-center w-4/5 mx-auto">
+                <p className="text-[10px] uppercase font-bold">Firma de Recibido</p>
+             </div>
+             <div className="h-4"></div>
+           </>
+         )}
+
+         {/* ================= DISEÑO TICKET DE CIERRE ================= */}
+         {ticket.tipo === 'CIERRE' && (
+           <>
+             <div className="text-center mb-4 border-b border-black pb-3 mt-4">
+                <p className="font-bold text-xl uppercase">Corte de Caja</p>
+             </div>
+             <div className="space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3 text-[11px]">
+                <p><span className="font-bold">Apertura:</span><br/>{ticket.fechaApertura}</p>
+                <p><span className="font-bold">Cierre:</span><br/>{ticket.fechaCierre}</p>
+             </div>
+             <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
+                <div className="flex justify-between"><span>Fondo Inicial:</span><span>${ticket.fondo.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>+ Ventas (Viajes):</span><span>${ticket.ventas.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>- Retiros:</span><span>${ticket.retiros.toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold mt-2 pt-2 border-t border-dashed border-gray-400 text-sm">
+                  <span>TOTAL ESPERADO:</span><span>${ticket.esperado.toFixed(2)}</span>
+                </div>
+             </div>
+             <div className="space-y-2 mb-6 border-b border-black pb-3">
+                <div className="flex justify-between font-black text-sm"><span>EFECTIVO FÍSICO:</span><span>${ticket.real.toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold text-[13px] mt-2">
+                  <span>DIFERENCIA:</span>
+                  <span>${ticket.diferencia.toFixed(2)}</span>
+                </div>
+                {ticket.diferencia < 0 && <p className="text-[10px] text-center mt-1 font-bold">(FALTANTE EN CAJA)</p>}
+                {ticket.diferencia > 0 && <p className="text-[10px] text-center mt-1 font-bold">(SOBRANTE EN CAJA)</p>}
+                {ticket.diferencia === 0 && <p className="text-[10px] text-center mt-1 font-bold">(CAJA CUADRADA PERFECTA)</p>}
+             </div>
+             <div className="mt-16 border-t border-black pt-2 text-center w-4/5 mx-auto">
+                <p className="text-[10px] uppercase font-bold">Firma de Cajero</p>
+             </div>
+             <div className="h-4"></div>
+           </>
+         )}
+         
+         {/* BOTONES DE ACCIÓN (Se ocultan automáticamente al imprimir) */}
+         <div className="flex flex-col gap-2 print:hidden mt-6">
+            <button onClick={() => window.print()} className="w-full bg-[#10b981] hover:bg-[#059669] text-white py-4 rounded-xl font-sans font-black text-lg transition-colors shadow-lg">🖨️ IMPRIMIR</button>
+            <button onClick={onClose} className="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 py-3 rounded-xl font-sans font-bold text-sm transition-colors">Cerrar y Continuar</button>
+         </div>
       </div>
     </div>
-  );
+  )
 }
