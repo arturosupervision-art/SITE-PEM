@@ -51,25 +51,58 @@ export default function ModuloCaja() {
 
 
   // ==========================================
-  // LÓGICA DE TICKETS (VENTA, RETIRO Y CIERRE)
+  // LÓGICA DE TICKETS VISUALES (VENTA, RETIRO Y CIERRE)
   // ==========================================
   const estilosTicket = `
     <style>
-      body { font-family: 'Courier New', Courier, monospace; font-size: 14px; color: #000; margin: 0; padding: 15px; width: 300px; }
+      body { font-family: 'Courier New', Courier, monospace; font-size: 14px; color: #000; margin: 0 auto; padding: 20px; max-width: 320px; background: #fff; }
       .center { text-align: center; }
       .left { text-align: left; }
       .right { text-align: right; }
       .bold { font-weight: bold; }
-      .divider { border-bottom: 1px dashed #000; margin: 12px 0; }
+      .divider { border-bottom: 1px dashed #000; margin: 15px 0; }
       .flex { display: flex; justify-content: space-between; }
       .text-xl { font-size: 18px; }
+      
+      /* Botones que aparecen en la ventana pero NO se imprimen */
+      .botones-accion { margin-top: 30px; display: flex; justify-content: center; gap: 10px; }
+      .btn { padding: 12px 15px; font-weight: bold; font-family: sans-serif; cursor: pointer; border: none; border-radius: 8px; font-size: 14px; transition: 0.2s; }
+      .btn-imprimir { background-color: #10b981; color: white; }
+      .btn-imprimir:hover { background-color: #059669; }
+      .btn-cerrar { background-color: #ef4444; color: white; }
+      .btn-cerrar:hover { background-color: #dc2626; }
+      
+      @media print { 
+        .no-print { display: none !important; } 
+        body { padding: 0; margin: 0; max-width: 100%; }
+      }
     </style>
   `;
 
   const lanzarImpresion = (contenidoHTML: string) => {
-    const ventanaTicket = window.open('', '_blank', 'width=400,height=600');
-    if (!ventanaTicket) return;
-    ventanaTicket.document.write(`<html><head><title>Impresión de Ticket</title>${estilosTicket}</head><body>${contenidoHTML}<script>window.print(); setTimeout(() => window.close(), 1000);</script></body></html>`);
+    const ventanaTicket = window.open('', '_blank', 'width=450,height=700');
+    if (!ventanaTicket) {
+      alert("⚠️ Tu navegador bloqueó la ventana del ticket. Por favor permite las ventanas emergentes.");
+      return;
+    }
+    
+    // Aquí está la corrección: Se agregan botones reales y se quita el cierre automático
+    ventanaTicket.document.write(`
+      <html>
+        <head>
+          <title>Visor de Ticket</title>
+          ${estilosTicket}
+        </head>
+        <body>
+          ${contenidoHTML}
+          
+          <div class="botones-accion no-print">
+            <button class="btn btn-imprimir" onclick="window.print()">🖨️ Imprimir Ticket</button>
+            <button class="btn btn-cerrar" onclick="window.close()">❌ Cerrar</button>
+          </div>
+        </body>
+      </html>
+    `);
     ventanaTicket.document.close();
   };
 
@@ -153,8 +186,8 @@ export default function ModuloCaja() {
       .insert([{ tipo: 'venta', monto: total, concepto: `Venta ${cantidad} boletos - ${alumno.matricula}` }]);
 
     if (!errorAlumno && !errorCaja) {
-      setVentasTurno(prev => prev + total); // Sumamos a las ventas del turno
-      imprimirTicketVenta(alumno, cantidad, total);
+      setVentasTurno(prev => prev + total);
+      imprimirTicketVenta(alumno, cantidad, total); // Abre la ventana del ticket
       buscarAlumnos(); 
     } else {
       alert('❌ Error al registrar la venta.');
@@ -189,7 +222,7 @@ export default function ModuloCaja() {
   const handleRetiro = () => {
     const retiroNum = Number(montoRetiro);
     if(retiroNum > 0) {
-      setRetirosTurno(prev => prev + retiroNum); // Sumamos a retiros
+      setRetirosTurno(prev => prev + retiroNum);
       imprimirTicketRetiro(retiroNum);
       alert(`Retiro de $${retiroNum} registrado.`);
       setModalRetiro(false);
