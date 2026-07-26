@@ -27,7 +27,7 @@ export default function ModuloCajaViajes() {
 
   const [mostrarHistorial, setMostrarHistorial] = useState(false)
   const [ventasDia, setVentasDia] = useState<any[]>([])
-  const [fechaFiltro, setFechaFiltro] = useState(new Date().toLocaleDateString('en-CA')) // Formato YYYY-MM-DD local
+  const [fechaFiltro, setFechaFiltro] = useState(new Date().toLocaleDateString('en-CA'))
   const [cargandoHistorial, setCargandoHistorial] = useState(false)
 
   // ================= ESTADOS QR =================
@@ -223,7 +223,7 @@ export default function ModuloCajaViajes() {
           <>
             <div className="bg-[#0f172a] p-8 rounded-3xl shadow-2xl border border-slate-800 max-w-md w-full text-center mt-auto">
               <div className="bg-white p-3 rounded-2xl inline-block mb-6">
-                <img src="/logo negro.png" alt="Logo" className="h-16 object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
+                <img src="/logo negro.png" alt="Logo" className="h-16 object-contain" />
               </div>
               <h1 className="text-[#fbbf24] text-2xl font-black mb-2">Apertura de Caja</h1>
               <p className="text-slate-400 mb-8 text-sm px-4">Para comenzar a operar, declara el fondo inicial de la caja.</p>
@@ -257,7 +257,7 @@ export default function ModuloCajaViajes() {
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
           <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-slate-800 w-full md:w-fit">
             <div className="bg-white p-1.5 rounded-lg h-12 w-12 flex items-center justify-center">
-              <img src="/logo negro.png" alt="Logo" className="h-full object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
+              <img src="/logo negro.png" alt="Logo" className="h-full object-contain" />
             </div>
             <div>
               <h1 className="text-[#fbbf24] font-black text-xl tracking-wide">SITE - VIAJES</h1>
@@ -557,7 +557,7 @@ function RenderTicket({ ticket, onClose }: { ticket: any, onClose: () => void })
       <div className="bg-white text-black p-5 w-full max-w-[320px] print:w-[80mm] print:max-w-[80mm] print:p-2 print:m-0 font-mono shadow-2xl print:shadow-none text-[12px] md:text-[14px] print:text-[12px] flex flex-col rounded-xl print:rounded-none">
          
          <div className="flex justify-center mb-3">
-           <img src="/logo negro.png" alt="Logo" className="h-16 w-auto object-contain grayscale" onError={(e) => e.currentTarget.style.display = 'none'} />
+           <img src="/logo negro.png" alt="Logo" className="h-16 w-auto object-contain grayscale" />
          </div>
          <div className="text-center font-bold text-lg mb-1">SITE - VIAJES</div>
 
