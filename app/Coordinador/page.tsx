@@ -7,13 +7,16 @@ export default function Coordinador() {
   const [registros, setRegistros] = useState<any[]>([]);
 
   const cargarRegistros = async () => {
+    // Cambiamos el orden a fecha_hora para evitar errores si el ID es UUID
     const { data, error } = await supabase
       .from('registros_transporte')
       .select('*')
-      .order('id', { ascending: false })
-      .limit(50); // Muestra los últimos 50
+      .order('fecha_hora', { ascending: false })
+      .limit(50);
 
-    if (!error && data) {
+    if (error) {
+      console.error("Error al cargar registros:", error);
+    } else if (data) {
       setRegistros(data);
     }
   };
@@ -29,6 +32,7 @@ export default function Coordinador() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'registros_transporte' },
         (payload) => {
+          // Agregamos el nuevo registro al inicio de la lista
           setRegistros((prev) => [payload.new, ...prev]);
         }
       )
@@ -39,16 +43,28 @@ export default function Coordinador() {
     };
   }, []);
 
+  // Función para enviar WhatsApp
+  const notificarWhatsApp = (registro: any) => {
+    const fecha = new Date(registro.fecha_hora).toLocaleDateString('es-MX');
+    const hora = new Date(registro.fecha_hora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    
+    const mensaje = `*SITE-PEM: Aviso de Transporte* 🚌\n\nEstimado tutor, le informamos que el alumno con matrícula *${registro.matricula}* ha registrado un *${registro.tipo_movimiento.toUpperCase()}*.\n\n*Detalles del movimiento:*\n⏰ *Hora:* ${hora}\n📅 *Fecha:* ${fecha}\n🚍 *Unidad:* Autobús ${registro.unidad_transporte}\n📍 *Ubicación GPS:* ${registro.ubicacion_gps || 'No disponible'}\n\n_Mensaje automático del Sistema de Control SITE-PEM._`;
+
+    // Al no especificar número, abre WhatsApp y te deja elegir el contacto
+    const url = `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+    window.open(url, '_blank');
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 p-6 font-sans text-slate-200 flex flex-col justify-between">
       <div className="max-w-6xl mx-auto w-full">
+        
         {/* ENCABEZADO COORDINADOR */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
           <div className="flex items-center gap-4 flex-wrap justify-center text-center md:text-left">
-            {/* LOGO RECTANGULAR BLANCO */}
             <div className="bg-white rounded-xl p-2 shadow-lg shrink-0 h-20 flex items-center justify-center">
               <img
-                src="/logo%20negro.png"
+                src="/logo negro.png"
                 alt="Logo PEM"
                 className="h-full w-auto object-contain"
               />
@@ -87,22 +103,23 @@ export default function Coordinador() {
                   <th className="px-6 py-4 font-bold">Movimiento</th>
                   <th className="px-6 py-4 font-bold">Unidad</th>
                   <th className="px-6 py-4 font-bold text-center">GPS</th>
+                  <th className="px-6 py-4 font-bold text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
                 {registros.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="px-6 py-8 text-center text-slate-500 animate-pulse"
                     >
-                      Esperando registros en tiempo real...
+                      Esperando registros en tiempo real o no hay datos...
                     </td>
                   </tr>
                 ) : (
                   registros.map((registro) => (
                     <tr
-                      key={registro.id}
+                      key={registro.id || registro.fecha_hora}
                       className="hover:bg-slate-800/30 transition-colors"
                     >
                       <td className="px-6 py-4 text-slate-300">
@@ -140,6 +157,14 @@ export default function Coordinador() {
                             Sin ubicación
                           </span>
                         )}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => notificarWhatsApp(registro)}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors w-full border border-emerald-500/50"
+                        >
+                          💬 Notificar
+                        </button>
                       </td>
                     </tr>
                   ))
