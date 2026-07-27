@@ -797,7 +797,91 @@ export default function PanelAdministracion() {
               </div>
             </div>
 
-            <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+           <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+            <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/50">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">🎓 Control de Alumnos ({alumnos.length})</h2>
+                <p className="text-slate-400 text-xs mt-1">Semestre, Grupo, Turno, Tutores y Eliminación por Matrícula</p>
+              </div>
+
+              <div className="flex flex-wrap w-full md:w-auto gap-2">
+                {/* AQUÍ ESTÁ EL BOTÓN DE ACTUALIZAR, MÁS VISIBLE Y AL FRENTE */}
+                <button onClick={cargarAlumnos} className="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500 font-bold px-4 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-2 shadow-lg shadow-indigo-900/20">
+                  🔄 Actualizar Boletos
+                </button>
+                <input 
+                  type="text" 
+                  placeholder="Buscar alumno..." 
+                  value={busquedaAlumno}
+                  onChange={(e) => setBusquedaAlumno(e.target.value)}
+                  className="bg-[#020617] border border-slate-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-indigo-500 flex-1 md:w-40"
+                />
+                <button onClick={descargarBaseDatosAlumnos} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-slate-700 font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1">📥 Descargar BD</button>
+                <button onClick={() => setMostrarModalMasivo(true)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1">📁 Carga Masiva</button>
+                <button onClick={() => setMostrarModalEliminarMasivo(true)} className="bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-700 font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1">🗑️ Eliminar Generación</button>
+                <button onClick={abrirModalNuevoAlumno} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1">➕ Nuevo</button>
+              </div>
+            </div>
+
+            {idsSeleccionados.length > 0 && (
+              <div className="bg-red-950/40 border-b border-red-900/50 px-6 py-3 flex justify-between items-center">
+                <span className="text-red-300 text-xs font-bold">{idsSeleccionados.length} alumnos seleccionados para borrado</span>
+                <button onClick={eliminarSeleccionadosDirecto} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Eliminar Selección Marcada</button>
+              </div>
+            )}
+
+            <div className="overflow-x-auto p-2">
+              {cargandoAlumnos ? (
+                <p className="text-center text-slate-500 py-10 font-bold">Cargando catálogo de alumnos...</p>
+              ) : alumnosFiltrados.length === 0 ? (
+                <p className="text-center text-slate-500 py-10 font-bold">No se encontraron alumnos registrados.</p>
+              ) : (
+                <table className="w-full text-left text-sm">
+                  <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
+                    <tr>
+                      <th className="px-3 py-4 text-center"><input type="checkbox" checked={idsSeleccionados.length === alumnosFiltrados.length && alumnosFiltrados.length > 0} onChange={seleccionarTodosActuales} className="cursor-pointer"/></th>
+                      <th className="px-4 py-4 font-bold">Nombre Completo</th>
+                      <th className="px-4 py-4 font-bold">Matrícula / QR</th>
+                      <th className="px-4 py-4 font-bold">Sem / Grupo / Turno</th>
+                      <th className="px-4 py-4 font-bold">Datos del Tutor</th>
+                      <th className="px-4 py-4 font-bold text-center">Boletos Disp.</th>
+                      <th className="px-4 py-4 font-bold text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {alumnosFiltrados.map((al) => (
+                      <tr key={al.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
+                        <td className="px-3 py-4 text-center"><input type="checkbox" checked={idsSeleccionados.includes(al.id)} onChange={() => toggleSeleccionAlumno(al.id)} className="cursor-pointer"/></td>
+                        <td className="px-4 py-4 text-white font-bold">{al.nombre_completo}</td>
+                        <td className="px-4 py-4">
+                          <p className="text-slate-300 font-mono text-xs">{al.matricula || 'Sin Matrícula'}</p>
+                          {al.codigo_qr ? <span className="bg-indigo-900/40 text-indigo-300 border border-indigo-800 px-1.5 py-0.5 rounded font-mono text-[10px] inline-block mt-1">🏷️ {al.codigo_qr}</span> : <span className="text-slate-600 italic text-[10px] block mt-1">Sin QR</span>}
+                        </td>
+                        <td className="px-4 py-4 text-xs">
+                          <p className="text-white font-bold">{al.semestre} - Grupo {al.grupo}</p>
+                          <p className="text-slate-400">{al.turno}</p>
+                        </td>
+                        <td className="px-4 py-4 text-xs">
+                          <p className="text-slate-300">✉️ {al.correo_tutor || 'No registrado'}</p>
+                          <p className="text-slate-400">📞 {al.telefono_tutor || 'No registrado'}</p>
+                        </td>
+                        {/* FORMATO CAMBIADO A BOLETOS ENTEROS */}
+                        <td className="px-4 py-4 text-center font-black text-emerald-400 text-lg">
+                          {al.saldo_actual || 0} <span className="text-sm">🎟️</span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <div className="flex justify-center gap-1">
+                            <button onClick={() => abrirModalEditarAlumno(al)} className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-2 py-1 rounded text-xs font-bold transition-colors">✏️</button>
+                            <button onClick={() => eliminarAlumnoIndividual(al.id, al.nombre_completo)} className="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700 px-2 py-1 rounded text-xs font-bold transition-colors">🗑️</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
               <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">💳 Auditoría de Retiros (Hoy)</h2>
                 <button onClick={cargarDatosDashboard} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm font-bold transition-colors border border-slate-700">
