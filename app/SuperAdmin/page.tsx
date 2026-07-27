@@ -47,7 +47,7 @@ export default function PanelAdministracion() {
   const [mostrarModalEliminarMasivo, setMostrarModalEliminarMasivo] = useState(false)
   const [alumnoEditando, setAlumnoEditando] = useState<any>(null)
   
-  // Formulario Individual Alumno (Nuevos campos solicitados)
+  // Formulario Individual Alumno
   const [formNombre, setFormNombre] = useState('')
   const [formMatricula, setFormMatricula] = useState('')
   const [formSemestre, setFormSemestre] = useState('1º')
@@ -59,7 +59,7 @@ export default function PanelAdministracion() {
   const [formSaldo, setFormSaldo] = useState(0)
   const [guardandoAlumno, setGuardandoAlumno] = useState(false)
 
-  // Formulario Carga Masiva y Eliminación Masiva
+  // Formulario Carga Masiva y Eliminación Masiva (Solo matrículas para eliminar)
   const [textoMasivo, setTextoMasivo] = useState('')
   const [cargandoMasivo, setCargandoMasivo] = useState(false)
   const [textoEliminarMasivo, setTextoEliminarMasivo] = useState('')
@@ -275,6 +275,7 @@ export default function PanelAdministracion() {
     setGuardandoAlumno(true)
 
     try {
+      const gradoGrupoVal = `${formSemestre} Grupo ${formGrupo}`
       const datosAlumno = {
         nombre_completo: formNombre,
         matricula: formMatricula,
@@ -284,7 +285,8 @@ export default function PanelAdministracion() {
         codigo_qr: formQr,
         correo_tutor: formCorreoTutor,
         telefono_tutor: formTelefonoTutor,
-        saldo_actual: formSaldo
+        saldo_actual: formSaldo,
+        grado_grupo: gradoGrupoVal // Satisface la restricción Not-Null de Supabase
       }
 
       if (alumnoEditando) {
@@ -311,7 +313,6 @@ export default function PanelAdministracion() {
     }
   }
 
-  // ELIMINAR ALUMNO INDIVIDUAL
   const eliminarAlumnoIndividual = async (id: any, nombre: string) => {
     if (confirm(`¿Estás seguro de eliminar a ${nombre}?`)) {
       try {
@@ -324,7 +325,6 @@ export default function PanelAdministracion() {
     }
   }
 
-  // SELECCIÓN MÚLTIPLE EN TABLA
   const toggleSeleccionAlumno = (id: string) => {
     setIdsSeleccionados(prev => 
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
@@ -354,7 +354,7 @@ export default function PanelAdministracion() {
     }
   }
 
-  // ELIMINACIÓN MASIVA POR LISTA / MATRÍCULAS (CSV / Texto)
+  // ================= ELIMINACIÓN MASIVA ÚNICAMENTE POR MATRÍCULA =================
   const procesarEliminacionMasiva = async () => {
     if (!textoEliminarMasivo.trim()) return
     try {
@@ -363,11 +363,8 @@ export default function PanelAdministracion() {
 
       lineas.forEach(l => {
         const val = l.trim()
-        if (val) {
-          // Si el archivo subido tiene comas, tomamos la columna 1 (Matrícula)
-          const partes = val.split(',')
-          const mat = partes.length > 1 ? partes[1].trim() : partes[0].trim()
-          if (mat) matriculasAEliminar.push(mat)
+        if (val && !val.toLowerCase().includes('matricula')) { // Omite encabezados si los hay
+          matriculasAEliminar.push(val)
         }
       })
 
@@ -376,10 +373,10 @@ export default function PanelAdministracion() {
         return
       }
 
-      if (confirm(`Se eliminarán los alumnos que coincidan con ${matriculasAEliminar.length} matrículas de la lista. ¿Continuar?`)) {
+      if (confirm(`Se eliminarán los alumnos correspondientes a ${matriculasAEliminar.length} matrículas. ¿Deseas continuar?`)) {
         const { error } = await supabase.from('alumnos').delete().in('matricula', matriculasAEliminar)
         if (error) throw error
-        alert('Eliminación masiva completada con éxito.')
+        alert('Eliminación de generación completada con éxito.')
         setTextoEliminarMasivo('')
         setMostrarModalEliminarMasivo(false)
         cargarAlumnos()
@@ -400,19 +397,22 @@ export default function PanelAdministracion() {
 
       lineas.forEach(linea => {
         const l = linea.trim()
-        if (l) {
+        if (l && !l.toLowerCase().includes('nombre')) {
           const partes = l.split(',')
           if (partes.length >= 1) {
+            const sem = partes[2]?.trim() || '1º'
+            const grupo = partes[3]?.trim() || '1'
             nuevosAlumnos.push({
               nombre_completo: partes[0]?.trim(),
               matricula: partes[1]?.trim() || '',
-              semestre: partes[2]?.trim() || '1º',
-              grupo: partes[3]?.trim() || '1',
+              semestre: sem,
+              grupo: grupo,
               turno: partes[4]?.trim() || 'Matutino',
               codigo_qr: partes[5]?.trim() || '',
               correo_tutor: partes[6]?.trim() || '',
               telefono_tutor: partes[7]?.trim() || '',
-              saldo_actual: parseFloat(partes[8]?.trim()) || 0
+              saldo_actual: parseFloat(partes[8]?.trim()) || 0,
+              grado_grupo: `${sem} Grupo ${grupo}`
             })
           }
         }
@@ -475,8 +475,25 @@ export default function PanelAdministracion() {
       reader.onload = (event) => {
         const contenido = event.target?.result as string
         if (contenido) {
-          if (tipo === 'CARGA') setTextoMasivo(contenido)
-          else setTextoEliminarMasivo(contenido)
+          if (tipo === 'CARGA') {
+            setTextoMasivo(contenido)
+          } else {
+            // Si suben un CSV completo, extraemos únicamente la columna de la matrícula (Columna 2 o la que coincida)
+            const lineas = contenido.split('\n')
+            const matriculasExtraidas: string[] = []
+            lineas.forEach(l => {
+              const row = l.trim()
+              if (row) {
+                const partes = row.split(',')
+                // Si viene con comas, asumimos que la matrícula está en la segunda columna (índice 1), de lo contrario es el texto entero
+                const mat = partes.length > 1 ? partes[1].replace(/"/g, '').trim() : row.replace(/"/g, '').trim()
+                if (mat && !mat.toLowerCase().includes('matricula')) {
+                  matriculasExtraidas.push(mat)
+                }
+              }
+            })
+            setTextoEliminarMasivo(matriculasExtraidas.join('\n'))
+          }
         }
       }
       reader.readAsText(file)
@@ -706,7 +723,7 @@ export default function PanelAdministracion() {
             <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/50">
               <div>
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">🎓 Control de Alumnos ({alumnos.length})</h2>
-                <p className="text-slate-400 text-xs mt-1">Semestre, Grupo, Turno, Tutores y Eliminación Masiva selectiva</p>
+                <p className="text-slate-400 text-xs mt-1">Semestre, Grupo, Turno, Tutores y Eliminación por Matrícula</p>
               </div>
 
               <div className="flex flex-wrap w-full md:w-auto gap-2">
@@ -909,31 +926,31 @@ export default function PanelAdministracion() {
         </div>
       )}
 
-      {/* ================= MODAL: ELIMINACIÓN MASIVA DE ALUMNOS ================= */}
+      {/* ================= MODAL: ELIMINACIÓN MASIVA POR MATRÍCULAS ================= */}
       {mostrarModalEliminarMasivo && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
           <div className="bg-[#0f172a] border border-red-900/50 p-6 md:p-8 rounded-2xl w-full max-w-xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-red-400 flex items-center gap-2">
-                🗑️ Eliminación Masiva por Lista / Generación
+                🗑️ Eliminar Generación por Matrículas
               </h2>
               <button onClick={() => setMostrarModalEliminarMasivo(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
             </div>
 
             <p className="text-slate-400 text-xs mb-4">
-              Puedes descargar tu BD actual de alumnos, filtrar o conservar solo las matrículas de los alumnos que salieron (ej. generación 2026), y subir o pegar su lista aquí para eliminarlos de golpe.
+              Pega únicamente las matrículas (una por renglón) o sube un archivo CSV. El sistema detectará solo las matrículas para eliminar a los alumnos de golpe.
             </p>
 
             <div className="mb-4">
               <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 px-3 py-2 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1 mb-3">
-                📂 Subir CSV con Matrículas a Eliminar
+                📂 Cargar Matrículas desde Archivo
                 <input type="file" accept=".csv, .txt" onChange={(e) => cargarArchivoMasivo(e, 'ELIMINAR')} className="hidden" />
               </label>
               <textarea 
                 rows={6}
                 value={textoEliminarMasivo}
                 onChange={(e) => setTextoEliminarMasivo(e.target.value)}
-                placeholder={"O pega aquí las matrículas (una por línea o con formato CSV):\n2026-001\n2026-002\n2026-003"}
+                placeholder={"MAT-001\nMAT-002\n2026-050"}
                 className="w-full bg-[#020617] border border-red-900/40 rounded-xl p-3 text-white text-xs font-mono outline-none focus:border-red-500"
               />
             </div>
@@ -952,7 +969,7 @@ export default function PanelAdministracion() {
                 disabled={!textoEliminarMasivo.trim()}
                 className="w-1/2 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-colors text-sm disabled:opacity-50"
               >
-                ⚠️ Ejecutar Borrado Masivo
+                ⚠️ Ejecutar Borrado por Matrícula
               </button>
             </div>
           </div>
