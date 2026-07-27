@@ -41,8 +41,9 @@ export default function Coordinador() {
 
   // Función MEJORADA para WhatsApp (Sin emojis conflictivos y con valores por defecto)
   const notificarWhatsApp = (registro: any) => {
-    const fecha = new Date(registro.fecha_hora).toLocaleDateString('es-MX');
-    const hora = new Date(registro.fecha_hora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    // APLICACIÓN DE ZONA HORARIA MEXICO CITY
+    const fecha = new Date(registro.fecha_hora).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' });
+    const hora = new Date(registro.fecha_hora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' });
     
     const unidad = registro.unidad_transporte || '1';
     const ubicacion = registro.ubicacion_gps || 'No disponible';
@@ -127,7 +128,8 @@ export default function Coordinador() {
                       className="hover:bg-slate-800/30 transition-colors"
                     >
                       <td className="px-6 py-4 text-slate-300">
-                        {new Date(registro.fecha_hora).toLocaleString('es-MX')}
+                        {/* APLICACIÓN DE ZONA HORARIA MEXICO CITY */}
+                        {new Date(registro.fecha_hora).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}
                       </td>
                       <td className="px-6 py-4">
                         <div className="font-bold text-blue-300">
