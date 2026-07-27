@@ -39,11 +39,18 @@ export default function Coordinador() {
     };
   }, []);
 
+  // Función MEJORADA para WhatsApp (Sin emojis conflictivos y con valores por defecto)
   const notificarWhatsApp = (registro: any) => {
     const fecha = new Date(registro.fecha_hora).toLocaleDateString('es-MX');
     const hora = new Date(registro.fecha_hora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     
-    const mensaje = `*SITE-PEM: Aviso de Transporte* 🚌\n\nEstimado tutor, le informamos que el alumno *${registro.alumno_nombre || 'Sin Nombre'}* ha registrado un *${registro.tipo_movimiento?.toUpperCase()}*.\n\n*Detalles del movimiento:*\n⏰ *Hora:* ${hora}\n📅 *Fecha:* ${fecha}\n🚍 *Unidad:* Autobús ${registro.unidad_transporte}\n📍 *Ubicación:* ${registro.ubicacion_gps || 'No disponible'}\n\n_Mensaje automático del Sistema de Control SITE-PEM._`;
+    const unidad = registro.unidad_transporte || '1';
+    const ubicacion = registro.ubicacion_gps || 'No disponible';
+    const movimiento = registro.tipo_movimiento ? registro.tipo_movimiento.toUpperCase() : 'MOVIMIENTO';
+    const nombre = registro.alumno_nombre || 'Sin Nombre';
+    
+    // Usamos formato de texto limpio para evitar problemas de codificación ()
+    const mensaje = `*SITE-PEM: Aviso de Transporte*\n\nEstimado tutor, le informamos que el alumno *${nombre}* ha registrado un *${movimiento}*.\n\n*Detalles del movimiento:*\n- *Hora:* ${hora}\n- *Fecha:* ${fecha}\n- *Unidad:* Autobús ${unidad}\n- *Ubicación:* ${ubicacion}\n\n_Mensaje automático del Sistema de Control SITE-PEM._`;
 
     const numeroLimpio = registro.telefono_tutor ? registro.telefono_tutor.replace(/\D/g, '') : '';
     
@@ -142,7 +149,7 @@ export default function Coordinador() {
                         </span>
                       </td>
                       <td className="px-6 py-4 font-bold text-slate-400">
-                        Autobús {registro.unidad_transporte}
+                        Autobús {registro.unidad_transporte || '1'}
                       </td>
                       <td className="px-6 py-4 text-center">
                         {registro.ubicacion_gps ? (
