@@ -11,7 +11,6 @@ export default function PantallaChofer() {
   const [alumnoActual, setAlumnoActual] = useState<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // NUEVOS ESTADOS PARA RUTA Y GPS
   const [modoRuta, setModoRuta] = useState<'ASCENSO' | 'DESCENSO' | null>(null);
   const [ubicacion, setUbicacion] = useState<{
     lat: number;
@@ -62,7 +61,6 @@ export default function PantallaChofer() {
     }
   };
 
-  // FUNCIÓN PARA INICIAR RUTA Y PEDIR GPS
   const iniciarRuta = (tipo: 'ASCENSO' | 'DESCENSO') => {
     if (!navigator.geolocation) {
       alert('Tu navegador no soporta GPS. Se continuará sin ubicación.');
@@ -127,7 +125,6 @@ export default function PantallaChofer() {
         return;
       }
 
-      // NUEVO: GUARDAR EL REGISTRO CON GPS EN SUPABASE
       const enlaceMaps = ubicacion
         ? `https://maps.google.com/?q=${ubicacion.lat},${ubicacion.lng}`
         : '';
@@ -136,25 +133,23 @@ export default function PantallaChofer() {
         {
           alumno_id: alumno.id,
           matricula: alumno.matricula,
+          alumno_nombre: alumno.nombre_completo, 
+          telefono_tutor: alumno.telefono_tutor, 
           tipo_movimiento: modoRuta === 'ASCENSO' ? 'Ascenso' : 'Descenso',
           ubicacion_gps: enlaceMaps,
-          unidad_transporte: '1' // Por defecto unidad 1 (puedes cambiarlo después)
+          unidad_transporte: '1'
         },
       ]);
 
       if (errorRegistro) {
         console.error("🚨 Error bloqueando inserción en Supabase:", errorRegistro);
       }
-      // -------------------------------------------------------------
-      // NUEVO: DISPARAR CORREO AUTOMÁTICO AL TUTOR
-      // -------------------------------------------------------------
-      // Validamos si la columna existe y tiene un correo
+
       if (alumno.correo_tutor) {
         const horaActual = new Date().toLocaleTimeString('es-MX', { 
           hour: '2-digit', minute: '2-digit', hour12: true 
         });
 
-        // Hacemos el fetch sin 'await' para no trabar la pantalla del chofer
         fetch('/api/enviar-correo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -167,7 +162,6 @@ export default function PantallaChofer() {
           })
         }).catch(err => console.error("Error disparando el correo:", err));
       }
-      // -------------------------------------------------------------
 
       reproducirSonido('EXITO');
       setEstadoPantalla('EXITO');
@@ -225,7 +219,6 @@ export default function PantallaChofer() {
       </header>
 
       <section className="my-auto max-w-xl mx-auto w-full text-center space-y-6 mt-8">
-        {/* PANTALLA NUEVA: SELECCIÓN DE RUTA */}
         {!modoRuta && (
           <div className="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-6">
             <div>
@@ -253,7 +246,6 @@ export default function PantallaChofer() {
           </div>
         )}
 
-        {/* PANTALLA DE ESCÁNER (TU DISEÑO ORIGINAL) */}
         {modoRuta && estadoPantalla === 'ESPERANDO' && (
           <div className="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-6 relative">
             <button
