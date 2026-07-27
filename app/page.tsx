@@ -300,15 +300,43 @@ export default function ModuloCajaViajes() {
 
         {/* BUSCADOR */}
         <div className="bg-[#0f172a] p-6 rounded-2xl mb-6 border border-slate-800 flex flex-col md:flex-row gap-4 justify-between items-center shadow-lg">
-          <div className="relative w-full md:w-2/3">
-            <span className="absolute left-4 top-3.5 text-slate-400">🔍</span>
-            <input type="text" placeholder="Escanear QR o teclear alumno/matrícula..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full bg-[#020617] text-white rounded-xl py-3 pl-12 pr-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" autoFocus />
+          <div className="relative w-full md:w-2/3 flex gap-2">
+            <div className="relative w-full">
+              <span className="absolute left-4 top-3.5 text-slate-400">🔍</span>
+              <input type="text" placeholder="Escanear QR o teclear alumno/matrícula..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full bg-[#020617] text-white rounded-xl py-3 pl-12 pr-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" autoFocus />
+            </div>
+            <button onClick={() => setEscaneandoBusqueda(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-3 rounded-xl transition-colors flex items-center justify-center border border-indigo-500/50" title="Usar cámara">
+              📷
+            </button>
           </div>
           <div className="flex items-center gap-3 bg-[#020617] px-4 py-2 rounded-xl border border-slate-700">
             <span className="text-slate-400 text-sm font-bold">Tarifa Viaje:</span>
             <span className="font-black text-[#fbbf24] text-xl">${precioBoleto}</span>
           </div>
         </div>
+
+        {/* MODAL CÁMARA BUSCADOR */}
+        {escaneandoBusqueda && (
+          <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50 print:hidden">
+            <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md">
+              <h2 className="text-xl font-bold mb-4 text-white text-center">Escanear QR de Alumno</h2>
+              <div className="rounded-xl overflow-hidden border-2 border-indigo-500 shadow-lg shadow-indigo-500/20 mb-4">
+                <Scanner 
+                  onResult={(text) => { 
+                    if(text) {
+                      setBusqueda(text);
+                      setEscaneandoBusqueda(false);
+                    }
+                  }} 
+                  onError={(error) => console.log(error?.message)} 
+                />
+              </div>
+              <button onClick={() => setEscaneandoBusqueda(false)} className="w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-lg font-bold transition-colors border border-slate-600">
+                Cancelar y Cerrar Cámara
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* LISTA DE ALUMNOS */}
         <div className="bg-[#0f172a] p-6 rounded-2xl border border-slate-800 shadow-xl mb-6">
@@ -461,10 +489,19 @@ export default function ModuloCajaViajes() {
             <div className="bg-indigo-900/40 p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
               <div>
                 <h2 className="text-2xl font-black text-white">Historial de Viajes (Ventas)</h2>
-                <div className="mt-2 flex items-center gap-3">
-                  <label htmlFor="fechaFiltro" className="text-sm font-bold text-slate-400 cursor-pointer">Consultar fecha:</label>
-                  <input id="fechaFiltro" type="date" value={fechaFiltro} onChange={(e) => setFechaFiltro(e.target.value)} className="bg-[#020617] border border-indigo-500/50 rounded-lg p-2.5 text-sm text-white font-bold outline-none focus:border-indigo-400 shadow-sm cursor-pointer" />
-                </div>
+               <div className="mt-2 flex items-center gap-3 bg-[#020617] px-3 py-1.5 rounded-lg border border-slate-700 w-fit">
+              <label htmlFor="fechaFiltro" className="text-sm font-bold text-indigo-400 cursor-pointer flex items-center gap-2">
+                📅 Fecha:
+              </label>
+              <input 
+                id="fechaFiltro" 
+                type="date" 
+                value={fechaFiltro} 
+                onChange={(e) => setFechaFiltro(e.target.value)} 
+                style={{ colorScheme: 'dark' }}
+                className="bg-transparent text-sm text-white font-bold outline-none cursor-pointer" 
+              />
+            </div>
               </div>
               <button onClick={() => setMostrarHistorial(false)} className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-2 rounded-xl font-bold w-full md:w-auto">Volver a Caja</button>
             </div>
