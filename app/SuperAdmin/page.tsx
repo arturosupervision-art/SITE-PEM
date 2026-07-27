@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 
 export default function PanelAdministracion() {
@@ -59,7 +59,11 @@ export default function PanelAdministracion() {
   const [formSaldo, setFormSaldo] = useState(0)
   const [guardandoAlumno, setGuardandoAlumno] = useState(false)
 
-  // Formulario Carga Masiva y Eliminación Masiva (Solo matrículas para eliminar)
+  // Estados para Cámara de PC
+  const [usandoCamara, setUsandoCamara] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  // Formulario Carga Masiva y Eliminación Masiva
   const [textoMasivo, setTextoMasivo] = useState('')
   const [cargandoMasivo, setCargandoMasivo] = useState(false)
   const [textoEliminarMasivo, setTextoEliminarMasivo] = useState('')
@@ -223,6 +227,51 @@ export default function PanelAdministracion() {
     setMostrarCorte(false)
   }
 
+  // ================= FUNCIONES DE CÁMARA PARA PC =================
+  const detenerCamara = (streamToStop?: MediaStream, intervalId?: NodeJS.Timeout) => {
+    if (intervalId) clearInterval(intervalId);
+    if (streamToStop) {
+      streamToStop.getTracks().forEach(t => t.stop());
+    } else if (videoRef.current && videoRef.current.srcObject) {
+      const s = videoRef.current.srcObject as MediaStream;
+      s.getTracks().forEach(t => t.stop());
+    }
+    setUsandoCamara(false);
+  }
+
+  const iniciarCamara = async () => {
+    setUsandoCamara(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        
+        // Verifica si la API nativa de BarcodeDetector está disponible (Chrome/Edge/Android)
+        if ('BarcodeDetector' in window) {
+          const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+          const interval = setInterval(async () => {
+            if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+              try {
+                const barcodes = await detector.detect(videoRef.current);
+                if (barcodes.length > 0) {
+                  setFormQr(barcodes[0].rawValue);
+                  detenerCamara(stream, interval);
+                }
+              } catch (e) {
+                console.error(e);
+              }
+            }
+          }, 500);
+        } else {
+          console.warn("La detección nativa de códigos QR no está soportada en este navegador. Utilice un escáner físico.");
+        }
+      }
+    } catch (err: any) {
+      alert("Error al acceder a la cámara web: " + err.message);
+      setUsandoCamara(false);
+    }
+  }
+
   // ================= FUNCIONES DE CONTROL DE ALUMNOS (SUPER ADMIN) =================
   const cargarAlumnos = async () => {
     setCargandoAlumnos(true)
@@ -253,6 +302,7 @@ export default function PanelAdministracion() {
     setFormCorreoTutor('')
     setFormTelefonoTutor('')
     setFormSaldo(0)
+    setUsandoCamara(false)
     setMostrarModalAlumno(true)
   }
 
@@ -267,6 +317,7 @@ export default function PanelAdministracion() {
     setFormCorreoTutor(al.correo_tutor || '')
     setFormTelefonoTutor(al.telefono_tutor || '')
     setFormSaldo(al.saldo_actual || 0)
+    setUsandoCamara(false)
     setMostrarModalAlumno(true)
   }
 
@@ -304,6 +355,7 @@ export default function PanelAdministracion() {
         if (error) throw error
       }
 
+      detenerCamara()
       setMostrarModalAlumno(false)
       cargarAlumnos()
     } catch (err: any) {
@@ -376,7 +428,7 @@ export default function PanelAdministracion() {
       if (confirm(`Se eliminarán los alumnos correspondientes a ${matriculasAEliminar.length} matrículas. ¿Deseas continuar?`)) {
         const { error } = await supabase.from('alumnos').delete().in('matricula', matriculasAEliminar)
         if (error) throw error
-        alert('Eliminación de generación completada con éxito.')
+        alert('Eliminación masiva completada con éxito.')
         setTextoEliminarMasivo('')
         setMostrarModalEliminarMasivo(false)
         cargarAlumnos()
@@ -384,6 +436,18 @@ export default function PanelAdministracion() {
     } catch (err: any) {
       alert('Error en eliminación masiva: ' + err.message)
     }
+  }
+
+  const descargarPlantillaEliminar = () => {
+    const contenido = "Nombre,Matricula,Semestre,Grupo,Turno\nJuan Perez Lopez,2026-001,6º,1,Matutino\nMaria Garcia Gomez,2026-002,6º,2,Vespertino"
+    const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'plantilla_eliminar_alumnos.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   // ================= CARGA MASIVA DE ALUMNOS =================
@@ -932,25 +996,35 @@ export default function PanelAdministracion() {
           <div className="bg-[#0f172a] border border-red-900/50 p-6 md:p-8 rounded-2xl w-full max-w-xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-red-400 flex items-center gap-2">
-                🗑️ Eliminar Generación por Matrículas
+                🗑️ Eliminar Generación por Base de Datos
               </h2>
               <button onClick={() => setMostrarModalEliminarMasivo(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
             </div>
 
             <p className="text-slate-400 text-xs mb-4">
-              Pega únicamente las matrículas (una por renglón) o sube un archivo CSV. El sistema detectará solo las matrículas para eliminar a los alumnos de golpe.
+              Descarga la plantilla, llénala con los datos (Nombre, Matricula, Semestre, Grupo, Turno) y súbela. El sistema extraerá automáticamente la matrícula para eliminar a los alumnos.
             </p>
 
-            <div className="mb-4">
-              <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 px-3 py-2 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1 mb-3">
-                📂 Cargar Matrículas desde Archivo
+            <div className="flex gap-3 mb-4">
+              <button 
+                onClick={descargarPlantillaEliminar}
+                className="bg-slate-800 hover:bg-slate-700 text-red-400 border border-red-800/50 px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+              >
+                📥 Descargar BD para Eliminar
+              </button>
+
+              <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 px-3 py-2 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1">
+                📂 Subir Archivo a Eliminar
                 <input type="file" accept=".csv, .txt" onChange={(e) => cargarArchivoMasivo(e, 'ELIMINAR')} className="hidden" />
               </label>
+            </div>
+
+            <div className="mb-4">
               <textarea 
                 rows={6}
                 value={textoEliminarMasivo}
                 onChange={(e) => setTextoEliminarMasivo(e.target.value)}
-                placeholder={"MAT-001\nMAT-002\n2026-050"}
+                placeholder={"Las matrículas extraídas aparecerán aquí..."}
                 className="w-full bg-[#020617] border border-red-900/40 rounded-xl p-3 text-white text-xs font-mono outline-none focus:border-red-500"
               />
             </div>
@@ -969,7 +1043,7 @@ export default function PanelAdministracion() {
                 disabled={!textoEliminarMasivo.trim()}
                 className="w-1/2 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-colors text-sm disabled:opacity-50"
               >
-                ⚠️ Ejecutar Borrado por Matrícula
+                ⚠️ Ejecutar Borrado Masivo
               </button>
             </div>
           </div>
@@ -984,7 +1058,7 @@ export default function PanelAdministracion() {
               <h2 className="text-xl font-bold text-white">
                 {alumnoEditando ? '✏️ Editar Alumno' : '➕ Registrar Alumno'}
               </h2>
-              <button onClick={() => setMostrarModalAlumno(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
+              <button onClick={() => { setMostrarModalAlumno(false); detenerCamara(); }} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
             </div>
 
             <form onSubmit={guardarAlumno} className="space-y-4">
@@ -1063,22 +1137,21 @@ export default function PanelAdministracion() {
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className="block text-xs font-bold text-indigo-400 uppercase">Código QR Vinculado</label>
-                  <label className="cursor-pointer text-xs bg-indigo-900/60 hover:bg-indigo-800 text-indigo-300 border border-indigo-700 px-2 py-1 rounded font-bold transition-colors">
-                    📷 Usar Cámara
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      capture="environment" 
-                      className="hidden" 
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) {
-                          setFormQr(file.name.replace(/\.[^/.]+$/, ""))
-                        }
-                      }} 
-                    />
-                  </label>
+                  <button 
+                    type="button"
+                    onClick={usandoCamara ? () => detenerCamara() : iniciarCamara}
+                    className="cursor-pointer text-xs bg-indigo-900/60 hover:bg-indigo-800 text-indigo-300 border border-indigo-700 px-2 py-1 rounded font-bold transition-colors"
+                  >
+                    {usandoCamara ? '⏹️ Detener Cámara' : '📷 Abrir Cámara'}
+                  </button>
                 </div>
+
+                {usandoCamara && (
+                  <div className="w-full h-48 bg-black rounded-xl overflow-hidden mb-2 relative">
+                    <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 border-2 border-indigo-500/50 m-4 rounded pointer-events-none"></div>
+                  </div>
+                )}
 
                 <input 
                   type="text" 
@@ -1127,7 +1200,7 @@ export default function PanelAdministracion() {
               <div className="pt-4 flex gap-3">
                 <button 
                   type="button" 
-                  onClick={() => setMostrarModalAlumno(false)}
+                  onClick={() => { setMostrarModalAlumno(false); detenerCamara(); }}
                   className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors text-sm"
                 >
                   Cancelar
