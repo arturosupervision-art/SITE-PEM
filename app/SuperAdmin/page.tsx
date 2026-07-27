@@ -44,20 +44,26 @@ export default function PanelAdministracion() {
   const [cargandoAlumnos, setCargandoAlumnos] = useState(false)
   const [mostrarModalAlumno, setMostrarModalAlumno] = useState(false)
   const [mostrarModalMasivo, setMostrarModalMasivo] = useState(false)
+  const [mostrarModalEliminarMasivo, setMostrarModalEliminarMasivo] = useState(false)
   const [alumnoEditando, setAlumnoEditando] = useState<any>(null)
   
-  // Formulario Individual Alumno
+  // Formulario Individual Alumno (Nuevos campos solicitados)
   const [formNombre, setFormNombre] = useState('')
   const [formMatricula, setFormMatricula] = useState('')
+  const [formSemestre, setFormSemestre] = useState('1º')
+  const [formGrupo, setFormGrupo] = useState('1')
+  const [formTurno, setFormTurno] = useState('Matutino')
   const [formQr, setFormQr] = useState('')
   const [formCorreoTutor, setFormCorreoTutor] = useState('')
   const [formTelefonoTutor, setFormTelefonoTutor] = useState('')
   const [formSaldo, setFormSaldo] = useState(0)
   const [guardandoAlumno, setGuardandoAlumno] = useState(false)
 
-  // Formulario Carga Masiva
+  // Formulario Carga Masiva y Eliminación Masiva
   const [textoMasivo, setTextoMasivo] = useState('')
   const [cargandoMasivo, setCargandoMasivo] = useState(false)
+  const [textoEliminarMasivo, setTextoEliminarMasivo] = useState('')
+  const [idsSeleccionados, setIdsSeleccionados] = useState<string[]>([])
 
   // ================= FUNCIONES DE LOGIN Y CIERRE =================
   const iniciarSesion = (e: React.FormEvent) => {
@@ -240,6 +246,9 @@ export default function PanelAdministracion() {
     setAlumnoEditando(null)
     setFormNombre('')
     setFormMatricula('')
+    setFormSemestre('1º')
+    setFormGrupo('1')
+    setFormTurno('Matutino')
     setFormQr('')
     setFormCorreoTutor('')
     setFormTelefonoTutor('')
@@ -251,6 +260,9 @@ export default function PanelAdministracion() {
     setAlumnoEditando(al)
     setFormNombre(al.nombre_completo || '')
     setFormMatricula(al.matricula || '')
+    setFormSemestre(al.semestre || '1º')
+    setFormGrupo(al.grupo || '1')
+    setFormTurno(al.turno || 'Matutino')
     setFormQr(al.codigo_qr || '')
     setFormCorreoTutor(al.correo_tutor || '')
     setFormTelefonoTutor(al.telefono_tutor || '')
@@ -263,31 +275,29 @@ export default function PanelAdministracion() {
     setGuardandoAlumno(true)
 
     try {
+      const datosAlumno = {
+        nombre_completo: formNombre,
+        matricula: formMatricula,
+        semestre: formSemestre,
+        grupo: formGrupo,
+        turno: formTurno,
+        codigo_qr: formQr,
+        correo_tutor: formCorreoTutor,
+        telefono_tutor: formTelefonoTutor,
+        saldo_actual: formSaldo
+      }
+
       if (alumnoEditando) {
         const { error } = await supabase
           .from('alumnos')
-          .update({
-            nombre_completo: formNombre,
-            matricula: formMatricula,
-            codigo_qr: formQr,
-            correo_tutor: formCorreoTutor,
-            telefono_tutor: formTelefonoTutor,
-            saldo_actual: formSaldo
-          })
+          .update(datosAlumno)
           .eq('id', alumnoEditando.id)
 
         if (error) throw error
       } else {
         const { error } = await supabase
           .from('alumnos')
-          .insert([{
-            nombre_completo: formNombre,
-            matricula: formMatricula,
-            codigo_qr: formQr,
-            correo_tutor: formCorreoTutor,
-            telefono_tutor: formTelefonoTutor,
-            saldo_actual: formSaldo
-          }])
+          .insert([datosAlumno])
 
         if (error) throw error
       }
@@ -303,7 +313,7 @@ export default function PanelAdministracion() {
 
   // ELIMINAR ALUMNO INDIVIDUAL
   const eliminarAlumnoIndividual = async (id: any, nombre: string) => {
-    if (confirm(`¿Estás seguro de eliminar a ${nombre}? Esta acción no se puede deshacer.`)) {
+    if (confirm(`¿Estás seguro de eliminar a ${nombre}?`)) {
       try {
         const { error } = await supabase.from('alumnos').delete().eq('id', id)
         if (error) throw error
@@ -314,18 +324,68 @@ export default function PanelAdministracion() {
     }
   }
 
-  // ELIMINAR TODOS LOS ALUMNOS (MASIVO)
-  const eliminarTodosLosAlumnos = async () => {
-    const confirmacion = prompt('⚠️¡ADVERTENCIA! Vas a eliminar TODOS los alumnos registrados.\nEscribe "ELIMINAR" para confirmar:')
-    if (confirmacion === 'ELIMINAR') {
+  // SELECCIÓN MÚLTIPLE EN TABLA
+  const toggleSeleccionAlumno = (id: string) => {
+    setIdsSeleccionados(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    )
+  }
+
+  const seleccionarTodosActuales = () => {
+    if (idsSeleccionados.length === alumnosFiltrados.length) {
+      setIdsSeleccionados([])
+    } else {
+      setIdsSeleccionados(alumnosFiltrados.map(a => a.id))
+    }
+  }
+
+  const eliminarSeleccionadosDirecto = async () => {
+    if (idsSeleccionados.length === 0) return
+    if (confirm(`¿Eliminar los ${idsSeleccionados.length} alumnos seleccionados?`)) {
       try {
-        const { error } = await supabase.from('alumnos').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        const { error } = await supabase.from('alumnos').delete().in('id', idsSeleccionados)
         if (error) throw error
-        alert('Se han eliminado todos los alumnos de la base de datos.')
+        alert('Alumnos eliminados correctamente.')
+        setIdsSeleccionados([])
         cargarAlumnos()
       } catch (err: any) {
-        alert('Error al eliminar masivamente: ' + err.message)
+        alert('Error al eliminar selección: ' + err.message)
       }
+    }
+  }
+
+  // ELIMINACIÓN MASIVA POR LISTA / MATRÍCULAS (CSV / Texto)
+  const procesarEliminacionMasiva = async () => {
+    if (!textoEliminarMasivo.trim()) return
+    try {
+      const lineas = textoEliminarMasivo.split('\n')
+      const matriculasAEliminar: string[] = []
+
+      lineas.forEach(l => {
+        const val = l.trim()
+        if (val) {
+          // Si el archivo subido tiene comas, tomamos la columna 1 (Matrícula)
+          const partes = val.split(',')
+          const mat = partes.length > 1 ? partes[1].trim() : partes[0].trim()
+          if (mat) matriculasAEliminar.push(mat)
+        }
+      })
+
+      if (matriculasAEliminar.length === 0) {
+        alert('No se encontraron matrículas válidas para eliminar.')
+        return
+      }
+
+      if (confirm(`Se eliminarán los alumnos que coincidan con ${matriculasAEliminar.length} matrículas de la lista. ¿Continuar?`)) {
+        const { error } = await supabase.from('alumnos').delete().in('matricula', matriculasAEliminar)
+        if (error) throw error
+        alert('Eliminación masiva completada con éxito.')
+        setTextoEliminarMasivo('')
+        setMostrarModalEliminarMasivo(false)
+        cargarAlumnos()
+      }
+    } catch (err: any) {
+      alert('Error en eliminación masiva: ' + err.message)
     }
   }
 
@@ -346,10 +406,13 @@ export default function PanelAdministracion() {
             nuevosAlumnos.push({
               nombre_completo: partes[0]?.trim(),
               matricula: partes[1]?.trim() || '',
-              codigo_qr: partes[2]?.trim() || '',
-              correo_tutor: partes[3]?.trim() || '',
-              telefono_tutor: partes[4]?.trim() || '',
-              saldo_actual: parseFloat(partes[5]?.trim()) || 0
+              semestre: partes[2]?.trim() || '1º',
+              grupo: partes[3]?.trim() || '1',
+              turno: partes[4]?.trim() || 'Matutino',
+              codigo_qr: partes[5]?.trim() || '',
+              correo_tutor: partes[6]?.trim() || '',
+              telefono_tutor: partes[7]?.trim() || '',
+              saldo_actual: parseFloat(partes[8]?.trim()) || 0
             })
           }
         }
@@ -375,7 +438,7 @@ export default function PanelAdministracion() {
   }
 
   const descargarPlantilla = () => {
-    const contenido = "Nombre Completo,Matricula,Codigo QR,Correo Tutor,Telefono Tutor,Saldo Inicial\nJuan Perez Lopez,2026-001,QR-1001,tutor.juan@email.com,5512345678,0\nMaria Garcia Gomez,2026-002,QR-1002,tutor.maria@email.com,5587654321,50\nCarlos Sanchez Diaz,2026-003,QR-1003,tutor.carlos@email.com,5544332211,0"
+    const contenido = "Nombre Completo,Matricula,Semestre,Grupo,Turno,Codigo QR,Correo Tutor,Telefono Tutor,Saldo Inicial\nJuan Perez Lopez,2026-001,6º,1,Matutino,QR-1001,tutor.juan@email.com,5512345678,0\nMaria Garcia Gomez,2026-002,6º,2,Vespertino,QR-1002,tutor.maria@email.com,5587654321,50"
     const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -386,13 +449,35 @@ export default function PanelAdministracion() {
     document.body.removeChild(link)
   }
 
-  const cargarArchivoMasivo = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const descargarBaseDatosAlumnos = () => {
+    if (alumnos.length === 0) {
+      alert('No hay alumnos para exportar.')
+      return
+    }
+    let csv = "Nombre Completo,Matricula,Semestre,Grupo,Turno,Codigo QR,Correo Tutor,Telefono Tutor,Saldo Actual\n"
+    alumnos.forEach(a => {
+      csv += `"${a.nombre_completo || ''}","${a.matricula || ''}","${a.semestre || ''}","${a.grupo || ''}","${a.turno || ''}","${a.codigo_qr || ''}","${a.correo_tutor || ''}","${a.telefono_tutor || ''}",${a.saldo_actual || 0}\n`
+    })
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'base_datos_alumnos_actual.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const cargarArchivoMasivo = (e: React.ChangeEvent<HTMLInputElement>, tipo: 'CARGA' | 'ELIMINAR') => {
     const file = e.target.files?.[0]
     if (file) {
       const reader = new FileReader()
       reader.onload = (event) => {
         const contenido = event.target?.result as string
-        if (contenido) setTextoMasivo(contenido)
+        if (contenido) {
+          if (tipo === 'CARGA') setTextoMasivo(contenido)
+          else setTextoEliminarMasivo(contenido)
+        }
       }
       reader.readAsText(file)
     }
@@ -620,19 +705,26 @@ export default function PanelAdministracion() {
           <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
             <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/50">
               <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">🎓 Control de Alumnos y Tutores ({alumnos.length})</h2>
-                <p className="text-slate-400 text-xs mt-1">Gestión individual, masiva, saldos, datos de tutor y eliminación</p>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">🎓 Control de Alumnos ({alumnos.length})</h2>
+                <p className="text-slate-400 text-xs mt-1">Semestre, Grupo, Turno, Tutores y Eliminación Masiva selectiva</p>
               </div>
 
               <div className="flex flex-wrap w-full md:w-auto gap-2">
                 <input 
                   type="text" 
-                  placeholder="Buscar alumno, tutor, QR..." 
+                  placeholder="Buscar alumno..." 
                   value={busquedaAlumno}
                   onChange={(e) => setBusquedaAlumno(e.target.value)}
-                  className="bg-[#020617] border border-slate-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-indigo-500 flex-1 md:w-48"
+                  className="bg-[#020617] border border-slate-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-indigo-500 flex-1 md:w-40"
                 />
                 
+                <button 
+                  onClick={descargarBaseDatosAlumnos}
+                  className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-slate-700 font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1"
+                >
+                  📥 Descargar BD
+                </button>
+
                 <button 
                   onClick={() => setMostrarModalMasivo(true)}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1"
@@ -641,20 +733,29 @@ export default function PanelAdministracion() {
                 </button>
 
                 <button 
+                  onClick={() => setMostrarModalEliminarMasivo(true)}
+                  className="bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-700 font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1"
+                >
+                  🗑️ Eliminar Generación
+                </button>
+
+                <button 
                   onClick={abrirModalNuevoAlumno}
                   className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1"
                 >
                   ➕ Nuevo
                 </button>
-
-                <button 
-                  onClick={eliminarTodosLosAlumnos}
-                  className="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700 px-3 py-2 rounded-xl text-xs font-bold transition-colors shrink-0 flex items-center gap-1"
-                >
-                  🗑️ Vaciar DB
-                </button>
               </div>
             </div>
+
+            {idsSeleccionados.length > 0 && (
+              <div className="bg-red-950/40 border-b border-red-900/50 px-6 py-3 flex justify-between items-center">
+                <span className="text-red-300 text-xs font-bold">{idsSeleccionados.length} alumnos seleccionados para borrado</span>
+                <button onClick={eliminarSeleccionadosDirecto} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                  Eliminar Selección Marcada
+                </button>
+              </div>
+            )}
 
             <div className="overflow-x-auto p-2">
               {cargandoAlumnos ? (
@@ -665,8 +766,17 @@ export default function PanelAdministracion() {
                 <table className="w-full text-left text-sm">
                   <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
                     <tr>
+                      <th className="px-3 py-4 text-center">
+                        <input 
+                          type="checkbox" 
+                          checked={idsSeleccionados.length === alumnosFiltrados.length && alumnosFiltrados.length > 0} 
+                          onChange={seleccionarTodosActuales}
+                          className="cursor-pointer"
+                        />
+                      </th>
                       <th className="px-4 py-4 font-bold">Nombre Completo</th>
                       <th className="px-4 py-4 font-bold">Matrícula / QR</th>
+                      <th className="px-4 py-4 font-bold">Sem / Grupo / Turno</th>
                       <th className="px-4 py-4 font-bold">Datos del Tutor</th>
                       <th className="px-4 py-4 font-bold text-right">Saldo</th>
                       <th className="px-4 py-4 font-bold text-center">Acciones</th>
@@ -675,6 +785,14 @@ export default function PanelAdministracion() {
                   <tbody>
                     {alumnosFiltrados.map((al) => (
                       <tr key={al.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
+                        <td className="px-3 py-4 text-center">
+                          <input 
+                            type="checkbox" 
+                            checked={idsSeleccionados.includes(al.id)}
+                            onChange={() => toggleSeleccionAlumno(al.id)}
+                            className="cursor-pointer"
+                          />
+                        </td>
                         <td className="px-4 py-4 text-white font-bold">{al.nombre_completo}</td>
                         <td className="px-4 py-4">
                           <p className="text-slate-300 font-mono text-xs">{al.matricula || 'Sin Matrícula'}</p>
@@ -685,6 +803,10 @@ export default function PanelAdministracion() {
                           ) : (
                             <span className="text-slate-600 italic text-[10px] block mt-1">Sin QR</span>
                           )}
+                        </td>
+                        <td className="px-4 py-4 text-xs">
+                          <p className="text-white font-bold">{al.semestre} - Grupo {al.grupo}</p>
+                          <p className="text-slate-400">{al.turno}</p>
                         </td>
                         <td className="px-4 py-4 text-xs">
                           <p className="text-slate-300">✉️ {al.correo_tutor || 'No registrado'}</p>
@@ -729,13 +851,13 @@ export default function PanelAdministracion() {
           <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                📁 Carga Masiva de Alumnos (600)
+                📁 Carga Masiva de Alumnos
               </h2>
               <button onClick={() => setMostrarModalMasivo(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
             </div>
 
             <p className="text-slate-400 text-xs mb-4">
-              Sube tus 600 alumnos adjuntando un archivo `.csv` o pegando la lista directamente con los datos de sus tutores.
+              Sube tus alumnos adjuntando un archivo `.csv` o pegando la lista con todos los campos requeridos.
             </p>
 
             <div className="flex gap-3 mb-4">
@@ -748,20 +870,20 @@ export default function PanelAdministracion() {
 
               <label className="cursor-pointer bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-300 border border-emerald-800 px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1">
                 📂 Seleccionar Archivo
-                <input type="file" accept=".csv, .txt" onChange={cargarArchivoMasivo} className="hidden" />
+                <input type="file" accept=".csv, .txt" onChange={(e) => cargarArchivoMasivo(e, 'CARGA')} className="hidden" />
               </label>
             </div>
 
             <div className="mb-4">
               <label className="block text-xs font-bold text-slate-400 uppercase mb-2">
                 Formato por línea: <br />
-                <span className="text-indigo-400 font-mono">Nombre, Matrícula, Código QR, Correo Tutor, Teléfono Tutor, Saldo</span>
+                <span className="text-indigo-400 font-mono">Nombre, Matrícula, Semestre, Grupo, Turno, Código QR, Correo Tutor, Teléfono Tutor, Saldo</span>
               </label>
               <textarea 
                 rows={8}
                 value={textoMasivo}
                 onChange={(e) => setTextoMasivo(e.target.value)}
-                placeholder={"Ejemplo:\nJuan Perez Lopez, 2026-001, QR-1001, tutor.juan@email.com, 5512345678, 0\nMaria Garcia Gomez, 2026-002, QR-1002, tutor.maria@email.com, 5587654321, 50"}
+                placeholder={"Ejemplo:\nJuan Perez Lopez, 2026-001, 6º, 1, Matutino, QR-1001, tutor@email.com, 5512345678, 0"}
                 className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-xs font-mono outline-none focus:border-indigo-500"
               />
             </div>
@@ -780,7 +902,57 @@ export default function PanelAdministracion() {
                 disabled={cargandoMasivo || !textoMasivo.trim()}
                 className="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors text-sm disabled:opacity-50"
               >
-                {cargandoMasivo ? 'Procesando...' : '🚀 Procesar e Insertar Masivo'}
+                {cargandoMasivo ? 'Procesando...' : '🚀 Procesar e Insertar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: ELIMINACIÓN MASIVA DE ALUMNOS ================= */}
+      {mostrarModalEliminarMasivo && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-red-900/50 p-6 md:p-8 rounded-2xl w-full max-w-xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-red-400 flex items-center gap-2">
+                🗑️ Eliminación Masiva por Lista / Generación
+              </h2>
+              <button onClick={() => setMostrarModalEliminarMasivo(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
+            </div>
+
+            <p className="text-slate-400 text-xs mb-4">
+              Puedes descargar tu BD actual de alumnos, filtrar o conservar solo las matrículas de los alumnos que salieron (ej. generación 2026), y subir o pegar su lista aquí para eliminarlos de golpe.
+            </p>
+
+            <div className="mb-4">
+              <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 px-3 py-2 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1 mb-3">
+                📂 Subir CSV con Matrículas a Eliminar
+                <input type="file" accept=".csv, .txt" onChange={(e) => cargarArchivoMasivo(e, 'ELIMINAR')} className="hidden" />
+              </label>
+              <textarea 
+                rows={6}
+                value={textoEliminarMasivo}
+                onChange={(e) => setTextoEliminarMasivo(e.target.value)}
+                placeholder={"O pega aquí las matrículas (una por línea o con formato CSV):\n2026-001\n2026-002\n2026-003"}
+                className="w-full bg-[#020617] border border-red-900/40 rounded-xl p-3 text-white text-xs font-mono outline-none focus:border-red-500"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                type="button" 
+                onClick={() => setMostrarModalEliminarMasivo(false)}
+                className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors text-sm"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button" 
+                onClick={procesarEliminacionMasiva}
+                disabled={!textoEliminarMasivo.trim()}
+                className="w-1/2 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-colors text-sm disabled:opacity-50"
+              >
+                ⚠️ Ejecutar Borrado Masivo
               </button>
             </div>
           </div>
@@ -790,7 +962,7 @@ export default function PanelAdministracion() {
       {/* ================= MODAL: NUEVO / EDITAR ALUMNO ================= */}
       {mostrarModalAlumno && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
-          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-white">
                 {alumnoEditando ? '✏️ Editar Alumno' : '➕ Registrar Alumno'}
@@ -811,15 +983,64 @@ export default function PanelAdministracion() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Matrícula</label>
-                <input 
-                  type="text" 
-                  value={formMatricula} 
-                  onChange={(e) => setFormMatricula(e.target.value)}
-                  placeholder="Ej. 2026-001"
-                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-mono" 
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Matrícula / ID</label>
+                  <input 
+                    type="text" 
+                    value={formMatricula} 
+                    onChange={(e) => setFormMatricula(e.target.value)}
+                    placeholder="Ej. 2026-001"
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-mono" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Semestre</label>
+                  <select 
+                    value={formSemestre} 
+                    onChange={(e) => setFormSemestre(e.target.value)}
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500"
+                  >
+                    <option value="1º">1º Semestre</option>
+                    <option value="2º">2º Semestre</option>
+                    <option value="3º">3º Semestre</option>
+                    <option value="4º">4º Semestre</option>
+                    <option value="5º">5º Semestre</option>
+                    <option value="6º">6º Semestre</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Grupo (1 a 7)</label>
+                  <select 
+                    value={formGrupo} 
+                    onChange={(e) => setFormGrupo(e.target.value)}
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500"
+                  >
+                    <option value="1">Grupo 1</option>
+                    <option value="2">Grupo 2</option>
+                    <option value="3">Grupo 3</option>
+                    <option value="4">Grupo 4</option>
+                    <option value="5">Grupo 5</option>
+                    <option value="6">Grupo 6</option>
+                    <option value="7">Grupo 7</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Turno</label>
+                  <select 
+                    value={formTurno} 
+                    onChange={(e) => setFormTurno(e.target.value)}
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500"
+                  >
+                    <option value="Matutino">Matutino</option>
+                    <option value="Vespertino">Vespertino</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -851,26 +1072,28 @@ export default function PanelAdministracion() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Correo Electrónico del Tutor</label>
-                <input 
-                  type="email" 
-                  value={formCorreoTutor} 
-                  onChange={(e) => setFormCorreoTutor(e.target.value)}
-                  placeholder="tutor@ejemplo.com"
-                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" 
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Correo Tutor</label>
+                  <input 
+                    type="email" 
+                    value={formCorreoTutor} 
+                    onChange={(e) => setFormCorreoTutor(e.target.value)}
+                    placeholder="tutor@ejemplo.com"
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" 
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono Móvil del Tutor</label>
-                <input 
-                  type="tel" 
-                  value={formTelefonoTutor} 
-                  onChange={(e) => setFormTelefonoTutor(e.target.value)}
-                  placeholder="Ej. 5512345678"
-                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-mono" 
-                />
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono Tutor</label>
+                  <input 
+                    type="tel" 
+                    value={formTelefonoTutor} 
+                    onChange={(e) => setFormTelefonoTutor(e.target.value)}
+                    placeholder="5512345678"
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-mono" 
+                  />
+                </div>
               </div>
 
               <div>
