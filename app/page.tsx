@@ -8,6 +8,7 @@ export default function ModuloCajaViajes() {
   const [cargando, setCargando] = useState(true)
   const [alumnos, setAlumnos] = useState<any[]>([])
   const [busqueda, setBusqueda] = useState('')
+  const [escaneandoBusqueda, setEscaneandoBusqueda] = useState(false)
   const [precioBoleto, setPrecioBoleto] = useState(20)
 
   // ================= ESTADOS DE CAJA =================
