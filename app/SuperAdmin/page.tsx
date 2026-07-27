@@ -895,4 +895,4 @@ export default function PanelAdministracion() {
       )}
     </div>
   )
-}  
+}
