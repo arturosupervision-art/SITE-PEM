@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 export default function PantallaChofer() {
   const [busquedaManual, setBusquedaManual] = useState('');
@@ -16,6 +17,33 @@ export default function PantallaChofer() {
     lat: number;
     lng: number;
   } | null>(null);
+
+  // EFECTO PARA ACTIVAR LA CÁMARA
+  useEffect(() => {
+    if (modoRuta && estadoPantalla === 'ESPERANDO') {
+      // Configuramos el escáner para que lea códigos QR y de barras
+      const scanner = new Html5QrcodeScanner(
+        'reader',
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        false
+      );
+
+      scanner.render(
+        (decodedText) => {
+          scanner.clear(); // Apagamos la cámara al leer con éxito
+          procesarCodigo(decodedText);
+        },
+        (errorMessage) => {
+          // Ignoramos errores continuos de lectura para no saturar la consola
+        }
+      );
+
+      return () => {
+        // Limpiamos el escáner si el componente se desmonta o cambia de estado
+        scanner.clear().catch((error) => console.error('Error al limpiar cámara', error));
+      };
+    }
+  }, [modoRuta, estadoPantalla]);
 
   useEffect(() => {
     if (modoRuta && inputRef.current && estadoPantalla === 'ESPERANDO') {
@@ -130,10 +158,21 @@ export default function PantallaChofer() {
         : '';
 
       // ==============================================================
-      // SOLUCIÓN ZONA HORARIA: Calculamos la hora exacta local
+      // SOLUCIÓN ZONA HORARIA DEFINITIVA
       // ==============================================================
-      const offsetMs = new Date().getTimezoneOffset() * 60000;
-      const horaLocalMexico = new Date(Date.now() - offsetMs).toISOString().slice(0, -1);
+      // 1. Obtenemos la hora local forzada a Ciudad de México
+      const mxDate = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Mexico_City"}));
+      
+      // 2. Extraemos cada componente para armar el formato ISO nosotros mismos
+      const year = mxDate.getFullYear();
+      const month = String(mxDate.getMonth() + 1).padStart(2, '0');
+      const day = String(mxDate.getDate()).padStart(2, '0');
+      const hours = String(mxDate.getHours()).padStart(2, '0');
+      const minutes = String(mxDate.getMinutes()).padStart(2, '0');
+      const seconds = String(mxDate.getSeconds()).padStart(2, '0');
+      
+      // 3. Le añadimos explícitamente el indicador -06:00 (Hora del Centro) 
+      const fechaHoraLocal = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}-06:00`;
 
       const { error: errorRegistro } = await supabase.from('registros_transporte').insert([
         {
@@ -144,7 +183,7 @@ export default function PantallaChofer() {
           tipo_movimiento: modoRuta === 'ASCENSO' ? 'Ascenso' : 'Descenso',
           ubicacion_gps: enlaceMaps,
           unidad_transporte: '1',
-          created_at: horaLocalMexico // <-- AQUÍ FORZAMOS LA HORA LOCAL
+          fecha_hora: fechaHoraLocal // <-- AHORA SÍ IMPACTA DIRECTO EN TU COLUMNA
         },
       ]);
 
@@ -153,7 +192,7 @@ export default function PantallaChofer() {
       }
 
       if (alumno.correo_tutor) {
-        const horaActual = new Date().toLocaleTimeString('es-MX', { 
+        const horaActual = mxDate.toLocaleTimeString('es-MX', { 
           hour: '2-digit', minute: '2-digit', hour12: true 
         });
 
@@ -257,22 +296,23 @@ export default function PantallaChofer() {
           <div className="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-6 relative">
             <button
               onClick={() => setModoRuta(null)}
-              className="absolute top-4 right-4 text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded border border-slate-500 transition-colors"
+              className="absolute top-4 right-4 text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded border border-slate-500 transition-colors z-10"
             >
               Cambiar Ruta
             </button>
 
-            <div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center mx-auto border-4 border-amber-500/30 animate-pulse mt-4">
-              <span className="text-4xl">📱</span>
-            </div>
             <div>
               <h2 className="text-2xl font-bold text-white mb-2">
                 Listo para escanear
               </h2>
-              <p className="text-slate-400 text-sm">
-                Escanea con la cámara de tu celular o ingresa la matrícula del
-                alumno.
+              <p className="text-slate-400 text-sm mb-4">
+                Enfoca el código QR/Barras del alumno o ingresa la matrícula manualmente.
               </p>
+            </div>
+
+            {/* CONTENEDOR DE LA CÁMARA */}
+            <div className="w-full max-w-sm mx-auto overflow-hidden rounded-2xl border-4 border-amber-500/30 bg-slate-950 mb-4 shadow-inner">
+              <div id="reader" className="w-full"></div>
             </div>
 
             <form onSubmit={handleSubmit} className="flex gap-2">
