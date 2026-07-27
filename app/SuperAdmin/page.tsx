@@ -43,14 +43,19 @@ export default function PanelAdministracion() {
   const [busquedaAlumno, setBusquedaAlumno] = useState('')
   const [cargandoAlumnos, setCargandoAlumnos] = useState(false)
   const [mostrarModalAlumno, setMostrarModalAlumno] = useState(false)
+  const [mostrarModalMasivo, setMostrarModalMasivo] = useState(false)
   const [alumnoEditando, setAlumnoEditando] = useState<any>(null)
   
-  // Formulario Alumno
+  // Formulario Individual Alumno
   const [formNombre, setFormNombre] = useState('')
   const [formMatricula, setFormMatricula] = useState('')
   const [formQr, setFormQr] = useState('')
   const [formSaldo, setFormSaldo] = useState(0)
   const [guardandoAlumno, setGuardandoAlumno] = useState(false)
+
+  // Formulario Carga Masiva
+  const [textoMasivo, setTextoMasivo] = useState('')
+  const [cargandoMasivo, setCargandoMasivo] = useState(false)
 
   // ================= FUNCIONES DE LOGIN Y CIERRE =================
   const iniciarSesion = (e: React.FormEvent) => {
@@ -286,6 +291,73 @@ export default function PanelAdministracion() {
     }
   }
 
+  // ================= CARGA MASIVA DE ALUMNOS =================
+  const procesarCargaMasiva = async () => {
+    if (!textoMasivo.trim()) return
+    setCargandoMasivo(true)
+
+    try {
+      const lineas = textoMasivo.split('\n')
+      const nuevosAlumnos: any[] = []
+
+      lineas.forEach(linea => {
+        const l = linea.trim()
+        if (l) {
+          const partes = l.split(',')
+          if (partes.length >= 1) {
+            nuevosAlumnos.push({
+              nombre_completo: partes[0]?.trim(),
+              matricula: partes[1]?.trim() || '',
+              codigo_qr: partes[2]?.trim() || '',
+              saldo_actual: parseFloat(partes[3]?.trim()) || 0
+            })
+          }
+        }
+      })
+
+      if (nuevosAlumnos.length === 0) {
+        alert('No se encontraron registros válidos para procesar.')
+        return
+      }
+
+      const { error } = await supabase.from('alumnos').insert(nuevosAlumnos)
+      if (error) throw error
+
+      alert(`¡Éxito! Se subieron ${nuevosAlumnos.length} alumnos correctamente.`)
+      setTextoMasivo('')
+      setMostrarModalMasivo(false)
+      cargarAlumnos()
+    } catch (err: any) {
+      alert('Error al realizar la carga masiva: ' + err.message)
+    } finally {
+      setCargandoMasivo(false)
+    }
+  }
+
+  const descargarPlantilla = () => {
+    const contenido = "Juan Perez Lopez, 2026-001, QR-1001, 0\nMaria Garcia Gomez, 2026-002, QR-1002, 50\nCarlos Sanchez Diaz, 2026-003, QR-1003, 0"
+    const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'plantilla_alumnos_site.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const cargarArchivoMasivo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const contenido = event.target?.result as string
+        if (contenido) setTextoMasivo(contenido)
+      }
+      reader.readAsText(file)
+    }
+  }
+
   const alumnosFiltrados = alumnos.filter(a => 
     a.nombre_completo?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
     a.matricula?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
@@ -477,27 +549,29 @@ export default function PanelAdministracion() {
                 </div>
               </a>
 
+              {/* RUTA RUTA CAMBIADA A /Chofer */}
               <a 
-                href="/Caja" 
+                href="/Chofer" 
                 target="_blank" 
                 className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group"
               >
-                <span className="text-2xl">💳</span>
+                <span className="text-2xl">🚌</span>
                 <div>
-                  <p className="text-white font-bold text-sm group-hover:text-indigo-400">Modulo de Caja</p>
-                  <p className="text-slate-500 text-xs">Recargas y Retiros de caja</p>
+                  <p className="text-white font-bold text-sm group-hover:text-indigo-400">Módulo de Chofer</p>
+                  <p className="text-slate-500 text-xs">Validación en unidad</p>
                 </div>
               </a>
 
+              {/* RUTA CAMBIADA A /Coordinador */}
               <a 
-                href="/Registro" 
+                href="/Coordinador" 
                 target="_blank" 
                 className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group"
               >
                 <span className="text-2xl">📋</span>
                 <div>
-                  <p className="text-white font-bold text-sm group-hover:text-indigo-400">Módulo de Registro</p>
-                  <p className="text-slate-500 text-xs">Registro rápido público</p>
+                  <p className="text-white font-bold text-sm group-hover:text-indigo-400">Módulo de Coordinador</p>
+                  <p className="text-slate-500 text-xs">Registros de ascenso y descenso</p>
                 </div>
               </a>
             </div>
@@ -506,23 +580,31 @@ export default function PanelAdministracion() {
           <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
             <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/50">
               <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">🎓 Control de Alumnos y Tarjetas QR</h2>
-                <p className="text-slate-400 text-xs mt-1">Alta, edición de saldos y vinculación de código QR</p>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">🎓 Control de Alumnos y Tarjetas QR ({alumnos.length})</h2>
+                <p className="text-slate-400 text-xs mt-1">Alta individual, masiva, saldos y código QR</p>
               </div>
 
-              <div className="flex w-full md:w-auto gap-3">
+              <div className="flex flex-wrap w-full md:w-auto gap-2">
                 <input 
                   type="text" 
                   placeholder="Buscar alumno, matrícula o QR..." 
                   value={busquedaAlumno}
                   onChange={(e) => setBusquedaAlumno(e.target.value)}
-                  className="bg-[#020617] border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-indigo-500 w-full md:w-64"
+                  className="bg-[#020617] border border-slate-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-indigo-500 flex-1 md:w-56"
                 />
+                
+                <button 
+                  onClick={() => setMostrarModalMasivo(true)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs md:text-sm transition-colors shrink-0 flex items-center gap-1"
+                >
+                  📁 Carga Masiva (600)
+                </button>
+
                 <button 
                   onClick={abrirModalNuevoAlumno}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition-colors shrink-0 flex items-center gap-2"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs md:text-sm transition-colors shrink-0 flex items-center gap-1"
                 >
-                  ➕ Nuevo Alumno
+                  ➕ Nuevo
                 </button>
               </div>
             </div>
@@ -582,6 +664,70 @@ export default function PanelAdministracion() {
         System by <span className="font-bold text-slate-500">Arturo Díaz</span>
       </div>
 
+      {/* ================= MODAL: CARGA MASIVA DE ALUMNOS ================= */}
+      {mostrarModalMasivo && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                📁 Carga Masiva de Alumnos
+              </h2>
+              <button onClick={() => setMostrarModalMasivo(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
+            </div>
+
+            <p className="text-slate-400 text-xs mb-4">
+              Puedes subir tus 600 alumnos adjuntando un archivo `.csv` o pegando el texto directamente.
+            </p>
+
+            <div className="flex gap-3 mb-4">
+              <button 
+                onClick={descargarPlantilla}
+                className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-800/50 px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+              >
+                📥 Descargar Plantilla de Ejemplo (.CSV)
+              </button>
+
+              <label className="cursor-pointer bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-300 border border-emerald-800 px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1">
+                📂 Seleccionar Archivo .CSV / .TXT
+                <input type="file" accept=".csv, .txt" onChange={cargarArchivoMasivo} className="hidden" />
+              </label>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs font-bold text-slate-400 uppercase mb-2">
+                Formato esperado por línea: <br />
+                <span className="text-indigo-400 font-mono">Nombre Completo, Matrícula, Código QR, Saldo Inicial</span>
+              </label>
+              <textarea 
+                rows={8}
+                value={textoMasivo}
+                onChange={(e) => setTextoMasivo(e.target.value)}
+                placeholder={"Ejemplo:\nJuan Perez Lopez, 2026-001, QR-1001, 0\nMaria Garcia Gomez, 2026-002, QR-1002, 50\nCarlos Sanchez Diaz, 2026-003, QR-1003, 0"}
+                className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-xs font-mono outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                type="button" 
+                onClick={() => setMostrarModalMasivo(false)}
+                className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors text-sm"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button" 
+                onClick={procesarCargaMasiva}
+                disabled={cargandoMasivo || !textoMasivo.trim()}
+                className="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors text-sm disabled:opacity-50"
+              >
+                {cargandoMasivo ? 'Procesando...' : '🚀 Procesar e Insertar Masivo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ================= MODAL: NUEVO / EDITAR ALUMNO ================= */}
       {mostrarModalAlumno && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
@@ -617,7 +763,6 @@ export default function PanelAdministracion() {
                 />
               </div>
 
-              {/* VINCULACIÓN QR: CÁMARA NATIVA + ENTRADA MANUAL */}
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className="block text-xs font-bold text-indigo-400 uppercase">Código QR Vinculado</label>
