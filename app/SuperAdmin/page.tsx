@@ -38,6 +38,20 @@ export default function PanelAdministracion() {
   // ================= ESTADO DEL TICKET / REPORTE =================
   const [documentoActual, setDocumentoActual] = useState<any>(null)
 
+  // ================= ESTADOS DE GESTIÓN DE ALUMNOS (SUPER ADMIN) =================
+  const [alumnos, setAlumnos] = useState<any[]>([])
+  const [busquedaAlumno, setBusquedaAlumno] = useState('')
+  const [cargandoAlumnos, setCargandoAlumnos] = useState(false)
+  const [mostrarModalAlumno, setMostrarModalAlumno] = useState(false)
+  const [alumnoEditando, setAlumnoEditando] = useState<any>(null)
+  
+  // Formulario Alumno
+  const [formNombre, setFormNombre] = useState('')
+  const [formMatricula, setFormMatricula] = useState('')
+  const [formQr, setFormQr] = useState('')
+  const [formSaldo, setFormSaldo] = useState(0)
+  const [guardandoAlumno, setGuardandoAlumno] = useState(false)
+
   // ================= FUNCIONES DE LOGIN Y CIERRE =================
   const iniciarSesion = (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,6 +59,7 @@ export default function PanelAdministracion() {
       setRol('SUPERADMIN')
       setErrorPin(false)
       cargarDatosDashboard()
+      cargarAlumnos()
     } else if (pin === '8888') {
       setRol('ADMIN')
       setVista('FINANZAS')
@@ -196,6 +211,90 @@ export default function PanelAdministracion() {
     setMostrarCorte(false)
   }
 
+  // ================= FUNCIONES DE CONTROL DE ALUMNOS (SUPER ADMIN) =================
+  const cargarAlumnos = async () => {
+    setCargandoAlumnos(true)
+    try {
+      const { data, error } = await supabase
+        .from('alumnos')
+        .select('*')
+        .order('nombre_completo', { ascending: true })
+      
+      if (!error && data) {
+        setAlumnos(data)
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setCargandoAlumnos(false)
+    }
+  }
+
+  const abrirModalNuevoAlumno = () => {
+    setAlumnoEditando(null)
+    setFormNombre('')
+    setFormMatricula('')
+    setFormQr('')
+    setFormSaldo(0)
+    setMostrarModalAlumno(true)
+  }
+
+  const abrirModalEditarAlumno = (al: any) => {
+    setAlumnoEditando(al)
+    setFormNombre(al.nombre_completo || '')
+    setFormMatricula(al.matricula || '')
+    setFormQr(al.codigo_qr || '')
+    setFormSaldo(al.saldo_actual || 0)
+    setMostrarModalAlumno(true)
+  }
+
+  const guardarAlumno = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setGuardandoAlumno(true)
+
+    try {
+      if (alumnoEditando) {
+        // Actualizar
+        const { error } = await supabase
+          .from('alumnos')
+          .update({
+            nombre_completo: formNombre,
+            matricula: formMatricula,
+            codigo_qr: formQr,
+            saldo_actual: formSaldo
+          })
+          .eq('id', alumnoEditando.id)
+
+        if (error) throw error
+      } else {
+        // Crear nuevo
+        const { error } = await supabase
+          .from('alumnos')
+          .insert([{
+            nombre_completo: formNombre,
+            matricula: formMatricula,
+            codigo_qr: formQr,
+            saldo_actual: formSaldo
+          }])
+
+        if (error) throw error
+      }
+
+      setMostrarModalAlumno(false)
+      cargarAlumnos()
+    } catch (err: any) {
+      alert('Error al guardar el alumno: ' + err.message)
+    } font-bold {
+      setGuardandoAlumno(false)
+    }
+  }
+
+  const alumnosFiltrados = alumnos.filter(a => 
+    a.nombre_completo?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
+    a.matricula?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
+    a.codigo_qr?.toLowerCase().includes(busquedaAlumno.toLowerCase())
+  )
+
   // ================= RENDERIZADO DEL LOGIN =================
   if (!rol) {
     return (
@@ -239,7 +338,7 @@ export default function PanelAdministracion() {
     )
   }
 
-  // PANTALLA DE CARGA (Para cuando se obtienen datos de Supabase)
+  // PANTALLA DE CARGA
   if (cargando) return <div className="min-h-screen bg-[#020617] flex justify-center items-center text-white font-bold text-xl">Cargando Sistema...</div>
 
   // ================= RENDERIZADO DEL PANEL PRINCIPAL =================
@@ -250,7 +349,7 @@ export default function PanelAdministracion() {
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-800 pb-4 gap-4">
         <div>
           <h3 className="text-indigo-400 font-bold text-sm tracking-widest uppercase">
-            SITE-PEM • {rol === 'SUPERADMIN' ? 'SUPER ADMINISTRADOR' : 'FINANZAS'}
+            SITE-PEM • {rol === 'SUPERADMIN' ? 'SUPER ADMINISTRADOR (MODO DIOS)' : 'FINANZAS'}
           </h3>
           <h1 className="text-white font-black text-3xl">Panel Central</h1>
         </div>
@@ -258,9 +357,9 @@ export default function PanelAdministracion() {
         {/* CONTROLES DEL HEADER */}
         <div className="flex flex-wrap gap-3">
           
-          {/* Si es Super Admin, mostrar pestañas para cambiar de vista */}
+          {/* Pestanas Super Admin */}
           {rol === 'SUPERADMIN' && (
-            <div className="bg-[#0f172a] rounded-xl border border-slate-800 p-1 flex gap-1 mr-4">
+            <div className="bg-[#0f172a] rounded-xl border border-slate-800 p-1 flex gap-1 mr-2">
               <button 
                 onClick={() => setVista('FINANZAS')} 
                 className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${vista === 'FINANZAS' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
@@ -271,7 +370,7 @@ export default function PanelAdministracion() {
                 onClick={() => setVista('SISTEMA')} 
                 className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${vista === 'SISTEMA' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
               >
-                ⚙️ Sistema
+                ⚙️ Sistema & Alumnos
               </button>
             </div>
           )}
@@ -300,7 +399,6 @@ export default function PanelAdministracion() {
         <>
           {/* DASHBOARD CARDS */}
           <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            {/* Card Ingresos Acumulados Día */}
             <div className="bg-[#0f172a] rounded-2xl border border-emerald-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
               <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>
               <span className="text-3xl mb-2">💵</span>
@@ -311,7 +409,6 @@ export default function PanelAdministracion() {
               </button>
             </div>
 
-            {/* Card Boletos Vendidos */}
             <div className="bg-[#0f172a] rounded-2xl border border-pink-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
               <div className="absolute top-0 left-0 w-full h-1 bg-pink-500"></div>
               <span className="text-3xl mb-2">🎟️</span>
@@ -319,7 +416,6 @@ export default function PanelAdministracion() {
               <p className="text-white font-black text-4xl">{boletosDia}</p>
             </div>
 
-            {/* Card Acumulado Semanal */}
             <div className="bg-[#0f172a] rounded-2xl border border-indigo-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
               <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
               <span className="text-3xl mb-2">📊</span>
@@ -369,20 +465,126 @@ export default function PanelAdministracion() {
 
       {/* ================= CONTENIDO: VISTA SISTEMA (SOLO SUPERADMIN) ================= */}
       {vista === 'SISTEMA' && rol === 'SUPERADMIN' && (
-        <div className="max-w-6xl mx-auto bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden p-8 flex flex-col items-center justify-center min-h-[400px]">
-          <span className="text-6xl mb-4">🚧</span>
-          <h2 className="text-2xl font-black text-white mb-2">Gestión del Sistema SITE-PEM</h2>
-          <p className="text-slate-400 text-center max-w-lg mb-6">
-            Esta es la zona exclusiva del Super Administrador. Aquí es donde agregaremos las tablas maestras para crear/editar usuarios, suspender cuentas y modificar los saldos de los alumnos.
-          </p>
-          <div className="flex gap-4">
-            <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl text-center shadow-inner">
-              <span className="block text-2xl mb-2">👥</span>
-              <p className="text-sm font-bold text-slate-300">Control de Usuarios</p>
+        <div className="max-w-6xl mx-auto space-y-8">
+          
+          {/* PANEL DE CONSOLA DE ACCESOS RÁPIDOS */}
+          <div className="bg-[#0f172a] rounded-2xl border border-indigo-900/40 p-6 shadow-xl">
+            <h2 className="text-xl font-black text-white mb-2 flex items-center gap-2">
+              🚀 Acceso Directo a Módulos
+            </h2>
+            <p className="text-slate-400 text-sm mb-4">
+              Como Super Admin, puedes entrar a cualquier consola directamente sin requerir contraseñas adicionales.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <a 
+                href="/" 
+                target="_blank" 
+                className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group"
+              >
+                <span className="text-2xl">🎟️</span>
+                <div>
+                  <p className="text-white font-bold text-sm group-hover:text-indigo-400">Punto de Venta</p>
+                  <p className="text-slate-500 text-xs">Venta de boletos / Escáner</p>
+                </div>
+              </a>
+
+              <a 
+                href="/Caja" 
+                target="_blank" 
+                className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group"
+              >
+                <span className="text-2xl">💳</span>
+                <div>
+                  <p className="text-white font-bold text-sm group-hover:text-indigo-400">Modulo de Caja</p>
+                  <p className="text-slate-500 text-xs">Recargas y Retiros de caja</p>
+                </div>
+              </a>
+
+              <a 
+                href="/Registro" 
+                target="_blank" 
+                className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group"
+              >
+                <span className="text-2xl">📋</span>
+                <div>
+                  <p className="text-white font-bold text-sm group-hover:text-indigo-400">Módulo de Registro</p>
+                  <p className="text-slate-500 text-xs">Registro rápido público</p>
+                </div>
+              </a>
             </div>
-            <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl text-center shadow-inner">
-              <span className="block text-2xl mb-2">🎓</span>
-              <p className="text-sm font-bold text-slate-300">Padrón de Alumnos</p>
+          </div>
+
+          {/* TABLA DE ADMINISTRACIÓN DE ALUMNOS */}
+          <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+            <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/50">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">🎓 Control de Alumnos y Tarjetas QR</h2>
+                <p className="text-slate-400 text-xs mt-1">Alta, edición de saldos y vinculación de código QR</p>
+              </div>
+
+              <div className="flex w-full md:w-auto gap-3">
+                <input 
+                  type="text" 
+                  placeholder="Buscar alumno, matrícula o QR..." 
+                  value={busquedaAlumno}
+                  onChange={(e) => setBusquedaAlumno(e.target.value)}
+                  className="bg-[#020617] border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-indigo-500 w-full md:w-64"
+                />
+                <button 
+                  onClick={abrirModalNuevoAlumno}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition-colors shrink-0 flex items-center gap-2"
+                >
+                  ➕ Nuevo Alumno
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto p-2">
+              {cargandoAlumnos ? (
+                <p className="text-center text-slate-500 py-10 font-bold">Cargando catálogo de alumnos...</p>
+              ) : alumnosFiltrados.length === 0 ? (
+                <p className="text-center text-slate-500 py-10 font-bold">No se encontraron alumnos registrados.</p>
+              ) : (
+                <table className="w-full text-left text-sm">
+                  <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
+                    <tr>
+                      <th className="px-6 py-4 font-bold">Nombre Completo</th>
+                      <th className="px-6 py-4 font-bold">Matrícula</th>
+                      <th className="px-6 py-4 font-bold">Código QR Vinc.</th>
+                      <th className="px-6 py-4 font-bold text-right">Saldo Actual</th>
+                      <th className="px-6 py-4 font-bold text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {alumnosFiltrados.map((al) => (
+                      <tr key={al.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
+                        <td className="px-6 py-4 text-white font-bold">{al.nombre_completo}</td>
+                        <td className="px-6 py-4 text-slate-300 font-mono">{al.matricula || 'N/A'}</td>
+                        <td className="px-6 py-4">
+                          {al.codigo_qr ? (
+                            <span className="bg-indigo-900/40 text-indigo-300 border border-indigo-800 px-2 py-1 rounded font-mono text-xs">
+                              🏷️ {al.codigo_qr}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600 italic text-xs">Sin QR vinculado</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right font-black text-emerald-400">
+                          ${(al.saldo_actual || 0).toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button 
+                            onClick={() => abrirModalEditarAlumno(al)}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                          >
+                            ✏️ Editar / QR
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
@@ -391,6 +593,84 @@ export default function PanelAdministracion() {
       <div className="text-center mt-10 pb-4 text-slate-600 text-sm">
         System by <span className="font-bold text-slate-500">Arturo Díaz</span>
       </div>
+
+      {/* ================= MODAL: NUEVO / EDITAR ALUMNO ================= */}
+      {mostrarModalAlumno && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-white">
+                {alumnoEditando ? '✏️ Editar Alumno' : '➕ Registrar Alumno'}
+              </h2>
+              <button onClick={() => setMostrarModalAlumno(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
+            </div>
+
+            <form onSubmit={guardarAlumno} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Nombre Completo</label>
+                <input 
+                  type="text" 
+                  required 
+                  value={formNombre} 
+                  onChange={(e) => setFormNombre(e.target.value)}
+                  placeholder="Ej. Juan Pérez López"
+                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Matrícula</label>
+                <input 
+                  type="text" 
+                  value={formMatricula} 
+                  onChange={(e) => setFormMatricula(e.target.value)}
+                  placeholder="Ej. 2026-001"
+                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-mono" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-indigo-400 uppercase mb-1">Código QR Vinculado</label>
+                <input 
+                  type="text" 
+                  value={formQr} 
+                  onChange={(e) => setFormQr(e.target.value)}
+                  placeholder="Escanea o escribe la clave del QR"
+                  className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-400 font-mono" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Saldo Inicial / Ajuste ($)</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  value={formSaldo} 
+                  onChange={(e) => setFormSaldo(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-bold" 
+                />
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => setMostrarModalAlumno(false)}
+                  className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors text-sm"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={guardandoAlumno}
+                  className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors text-sm"
+                >
+                  {guardandoAlumno ? 'Guardando...' : 'Guardar Alumno'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ================= MODAL: REPORTE POR RANGO ================= */}
       {mostrarReporteRango && (
@@ -615,4 +895,4 @@ export default function PanelAdministracion() {
       )}
     </div>
   )
-}
+}  
