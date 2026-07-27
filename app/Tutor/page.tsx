@@ -34,12 +34,12 @@ export default function ModuloTutor() {
 
     setAlumno(alumnoData);
 
-    // 2. Buscar historial de viajes del alumno (Los más recientes primero)
+    // 2. Buscar historial de viajes del alumno (Los más recientes primero, ordenado por fecha_hora)
     const { data: viajesData } = await supabase
       .from('registros_transporte')
       .select('*')
       .eq('matricula', matricula)
-      .order('id', { ascending: false })
+      .order('fecha_hora', { ascending: false }) // ORDENAMIENTO POR FECHA CORREGIDO
       .limit(10); // Muestra los últimos 10 movimientos
 
     if (viajesData) {
@@ -152,7 +152,8 @@ export default function ModuloTutor() {
                     >
                       <div className="flex justify-between items-center border-b border-slate-50 pb-2">
                         <span className="text-xs text-slate-400 font-medium">
-                          {new Date(viaje.fecha_hora).toLocaleString('es-MX')}
+                          {/* APLICACIÓN DE ZONA HORARIA MEXICO CITY */}
+                          {new Date(viaje.fecha_hora).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}
                         </span>
                         <span
                           className={`text-xs font-bold px-2 py-1 rounded-md ${
