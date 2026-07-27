@@ -78,7 +78,6 @@ export default function PanelAdministracion() {
     setErrorPin(false)
   }
 
-  // Cargar historial solo cuando el modal está activo
   useEffect(() => {
     if (mostrarHistorial && rol) cargarHistorialCompleto()
   }, [fechaHistorial, mostrarHistorial])
@@ -254,7 +253,6 @@ export default function PanelAdministracion() {
 
     try {
       if (alumnoEditando) {
-        // Actualizar
         const { error } = await supabase
           .from('alumnos')
           .update({
@@ -267,7 +265,6 @@ export default function PanelAdministracion() {
 
         if (error) throw error
       } else {
-        // Crear nuevo
         const { error } = await supabase
           .from('alumnos')
           .insert([{
@@ -284,7 +281,7 @@ export default function PanelAdministracion() {
       cargarAlumnos()
     } catch (err: any) {
       alert('Error al guardar el alumno: ' + err.message)
-    } font-bold {
+    } finally {
       setGuardandoAlumno(false)
     }
   }
@@ -338,7 +335,6 @@ export default function PanelAdministracion() {
     )
   }
 
-  // PANTALLA DE CARGA
   if (cargando) return <div className="min-h-screen bg-[#020617] flex justify-center items-center text-white font-bold text-xl">Cargando Sistema...</div>
 
   // ================= RENDERIZADO DEL PANEL PRINCIPAL =================
@@ -354,10 +350,7 @@ export default function PanelAdministracion() {
           <h1 className="text-white font-black text-3xl">Panel Central</h1>
         </div>
         
-        {/* CONTROLES DEL HEADER */}
         <div className="flex flex-wrap gap-3">
-          
-          {/* Pestanas Super Admin */}
           {rol === 'SUPERADMIN' && (
             <div className="bg-[#0f172a] rounded-xl border border-slate-800 p-1 flex gap-1 mr-2">
               <button 
@@ -375,7 +368,6 @@ export default function PanelAdministracion() {
             </div>
           )}
 
-          {/* Botones de acción generales */}
           {vista === 'FINANZAS' && (
             <button 
               onClick={() => { setMostrarReporteRango(true); setRangoCalculado(false); }} 
@@ -397,7 +389,6 @@ export default function PanelAdministracion() {
       {/* ================= CONTENIDO: VISTA FINANZAS ================= */}
       {vista === 'FINANZAS' && (
         <>
-          {/* DASHBOARD CARDS */}
           <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="bg-[#0f172a] rounded-2xl border border-emerald-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
               <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>
@@ -427,7 +418,6 @@ export default function PanelAdministracion() {
             </div>
           </div>
 
-          {/* TABLA: AUDITORÍA DE RETIROS */}
           <div className="max-w-6xl mx-auto bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
             <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">💳 Auditoría de Retiros (Hoy)</h2>
@@ -467,7 +457,6 @@ export default function PanelAdministracion() {
       {vista === 'SISTEMA' && rol === 'SUPERADMIN' && (
         <div className="max-w-6xl mx-auto space-y-8">
           
-          {/* PANEL DE CONSOLA DE ACCESOS RÁPIDOS */}
           <div className="bg-[#0f172a] rounded-2xl border border-indigo-900/40 p-6 shadow-xl">
             <h2 className="text-xl font-black text-white mb-2 flex items-center gap-2">
               🚀 Acceso Directo a Módulos
@@ -514,7 +503,6 @@ export default function PanelAdministracion() {
             </div>
           </div>
 
-          {/* TABLA DE ADMINISTRACIÓN DE ALUMNOS */}
           <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
             <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/50">
               <div>
@@ -597,7 +585,7 @@ export default function PanelAdministracion() {
       {/* ================= MODAL: NUEVO / EDITAR ALUMNO ================= */}
       {mostrarModalAlumno && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
-          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-md shadow-2xl">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-white">
                 {alumnoEditando ? '✏️ Editar Alumno' : '➕ Registrar Alumno'}
@@ -629,13 +617,32 @@ export default function PanelAdministracion() {
                 />
               </div>
 
+              {/* VINCULACIÓN QR: CÁMARA NATIVA + ENTRADA MANUAL */}
               <div>
-                <label className="block text-xs font-bold text-indigo-400 uppercase mb-1">Código QR Vinculado</label>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-bold text-indigo-400 uppercase">Código QR Vinculado</label>
+                  <label className="cursor-pointer text-xs bg-indigo-900/60 hover:bg-indigo-800 text-indigo-300 border border-indigo-700 px-2 py-1 rounded font-bold transition-colors">
+                    📷 Usar Cámara
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      capture="environment" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          setFormQr(file.name.replace(/\.[^/.]+$/, ""))
+                        }
+                      }} 
+                    />
+                  </label>
+                </div>
+
                 <input 
                   type="text" 
                   value={formQr} 
                   onChange={(e) => setFormQr(e.target.value)}
-                  placeholder="Escanea o escribe la clave del QR"
+                  placeholder="Escribe o escanea clave QR..."
                   className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-400 font-mono" 
                 />
               </div>
