@@ -2,15 +2,23 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 
-export default function ModuloFinanzasSuperAdmin() {
-  // ================= ESTADOS DEL DASHBOARD =================
-  const [cargando, setCargando] = useState(true)
+export default function PanelAdministracion() {
+  // ================= ESTADOS DE AUTENTICACIÓN =================
+  const [rol, setRol] = useState<'ADMIN' | 'SUPERADMIN' | null>(null)
+  const [pin, setPin] = useState('')
+  const [errorPin, setErrorPin] = useState(false)
+  
+  // ================= ESTADO DE VISTA (SOLO SUPERADMIN) =================
+  const [vista, setVista] = useState<'FINANZAS' | 'SISTEMA'>('FINANZAS')
+
+  // ================= ESTADOS DEL DASHBOARD (FINANZAS) =================
+  const [cargando, setCargando] = useState(false)
   const [ventasDia, setVentasDia] = useState(0)
   const [boletosDia, setBoletosDia] = useState(0)
   const [ventasSemana, setVentasSemana] = useState(0)
   const [retiros, setRetiros] = useState<any[]>([])
 
-  // ================= ESTADOS DE MODALES =================
+  // ================= ESTADOS DE MODALES (FINANZAS) =================
   const [mostrarCorte, setMostrarCorte] = useState(false)
   const [fechaCorte, setFechaCorte] = useState(new Date().toLocaleDateString('en-CA'))
   
@@ -30,15 +38,37 @@ export default function ModuloFinanzasSuperAdmin() {
   // ================= ESTADO DEL TICKET / REPORTE =================
   const [documentoActual, setDocumentoActual] = useState<any>(null)
 
-  useEffect(() => {
-    cargarDatosDashboard()
-  }, [])
+  // ================= FUNCIONES DE LOGIN Y CIERRE =================
+  const iniciarSesion = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (pin === '7777') {
+      setRol('SUPERADMIN')
+      setErrorPin(false)
+      cargarDatosDashboard()
+    } else if (pin === '8888') {
+      setRol('ADMIN')
+      setVista('FINANZAS')
+      setErrorPin(false)
+      cargarDatosDashboard()
+    } else {
+      setErrorPin(true)
+      setPin('')
+    }
+  }
 
+  const cerrarSesion = () => {
+    setRol(null)
+    setPin('')
+    setVista('FINANZAS')
+    setErrorPin(false)
+  }
+
+  // Cargar historial solo cuando el modal está activo
   useEffect(() => {
-    if (mostrarHistorial) cargarHistorialCompleto()
+    if (mostrarHistorial && rol) cargarHistorialCompleto()
   }, [fechaHistorial, mostrarHistorial])
 
-  // ================= FUNCIONES DE CARGA =================
+  // ================= FUNCIONES DE CARGA (FINANZAS) =================
   const obtenerLimitesDia = (fechaLocal: string) => {
     return {
       inicio: new Date(`${fechaLocal}T00:00:00.000`).toISOString(),
@@ -166,95 +196,197 @@ export default function ModuloFinanzasSuperAdmin() {
     setMostrarCorte(false)
   }
 
-  if (cargando) return <div className="min-h-screen bg-[#020617] flex justify-center items-center text-white font-bold text-xl">Cargando Finanzas...</div>
+  // ================= RENDERIZADO DEL LOGIN =================
+  if (!rol) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
+        <div className="bg-[#0f172a] p-8 rounded-2xl shadow-2xl border border-slate-800 max-w-sm w-full">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-black text-white mb-2">SITE-PEM</h1>
+            <p className="text-slate-400 text-sm">Panel de Administración Central</p>
+          </div>
+          
+          <form onSubmit={iniciarSesion} className="flex flex-col gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                Clave de Acceso
+              </label>
+              <input
+                type="password"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder="••••"
+                className={`w-full bg-[#020617] border ${errorPin ? 'border-red-500' : 'border-slate-700'} rounded-xl p-4 text-center text-white text-2xl font-black tracking-widest outline-none focus:border-indigo-500 transition-colors`}
+                maxLength={4}
+                autoFocus
+              />
+              {errorPin && (
+                <p className="text-red-400 text-xs font-bold mt-2 text-center animate-pulse">
+                  Clave incorrecta. Intente de nuevo.
+                </p>
+              )}
+            </div>
+            
+            <button 
+              type="submit" 
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors mt-2"
+            >
+              Ingresar al Panel
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
 
+  // PANTALLA DE CARGA (Para cuando se obtienen datos de Supabase)
+  if (cargando) return <div className="min-h-screen bg-[#020617] flex justify-center items-center text-white font-bold text-xl">Cargando Sistema...</div>
+
+  // ================= RENDERIZADO DEL PANEL PRINCIPAL =================
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 font-sans p-4 md:p-8">
       
-      {/* HEADER */}
+      {/* HEADER PRINCIPAL */}
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-800 pb-4 gap-4">
         <div>
-          <h3 className="text-indigo-400 font-bold text-sm tracking-widest uppercase">SITE-PEM • FINANZAS</h3>
+          <h3 className="text-indigo-400 font-bold text-sm tracking-widest uppercase">
+            SITE-PEM • {rol === 'SUPERADMIN' ? 'SUPER ADMINISTRADOR' : 'FINANZAS'}
+          </h3>
           <h1 className="text-white font-black text-3xl">Panel Central</h1>
         </div>
-        <div className="flex gap-3">
-          <button onClick={() => { setMostrarReporteRango(true); setRangoCalculado(false); }} className="bg-indigo-900/40 hover:bg-indigo-800/60 text-indigo-400 border border-indigo-800/50 px-5 py-2.5 rounded-xl font-bold transition-colors text-sm flex items-center gap-2">
-            📅 Reporte por Rango
-          </button>
-          <button className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl font-bold transition-colors border border-slate-700 text-sm">
+        
+        {/* CONTROLES DEL HEADER */}
+        <div className="flex flex-wrap gap-3">
+          
+          {/* Si es Super Admin, mostrar pestañas para cambiar de vista */}
+          {rol === 'SUPERADMIN' && (
+            <div className="bg-[#0f172a] rounded-xl border border-slate-800 p-1 flex gap-1 mr-4">
+              <button 
+                onClick={() => setVista('FINANZAS')} 
+                className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${vista === 'FINANZAS' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                💵 Finanzas
+              </button>
+              <button 
+                onClick={() => setVista('SISTEMA')} 
+                className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${vista === 'SISTEMA' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                ⚙️ Sistema
+              </button>
+            </div>
+          )}
+
+          {/* Botones de acción generales */}
+          {vista === 'FINANZAS' && (
+            <button 
+              onClick={() => { setMostrarReporteRango(true); setRangoCalculado(false); }} 
+              className="bg-indigo-900/40 hover:bg-indigo-800/60 text-indigo-400 border border-indigo-800/50 px-5 py-2.5 rounded-xl font-bold transition-colors text-sm flex items-center gap-2"
+            >
+              📅 Reporte Rango
+            </button>
+          )}
+          
+          <button 
+            onClick={cerrarSesion} 
+            className="bg-red-900/30 hover:bg-red-800/50 text-red-400 px-5 py-2.5 rounded-xl font-bold transition-colors border border-red-900/50 text-sm"
+          >
             Cerrar Sesión
           </button>
         </div>
       </div>
 
-      {/* DASHBOARD CARDS */}
-      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        
-        {/* Card Ingresos Acumulados Día */}
-        <div className="bg-[#0f172a] rounded-2xl border border-emerald-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
-          <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>
-          <span className="text-3xl mb-2">💵</span>
-          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Ingresos Acumulados (Hoy)</p>
-          <p className="text-white font-black text-4xl mb-4">${ventasDia.toFixed(2)}</p>
-          <button onClick={() => setMostrarCorte(true)} className="bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-400 border border-emerald-800/50 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
-            🖨️ Imprimir Corte Z
-          </button>
-        </div>
+      {/* ================= CONTENIDO: VISTA FINANZAS ================= */}
+      {vista === 'FINANZAS' && (
+        <>
+          {/* DASHBOARD CARDS */}
+          <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {/* Card Ingresos Acumulados Día */}
+            <div className="bg-[#0f172a] rounded-2xl border border-emerald-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
+              <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>
+              <span className="text-3xl mb-2">💵</span>
+              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Ingresos Acumulados (Hoy)</p>
+              <p className="text-white font-black text-4xl mb-4">${ventasDia.toFixed(2)}</p>
+              <button onClick={() => setMostrarCorte(true)} className="bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-400 border border-emerald-800/50 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
+                🖨️ Imprimir Corte Z
+              </button>
+            </div>
 
-        {/* Card Boletos Vendidos */}
-        <div className="bg-[#0f172a] rounded-2xl border border-pink-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
-          <div className="absolute top-0 left-0 w-full h-1 bg-pink-500"></div>
-          <span className="text-3xl mb-2">🎟️</span>
-          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Boletos Vendidos (Hoy)</p>
-          <p className="text-white font-black text-4xl">{boletosDia}</p>
-        </div>
+            {/* Card Boletos Vendidos */}
+            <div className="bg-[#0f172a] rounded-2xl border border-pink-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
+              <div className="absolute top-0 left-0 w-full h-1 bg-pink-500"></div>
+              <span className="text-3xl mb-2">🎟️</span>
+              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Boletos Vendidos (Hoy)</p>
+              <p className="text-white font-black text-4xl">{boletosDia}</p>
+            </div>
 
-        {/* Card Acumulado Semanal (LUNES A DOMINGO) */}
-        <div className="bg-[#0f172a] rounded-2xl border border-indigo-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
-          <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
-          <span className="text-3xl mb-2">📊</span>
-          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Ventas Semanales</p>
-          <p className="text-white font-black text-4xl mb-4">${ventasSemana.toFixed(2)}</p>
-          <button onClick={() => setMostrarHistorial(true)} className="bg-slate-800 hover:bg-slate-700 text-white border border-slate-600 px-4 py-2 rounded-lg font-bold text-sm transition-colors">
-            Ver Historial
-          </button>
-        </div>
+            {/* Card Acumulado Semanal */}
+            <div className="bg-[#0f172a] rounded-2xl border border-indigo-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
+              <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
+              <span className="text-3xl mb-2">📊</span>
+              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Ventas Semanales</p>
+              <p className="text-white font-black text-4xl mb-4">${ventasSemana.toFixed(2)}</p>
+              <button onClick={() => setMostrarHistorial(true)} className="bg-slate-800 hover:bg-slate-700 text-white border border-slate-600 px-4 py-2 rounded-lg font-bold text-sm transition-colors">
+                Ver Historial
+              </button>
+            </div>
+          </div>
 
-      </div>
+          {/* TABLA: AUDITORÍA DE RETIROS */}
+          <div className="max-w-6xl mx-auto bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">💳 Auditoría de Retiros (Hoy)</h2>
+              <button onClick={cargarDatosDashboard} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm font-bold transition-colors border border-slate-700">
+                🔄 Actualizar
+              </button>
+            </div>
+            <div className="overflow-x-auto p-2">
+              {retiros.length === 0 ? (
+                <p className="text-center text-slate-500 py-10 font-bold">No se han registrado retiros hoy.</p>
+              ) : (
+                <table className="w-full text-left text-sm">
+                  <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
+                    <tr>
+                      <th className="px-6 py-4 font-bold">Fecha / Hora</th>
+                      <th className="px-6 py-4 font-bold">Concepto</th>
+                      <th className="px-6 py-4 font-bold text-right">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {retiros.map((r) => (
+                      <tr key={r.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
+                        <td className="px-6 py-4 text-slate-300">{new Date(r.created_at).toLocaleString('es-MX')}</td>
+                        <td className="px-6 py-4 text-white font-medium">{r.concepto}</td>
+                        <td className="px-6 py-4 text-right font-black text-red-400">- ${r.monto.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
-      {/* TABLA: AUDITORÍA DE RETIROS */}
-      <div className="max-w-6xl mx-auto bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
-        <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">💳 Auditoría de Retiros (Hoy)</h2>
-          <button onClick={cargarDatosDashboard} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm font-bold transition-colors border border-slate-700">
-            🔄 Actualizar
-          </button>
+      {/* ================= CONTENIDO: VISTA SISTEMA (SOLO SUPERADMIN) ================= */}
+      {vista === 'SISTEMA' && rol === 'SUPERADMIN' && (
+        <div className="max-w-6xl mx-auto bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden p-8 flex flex-col items-center justify-center min-h-[400px]">
+          <span className="text-6xl mb-4">🚧</span>
+          <h2 className="text-2xl font-black text-white mb-2">Gestión del Sistema SITE-PEM</h2>
+          <p className="text-slate-400 text-center max-w-lg mb-6">
+            Esta es la zona exclusiva del Super Administrador. Aquí es donde agregaremos las tablas maestras para crear/editar usuarios, suspender cuentas y modificar los saldos de los alumnos.
+          </p>
+          <div className="flex gap-4">
+            <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl text-center shadow-inner">
+              <span className="block text-2xl mb-2">👥</span>
+              <p className="text-sm font-bold text-slate-300">Control de Usuarios</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl text-center shadow-inner">
+              <span className="block text-2xl mb-2">🎓</span>
+              <p className="text-sm font-bold text-slate-300">Padrón de Alumnos</p>
+            </div>
+          </div>
         </div>
-        <div className="overflow-x-auto p-2">
-          {retiros.length === 0 ? (
-            <p className="text-center text-slate-500 py-10 font-bold">No se han registrado retiros hoy.</p>
-          ) : (
-            <table className="w-full text-left text-sm">
-              <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
-                <tr>
-                  <th className="px-6 py-4 font-bold">Fecha / Hora</th>
-                  <th className="px-6 py-4 font-bold">Concepto</th>
-                  <th className="px-6 py-4 font-bold text-right">Monto</th>
-                </tr>
-              </thead>
-              <tbody>
-                {retiros.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
-                    <td className="px-6 py-4 text-slate-300">{new Date(r.created_at).toLocaleString('es-MX')}</td>
-                    <td className="px-6 py-4 text-white font-medium">{r.concepto}</td>
-                    <td className="px-6 py-4 text-right font-black text-red-400">- ${r.monto.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+      )}
 
       <div className="text-center mt-10 pb-4 text-slate-600 text-sm">
         System by <span className="font-bold text-slate-500">Arturo Díaz</span>
