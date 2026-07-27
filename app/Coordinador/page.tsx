@@ -7,7 +7,6 @@ export default function Coordinador() {
   const [registros, setRegistros] = useState<any[]>([]);
 
   const cargarRegistros = async () => {
-    // Cambiamos el orden a fecha_hora para evitar errores si el ID es UUID
     const { data, error } = await supabase
       .from('registros_transporte')
       .select('*')
@@ -22,17 +21,14 @@ export default function Coordinador() {
   };
 
   useEffect(() => {
-    // 1. Cargar datos iniciales
     cargarRegistros();
 
-    // 2. Suscribirse a cambios en tiempo real
     const canal = supabase
       .channel('tabla-registros')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'registros_transporte' },
         (payload) => {
-          // Agregamos el nuevo registro al inicio de la lista
           setRegistros((prev) => [payload.new, ...prev]);
         }
       )
@@ -43,15 +39,18 @@ export default function Coordinador() {
     };
   }, []);
 
-  // Función para enviar WhatsApp
   const notificarWhatsApp = (registro: any) => {
     const fecha = new Date(registro.fecha_hora).toLocaleDateString('es-MX');
     const hora = new Date(registro.fecha_hora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     
-    const mensaje = `*SITE-PEM: Aviso de Transporte* 🚌\n\nEstimado tutor, le informamos que el alumno con matrícula *${registro.matricula}* ha registrado un *${registro.tipo_movimiento.toUpperCase()}*.\n\n*Detalles del movimiento:*\n⏰ *Hora:* ${hora}\n📅 *Fecha:* ${fecha}\n🚍 *Unidad:* Autobús ${registro.unidad_transporte}\n📍 *Ubicación GPS:* ${registro.ubicacion_gps || 'No disponible'}\n\n_Mensaje automático del Sistema de Control SITE-PEM._`;
+    const mensaje = `*SITE-PEM: Aviso de Transporte* 🚌\n\nEstimado tutor, le informamos que el alumno *${registro.alumno_nombre || 'Sin Nombre'}* ha registrado un *${registro.tipo_movimiento?.toUpperCase()}*.\n\n*Detalles del movimiento:*\n⏰ *Hora:* ${hora}\n📅 *Fecha:* ${fecha}\n🚍 *Unidad:* Autobús ${registro.unidad_transporte}\n📍 *Ubicación:* ${registro.ubicacion_gps || 'No disponible'}\n\n_Mensaje automático del Sistema de Control SITE-PEM._`;
 
-    // Al no especificar número, abre WhatsApp y te deja elegir el contacto
-    const url = `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+    const numeroLimpio = registro.telefono_tutor ? registro.telefono_tutor.replace(/\D/g, '') : '';
+    
+    const url = numeroLimpio 
+      ? `https://wa.me/${numeroLimpio}?text=${encodeURIComponent(mensaje)}`
+      : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+      
     window.open(url, '_blank');
   };
 
@@ -59,7 +58,6 @@ export default function Coordinador() {
     <div className="min-h-screen bg-slate-950 p-6 font-sans text-slate-200 flex flex-col justify-between">
       <div className="max-w-6xl mx-auto w-full">
         
-        {/* ENCABEZADO COORDINADOR */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
           <div className="flex items-center gap-4 flex-wrap justify-center text-center md:text-left">
             <div className="bg-white rounded-xl p-2 shadow-lg shrink-0 h-20 flex items-center justify-center">
@@ -92,14 +90,13 @@ export default function Coordinador() {
           </div>
         </div>
 
-        {/* TABLA DE REGISTROS */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-md overflow-hidden mb-8">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-950 text-slate-400 uppercase text-xs border-b border-slate-800">
                 <tr>
                   <th className="px-6 py-4 font-bold">Fecha y Hora</th>
-                  <th className="px-6 py-4 font-bold">Matrícula</th>
+                  <th className="px-6 py-4 font-bold">Alumno</th>
                   <th className="px-6 py-4 font-bold">Movimiento</th>
                   <th className="px-6 py-4 font-bold">Unidad</th>
                   <th className="px-6 py-4 font-bold text-center">GPS</th>
@@ -125,8 +122,13 @@ export default function Coordinador() {
                       <td className="px-6 py-4 text-slate-300">
                         {new Date(registro.fecha_hora).toLocaleString('es-MX')}
                       </td>
-                      <td className="px-6 py-4 font-mono text-blue-300 font-bold">
-                        {registro.matricula}
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-blue-300">
+                          {registro.alumno_nombre || 'Desconocido'}
+                        </div>
+                        <div className="text-xs text-slate-500 font-mono mt-1">
+                          {registro.matricula}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <span
@@ -161,7 +163,7 @@ export default function Coordinador() {
                       <td className="px-6 py-4 text-center">
                         <button
                           onClick={() => notificarWhatsApp(registro)}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors w-full border border-emerald-500/50"
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors w-full border border-emerald-500/50 shadow-sm"
                         >
                           💬 Notificar
                         </button>
@@ -175,7 +177,6 @@ export default function Coordinador() {
         </div>
       </div>
 
-      {/* FIRMA DE AUTOR */}
       <footer className="text-center py-6 mt-auto">
         <p className="text-xs text-slate-500 font-medium tracking-wide">
           SITE-PEM System by <span className="text-slate-400">Arturo Diaz</span>
