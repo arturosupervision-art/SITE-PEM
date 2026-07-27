@@ -50,6 +50,8 @@ export default function PanelAdministracion() {
   const [formNombre, setFormNombre] = useState('')
   const [formMatricula, setFormMatricula] = useState('')
   const [formQr, setFormQr] = useState('')
+  const [formCorreoTutor, setFormCorreoTutor] = useState('')
+  const [formTelefonoTutor, setFormTelefonoTutor] = useState('')
   const [formSaldo, setFormSaldo] = useState(0)
   const [guardandoAlumno, setGuardandoAlumno] = useState(false)
 
@@ -239,6 +241,8 @@ export default function PanelAdministracion() {
     setFormNombre('')
     setFormMatricula('')
     setFormQr('')
+    setFormCorreoTutor('')
+    setFormTelefonoTutor('')
     setFormSaldo(0)
     setMostrarModalAlumno(true)
   }
@@ -248,6 +252,8 @@ export default function PanelAdministracion() {
     setFormNombre(al.nombre_completo || '')
     setFormMatricula(al.matricula || '')
     setFormQr(al.codigo_qr || '')
+    setFormCorreoTutor(al.correo_tutor || '')
+    setFormTelefonoTutor(al.telefono_tutor || '')
     setFormSaldo(al.saldo_actual || 0)
     setMostrarModalAlumno(true)
   }
@@ -264,6 +270,8 @@ export default function PanelAdministracion() {
             nombre_completo: formNombre,
             matricula: formMatricula,
             codigo_qr: formQr,
+            correo_tutor: formCorreoTutor,
+            telefono_tutor: formTelefonoTutor,
             saldo_actual: formSaldo
           })
           .eq('id', alumnoEditando.id)
@@ -276,6 +284,8 @@ export default function PanelAdministracion() {
             nombre_completo: formNombre,
             matricula: formMatricula,
             codigo_qr: formQr,
+            correo_tutor: formCorreoTutor,
+            telefono_tutor: formTelefonoTutor,
             saldo_actual: formSaldo
           }])
 
@@ -288,6 +298,34 @@ export default function PanelAdministracion() {
       alert('Error al guardar el alumno: ' + err.message)
     } finally {
       setGuardandoAlumno(false)
+    }
+  }
+
+  // ELIMINAR ALUMNO INDIVIDUAL
+  const eliminarAlumnoIndividual = async (id: any, nombre: string) => {
+    if (confirm(`¿Estás seguro de eliminar a ${nombre}? Esta acción no se puede deshacer.`)) {
+      try {
+        const { error } = await supabase.from('alumnos').delete().eq('id', id)
+        if (error) throw error
+        cargarAlumnos()
+      } catch (err: any) {
+        alert('Error al eliminar alumno: ' + err.message)
+      }
+    }
+  }
+
+  // ELIMINAR TODOS LOS ALUMNOS (MASIVO)
+  const eliminarTodosLosAlumnos = async () => {
+    const confirmacion = prompt('⚠️¡ADVERTENCIA! Vas a eliminar TODOS los alumnos registrados.\nEscribe "ELIMINAR" para confirmar:')
+    if (confirmacion === 'ELIMINAR') {
+      try {
+        const { error } = await supabase.from('alumnos').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        if (error) throw error
+        alert('Se han eliminado todos los alumnos de la base de datos.')
+        cargarAlumnos()
+      } catch (err: any) {
+        alert('Error al eliminar masivamente: ' + err.message)
+      }
     }
   }
 
@@ -309,7 +347,9 @@ export default function PanelAdministracion() {
               nombre_completo: partes[0]?.trim(),
               matricula: partes[1]?.trim() || '',
               codigo_qr: partes[2]?.trim() || '',
-              saldo_actual: parseFloat(partes[3]?.trim()) || 0
+              correo_tutor: partes[3]?.trim() || '',
+              telefono_tutor: partes[4]?.trim() || '',
+              saldo_actual: parseFloat(partes[5]?.trim()) || 0
             })
           }
         }
@@ -335,7 +375,7 @@ export default function PanelAdministracion() {
   }
 
   const descargarPlantilla = () => {
-    const contenido = "Juan Perez Lopez, 2026-001, QR-1001, 0\nMaria Garcia Gomez, 2026-002, QR-1002, 50\nCarlos Sanchez Diaz, 2026-003, QR-1003, 0"
+    const contenido = "Nombre Completo,Matricula,Codigo QR,Correo Tutor,Telefono Tutor,Saldo Inicial\nJuan Perez Lopez,2026-001,QR-1001,tutor.juan@email.com,5512345678,0\nMaria Garcia Gomez,2026-002,QR-1002,tutor.maria@email.com,5587654321,50\nCarlos Sanchez Diaz,2026-003,QR-1003,tutor.carlos@email.com,5544332211,0"
     const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -361,7 +401,9 @@ export default function PanelAdministracion() {
   const alumnosFiltrados = alumnos.filter(a => 
     a.nombre_completo?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
     a.matricula?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
-    a.codigo_qr?.toLowerCase().includes(busquedaAlumno.toLowerCase())
+    a.codigo_qr?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
+    a.correo_tutor?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
+    a.telefono_tutor?.toLowerCase().includes(busquedaAlumno.toLowerCase())
   )
 
   // ================= RENDERIZADO DEL LOGIN =================
@@ -549,7 +591,6 @@ export default function PanelAdministracion() {
                 </div>
               </a>
 
-              {/* RUTA RUTA CAMBIADA A /Chofer */}
               <a 
                 href="/Chofer" 
                 target="_blank" 
@@ -562,7 +603,6 @@ export default function PanelAdministracion() {
                 </div>
               </a>
 
-              {/* RUTA CAMBIADA A /Coordinador */}
               <a 
                 href="/Coordinador" 
                 target="_blank" 
@@ -580,31 +620,38 @@ export default function PanelAdministracion() {
           <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
             <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/50">
               <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">🎓 Control de Alumnos y Tarjetas QR ({alumnos.length})</h2>
-                <p className="text-slate-400 text-xs mt-1">Alta individual, masiva, saldos y código QR</p>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">🎓 Control de Alumnos y Tutores ({alumnos.length})</h2>
+                <p className="text-slate-400 text-xs mt-1">Gestión individual, masiva, saldos, datos de tutor y eliminación</p>
               </div>
 
               <div className="flex flex-wrap w-full md:w-auto gap-2">
                 <input 
                   type="text" 
-                  placeholder="Buscar alumno, matrícula o QR..." 
+                  placeholder="Buscar alumno, tutor, QR..." 
                   value={busquedaAlumno}
                   onChange={(e) => setBusquedaAlumno(e.target.value)}
-                  className="bg-[#020617] border border-slate-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-indigo-500 flex-1 md:w-56"
+                  className="bg-[#020617] border border-slate-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-indigo-500 flex-1 md:w-48"
                 />
                 
                 <button 
                   onClick={() => setMostrarModalMasivo(true)}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs md:text-sm transition-colors shrink-0 flex items-center gap-1"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1"
                 >
-                  📁 Carga Masiva (600)
+                  📁 Carga Masiva
                 </button>
 
                 <button 
                   onClick={abrirModalNuevoAlumno}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs md:text-sm transition-colors shrink-0 flex items-center gap-1"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1"
                 >
                   ➕ Nuevo
+                </button>
+
+                <button 
+                  onClick={eliminarTodosLosAlumnos}
+                  className="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700 px-3 py-2 rounded-xl text-xs font-bold transition-colors shrink-0 flex items-center gap-1"
+                >
+                  🗑️ Vaciar DB
                 </button>
               </div>
             </div>
@@ -618,37 +665,49 @@ export default function PanelAdministracion() {
                 <table className="w-full text-left text-sm">
                   <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
                     <tr>
-                      <th className="px-6 py-4 font-bold">Nombre Completo</th>
-                      <th className="px-6 py-4 font-bold">Matrícula</th>
-                      <th className="px-6 py-4 font-bold">Código QR Vinc.</th>
-                      <th className="px-6 py-4 font-bold text-right">Saldo Actual</th>
-                      <th className="px-6 py-4 font-bold text-center">Acciones</th>
+                      <th className="px-4 py-4 font-bold">Nombre Completo</th>
+                      <th className="px-4 py-4 font-bold">Matrícula / QR</th>
+                      <th className="px-4 py-4 font-bold">Datos del Tutor</th>
+                      <th className="px-4 py-4 font-bold text-right">Saldo</th>
+                      <th className="px-4 py-4 font-bold text-center">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {alumnosFiltrados.map((al) => (
                       <tr key={al.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
-                        <td className="px-6 py-4 text-white font-bold">{al.nombre_completo}</td>
-                        <td className="px-6 py-4 text-slate-300 font-mono">{al.matricula || 'N/A'}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-4 text-white font-bold">{al.nombre_completo}</td>
+                        <td className="px-4 py-4">
+                          <p className="text-slate-300 font-mono text-xs">{al.matricula || 'Sin Matrícula'}</p>
                           {al.codigo_qr ? (
-                            <span className="bg-indigo-900/40 text-indigo-300 border border-indigo-800 px-2 py-1 rounded font-mono text-xs">
+                            <span className="bg-indigo-900/40 text-indigo-300 border border-indigo-800 px-1.5 py-0.5 rounded font-mono text-[10px] inline-block mt-1">
                               🏷️ {al.codigo_qr}
                             </span>
                           ) : (
-                            <span className="text-slate-600 italic text-xs">Sin QR vinculado</span>
+                            <span className="text-slate-600 italic text-[10px] block mt-1">Sin QR</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-right font-black text-emerald-400">
+                        <td className="px-4 py-4 text-xs">
+                          <p className="text-slate-300">✉️ {al.correo_tutor || 'No registrado'}</p>
+                          <p className="text-slate-400">📞 {al.telefono_tutor || 'No registrado'}</p>
+                        </td>
+                        <td className="px-4 py-4 text-right font-black text-emerald-400">
                           ${(al.saldo_actual || 0).toFixed(2)}
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <button 
-                            onClick={() => abrirModalEditarAlumno(al)}
-                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                          >
-                            ✏️ Editar / QR
-                          </button>
+                        <td className="px-4 py-4 text-center">
+                          <div className="flex justify-center gap-1">
+                            <button 
+                              onClick={() => abrirModalEditarAlumno(al)}
+                              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-2 py-1 rounded text-xs font-bold transition-colors"
+                            >
+                              ✏️
+                            </button>
+                            <button 
+                              onClick={() => eliminarAlumnoIndividual(al.id, al.nombre_completo)}
+                              className="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700 px-2 py-1 rounded text-xs font-bold transition-colors"
+                            >
+                              🗑️
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -670,13 +729,13 @@ export default function PanelAdministracion() {
           <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                📁 Carga Masiva de Alumnos
+                📁 Carga Masiva de Alumnos (600)
               </h2>
               <button onClick={() => setMostrarModalMasivo(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
             </div>
 
             <p className="text-slate-400 text-xs mb-4">
-              Puedes subir tus 600 alumnos adjuntando un archivo `.csv` o pegando el texto directamente.
+              Sube tus 600 alumnos adjuntando un archivo `.csv` o pegando la lista directamente con los datos de sus tutores.
             </p>
 
             <div className="flex gap-3 mb-4">
@@ -684,25 +743,25 @@ export default function PanelAdministracion() {
                 onClick={descargarPlantilla}
                 className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-800/50 px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
               >
-                📥 Descargar Plantilla de Ejemplo (.CSV)
+                📥 Descargar Plantilla .CSV
               </button>
 
               <label className="cursor-pointer bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-300 border border-emerald-800 px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1">
-                📂 Seleccionar Archivo .CSV / .TXT
+                📂 Seleccionar Archivo
                 <input type="file" accept=".csv, .txt" onChange={cargarArchivoMasivo} className="hidden" />
               </label>
             </div>
 
             <div className="mb-4">
               <label className="block text-xs font-bold text-slate-400 uppercase mb-2">
-                Formato esperado por línea: <br />
-                <span className="text-indigo-400 font-mono">Nombre Completo, Matrícula, Código QR, Saldo Inicial</span>
+                Formato por línea: <br />
+                <span className="text-indigo-400 font-mono">Nombre, Matrícula, Código QR, Correo Tutor, Teléfono Tutor, Saldo</span>
               </label>
               <textarea 
                 rows={8}
                 value={textoMasivo}
                 onChange={(e) => setTextoMasivo(e.target.value)}
-                placeholder={"Ejemplo:\nJuan Perez Lopez, 2026-001, QR-1001, 0\nMaria Garcia Gomez, 2026-002, QR-1002, 50\nCarlos Sanchez Diaz, 2026-003, QR-1003, 0"}
+                placeholder={"Ejemplo:\nJuan Perez Lopez, 2026-001, QR-1001, tutor.juan@email.com, 5512345678, 0\nMaria Garcia Gomez, 2026-002, QR-1002, tutor.maria@email.com, 5587654321, 50"}
                 className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-xs font-mono outline-none focus:border-indigo-500"
               />
             </div>
@@ -789,6 +848,28 @@ export default function PanelAdministracion() {
                   onChange={(e) => setFormQr(e.target.value)}
                   placeholder="Escribe o escanea clave QR..."
                   className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-400 font-mono" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Correo Electrónico del Tutor</label>
+                <input 
+                  type="email" 
+                  value={formCorreoTutor} 
+                  onChange={(e) => setFormCorreoTutor(e.target.value)}
+                  placeholder="tutor@ejemplo.com"
+                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono Móvil del Tutor</label>
+                <input 
+                  type="tel" 
+                  value={formTelefonoTutor} 
+                  onChange={(e) => setFormTelefonoTutor(e.target.value)}
+                  placeholder="Ej. 5512345678"
+                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-mono" 
                 />
               </div>
 
