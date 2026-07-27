@@ -129,6 +129,12 @@ export default function PantallaChofer() {
         ? `https://maps.google.com/?q=${ubicacion.lat},${ubicacion.lng}`
         : '';
 
+      // ==============================================================
+      // SOLUCIÓN ZONA HORARIA: Calculamos la hora exacta local
+      // ==============================================================
+      const offsetMs = new Date().getTimezoneOffset() * 60000;
+      const horaLocalMexico = new Date(Date.now() - offsetMs).toISOString().slice(0, -1);
+
       const { error: errorRegistro } = await supabase.from('registros_transporte').insert([
         {
           alumno_id: alumno.id,
@@ -137,7 +143,8 @@ export default function PantallaChofer() {
           telefono_tutor: alumno.telefono_tutor, 
           tipo_movimiento: modoRuta === 'ASCENSO' ? 'Ascenso' : 'Descenso',
           ubicacion_gps: enlaceMaps,
-          unidad_transporte: '1'
+          unidad_transporte: '1',
+          created_at: horaLocalMexico // <-- AQUÍ FORZAMOS LA HORA LOCAL
         },
       ]);
 
