@@ -9,7 +9,7 @@ export default function PanelAdministracion() {
   const [errorPin, setErrorPin] = useState(false)
   
   // ================= ESTADO DE VISTA (SOLO SUPERADMIN) =================
-  const [vista, setVista] = useState<'FINANZAS' | 'SISTEMA' | 'PERSONAL'>('FINANZAS')
+  const [vista, setVista] = useState<'FINANZAS' | 'SISTEMA'>('FINANZAS')
 
   // ================= ESTADOS DEL DASHBOARD (FINANZAS) =================
   const [cargando, setCargando] = useState(false)
@@ -69,25 +69,6 @@ export default function PanelAdministracion() {
   const [textoEliminarMasivo, setTextoEliminarMasivo] = useState('')
   const [idsSeleccionados, setIdsSeleccionados] = useState<string[]>([])
 
-  // ================= ESTADOS DE GESTIÓN DE PERSONAL (SUPER ADMIN) =================
-  const [personal, setPersonal] = useState<any[]>([])
-  const [cargandoPersonal, setCargandoPersonal] = useState(false)
-  const [mostrarModalPersonal, setMostrarModalPersonal] = useState(false)
-  const [personalEditando, setPersonalEditando] = useState<any>(null)
-  const [guardandoPersonal, setGuardandoPersonal] = useState(false)
-
-  // Formulario Personal
-  const [formPersonalRol, setFormPersonalRol] = useState('CAJA')
-  const [formPersonalNombre, setFormPersonalNombre] = useState('')
-  const [formPersonalCorreo, setFormPersonalCorreo] = useState('')
-  const [formPersonalTelefono, setFormPersonalTelefono] = useState('')
-  const [formPersonalPassword, setFormPersonalPassword] = useState('')
-  
-  const [formPersonalRuta, setFormPersonalRuta] = useState('')
-  const [formPersonalTipoTransporte, setFormPersonalTipoTransporte] = useState('Autobús')
-  const [formPersonalSemestre, setFormPersonalSemestre] = useState('1º')
-  const [formPersonalTurno, setFormPersonalTurno] = useState('Matutino')
-
   // ================= FUNCIONES DE LOGIN Y CIERRE =================
   const iniciarSesion = (e: React.FormEvent) => {
     e.preventDefault()
@@ -96,7 +77,6 @@ export default function PanelAdministracion() {
       setErrorPin(false)
       cargarDatosDashboard()
       cargarAlumnos()
-      cargarPersonal()
     } else if (pin === '8888') {
       setRol('ADMIN')
       setVista('FINANZAS')
@@ -266,6 +246,7 @@ export default function PanelAdministracion() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         
+        // Verifica si la API nativa de BarcodeDetector está disponible (Chrome/Edge/Android)
         if ('BarcodeDetector' in window) {
           const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
           const interval = setInterval(async () => {
@@ -356,14 +337,21 @@ export default function PanelAdministracion() {
         correo_tutor: formCorreoTutor,
         telefono_tutor: formTelefonoTutor,
         saldo_actual: formSaldo,
-        grado_grupo: gradoGrupoVal
+        grado_grupo: gradoGrupoVal // Satisface la restricción Not-Null de Supabase
       }
 
       if (alumnoEditando) {
-        const { error } = await supabase.from('alumnos').update(datosAlumno).eq('id', alumnoEditando.id)
+        const { error } = await supabase
+          .from('alumnos')
+          .update(datosAlumno)
+          .eq('id', alumnoEditando.id)
+
         if (error) throw error
       } else {
-        const { error } = await supabase.from('alumnos').insert([datosAlumno])
+        const { error } = await supabase
+          .from('alumnos')
+          .insert([datosAlumno])
+
         if (error) throw error
       }
 
@@ -418,6 +406,7 @@ export default function PanelAdministracion() {
     }
   }
 
+  // ================= ELIMINACIÓN MASIVA ÚNICAMENTE POR MATRÍCULA =================
   const procesarEliminacionMasiva = async () => {
     if (!textoEliminarMasivo.trim()) return
     try {
@@ -426,7 +415,7 @@ export default function PanelAdministracion() {
 
       lineas.forEach(l => {
         const val = l.trim()
-        if (val && !val.toLowerCase().includes('matricula')) {
+        if (val && !val.toLowerCase().includes('matricula')) { // Omite encabezados si los hay
           matriculasAEliminar.push(val)
         }
       })
@@ -461,6 +450,7 @@ export default function PanelAdministracion() {
     document.body.removeChild(link)
   }
 
+  // ================= CARGA MASIVA DE ALUMNOS =================
   const procesarCargaMasiva = async () => {
     if (!textoMasivo.trim()) return
     setCargandoMasivo(true)
@@ -552,12 +542,14 @@ export default function PanelAdministracion() {
           if (tipo === 'CARGA') {
             setTextoMasivo(contenido)
           } else {
+            // Si suben un CSV completo, extraemos únicamente la columna de la matrícula (Columna 2 o la que coincida)
             const lineas = contenido.split('\n')
             const matriculasExtraidas: string[] = []
             lineas.forEach(l => {
               const row = l.trim()
               if (row) {
                 const partes = row.split(',')
+                // Si viene con comas, asumimos que la matrícula está en la segunda columna (índice 1), de lo contrario es el texto entero
                 const mat = partes.length > 1 ? partes[1].replace(/"/g, '').trim() : row.replace(/"/g, '').trim()
                 if (mat && !mat.toLowerCase().includes('matricula')) {
                   matriculasExtraidas.push(mat)
@@ -579,91 +571,6 @@ export default function PanelAdministracion() {
     a.correo_tutor?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
     a.telefono_tutor?.toLowerCase().includes(busquedaAlumno.toLowerCase())
   )
-
-  // ================= FUNCIONES DE CONTROL DE PERSONAL (SUPER ADMIN) =================
-  const cargarPersonal = async () => {
-    setCargandoPersonal(true)
-    try {
-      const { data, error } = await supabase.from('personal').select('*').order('nombre', { ascending: true })
-      if (!error && data) setPersonal(data)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setCargandoPersonal(false)
-    }
-  }
-
-  const abrirModalNuevoPersonal = () => {
-    setPersonalEditando(null)
-    setFormPersonalRol('CAJA')
-    setFormPersonalNombre('')
-    setFormPersonalCorreo('')
-    setFormPersonalTelefono('')
-    setFormPersonalPassword('')
-    setFormPersonalRuta('')
-    setFormPersonalTipoTransporte('Autobús')
-    setFormPersonalSemestre('1º')
-    setFormPersonalTurno('Matutino')
-    setMostrarModalPersonal(true)
-  }
-
-  const abrirModalEditarPersonal = (p: any) => {
-    setPersonalEditando(p)
-    setFormPersonalRol(p.rol || 'CAJA')
-    setFormPersonalNombre(p.nombre || '')
-    setFormPersonalCorreo(p.correo || '')
-    setFormPersonalTelefono(p.telefono || '')
-    setFormPersonalPassword(p.contrasena || '')
-    setFormPersonalRuta(p.ruta || '')
-    setFormPersonalTipoTransporte(p.tipo_transporte || 'Autobús')
-    setFormPersonalSemestre(p.semestre_asignado || '1º')
-    setFormPersonalTurno(p.turno || 'Matutino')
-    setMostrarModalPersonal(true)
-  }
-
-  const guardarPersonal = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setGuardandoPersonal(true)
-    try {
-      const datos = {
-        rol: formPersonalRol,
-        nombre: formPersonalNombre,
-        correo: formPersonalCorreo,
-        telefono: formPersonalTelefono,
-        contrasena: formPersonalPassword,
-        ruta: formPersonalRol === 'CHOFER' ? formPersonalRuta : null,
-        tipo_transporte: formPersonalRol === 'CHOFER' ? formPersonalTipoTransporte : null,
-        semestre_asignado: formPersonalRol === 'COORDINADOR' ? formPersonalSemestre : null,
-        turno: formPersonalRol === 'COORDINADOR' ? formPersonalTurno : null,
-      }
-      
-      if (personalEditando) {
-        const { error } = await supabase.from('personal').update(datos).eq('id', personalEditando.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase.from('personal').insert([datos])
-        if (error) throw error
-      }
-      setMostrarModalPersonal(false)
-      cargarPersonal()
-    } catch (err: any) {
-      alert('Error al guardar personal: ' + err.message)
-    } finally {
-      setGuardandoPersonal(false)
-    }
-  }
-
-  const eliminarPersonal = async (id: string, nombre: string) => {
-    if (confirm(`¿Estás seguro de eliminar a ${nombre} del sistema?`)) {
-      try {
-        const { error } = await supabase.from('personal').delete().eq('id', id)
-        if (error) throw error
-        cargarPersonal()
-      } catch (err: any) {
-        alert('Error al eliminar personal: ' + err.message)
-      }
-    }
-  }
 
   // ================= RENDERIZADO DEL LOGIN =================
   if (!rol) {
@@ -736,13 +643,7 @@ export default function PanelAdministracion() {
                 onClick={() => setVista('SISTEMA')} 
                 className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${vista === 'SISTEMA' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
               >
-                ⚙️ Alumnos
-              </button>
-              <button 
-                onClick={() => setVista('PERSONAL')} 
-                className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${vista === 'PERSONAL' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                👥 Personal
+                ⚙️ Sistema & Alumnos
               </button>
             </div>
           )}
@@ -767,114 +668,61 @@ export default function PanelAdministracion() {
 
       {/* ================= CONTENIDO: VISTA FINANZAS ================= */}
       {vista === 'FINANZAS' && (
-         <div className="max-w-6xl mx-auto space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-[#0f172a] rounded-2xl border border-emerald-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
-                <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>
-                <span className="text-3xl mb-2">💵</span>
-                <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Ingresos Acumulados (Hoy)</p>
-                <p className="text-white font-black text-4xl mb-4">${ventasDia.toFixed(2)}</p>
-                <button onClick={() => setMostrarCorte(true)} className="bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-400 border border-emerald-800/50 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
-                  🖨️ Imprimir Corte Z
-                </button>
-              </div>
-
-              <div className="bg-[#0f172a] rounded-2xl border border-pink-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
-                <div className="absolute top-0 left-0 w-full h-1 bg-pink-500"></div>
-                <span className="text-3xl mb-2">🎟️</span>
-                <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Boletos Vendidos (Hoy)</p>
-                <p className="text-white font-black text-4xl">{boletosDia}</p>
-              </div>
-
-              <div className="bg-[#0f172a] rounded-2xl border border-indigo-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
-                <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
-                <span className="text-3xl mb-2">📊</span>
-                <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Ventas Semanales</p>
-                <p className="text-white font-black text-4xl mb-4">${ventasSemana.toFixed(2)}</p>
-                <button onClick={() => setMostrarHistorial(true)} className="bg-slate-800 hover:bg-slate-700 text-white border border-slate-600 px-4 py-2 rounded-lg font-bold text-sm transition-colors">
-                  Ver Historial
-                </button>
-              </div>
+        <>
+          <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-[#0f172a] rounded-2xl border border-emerald-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
+              <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>
+              <span className="text-3xl mb-2">💵</span>
+              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Ingresos Acumulados (Hoy)</p>
+              <p className="text-white font-black text-4xl mb-4">${ventasDia.toFixed(2)}</p>
+              <button onClick={() => setMostrarCorte(true)} className="bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-400 border border-emerald-800/50 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
+                🖨️ Imprimir Corte Z
+              </button>
             </div>
 
-           <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
-            <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/50">
-              <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">🎓 Control de Alumnos ({alumnos.length})</h2>
-                <p className="text-slate-400 text-xs mt-1">Semestre, Grupo, Turno, Tutores y Eliminación por Matrícula</p>
-              </div>
-
-              <div className="flex flex-wrap w-full md:w-auto gap-2">
-                {/* AQUÍ ESTÁ EL BOTÓN DE ACTUALIZAR, MÁS VISIBLE Y AL FRENTE */}
-                <button onClick={cargarAlumnos} className="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500 font-bold px-4 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-2 shadow-lg shadow-indigo-900/20">
-                  🔄 Actualizar Boletos
-                </button>
-                <input 
-                  type="text" 
-                  placeholder="Buscar alumno..." 
-                  value={busquedaAlumno}
-                  onChange={(e) => setBusquedaAlumno(e.target.value)}
-                  className="bg-[#020617] border border-slate-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-indigo-500 flex-1 md:w-40"
-                />
-                <button onClick={descargarBaseDatosAlumnos} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-slate-700 font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1">📥 Descargar BD</button>
-                <button onClick={() => setMostrarModalMasivo(true)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1">📁 Carga Masiva</button>
-                <button onClick={() => setMostrarModalEliminarMasivo(true)} className="bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-700 font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1">🗑️ Eliminar Generación</button>
-                <button onClick={abrirModalNuevoAlumno} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1">➕ Nuevo</button>
-              </div>
+            <div className="bg-[#0f172a] rounded-2xl border border-pink-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
+              <div className="absolute top-0 left-0 w-full h-1 bg-pink-500"></div>
+              <span className="text-3xl mb-2">🎟️</span>
+              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Boletos Vendidos (Hoy)</p>
+              <p className="text-white font-black text-4xl">{boletosDia}</p>
             </div>
 
-            {idsSeleccionados.length > 0 && (
-              <div className="bg-red-950/40 border-b border-red-900/50 px-6 py-3 flex justify-between items-center">
-                <span className="text-red-300 text-xs font-bold">{idsSeleccionados.length} alumnos seleccionados para borrado</span>
-                <button onClick={eliminarSeleccionadosDirecto} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Eliminar Selección Marcada</button>
-              </div>
-            )}
+            <div className="bg-[#0f172a] rounded-2xl border border-indigo-900/50 p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
+              <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
+              <span className="text-3xl mb-2">📊</span>
+              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1 text-center">Ventas Semanales</p>
+              <p className="text-white font-black text-4xl mb-4">${ventasSemana.toFixed(2)}</p>
+              <button onClick={() => setMostrarHistorial(true)} className="bg-slate-800 hover:bg-slate-700 text-white border border-slate-600 px-4 py-2 rounded-lg font-bold text-sm transition-colors">
+                Ver Historial
+              </button>
+            </div>
+          </div>
 
+          <div className="max-w-6xl mx-auto bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">💳 Auditoría de Retiros (Hoy)</h2>
+              <button onClick={cargarDatosDashboard} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm font-bold transition-colors border border-slate-700">
+                🔄 Actualizar
+              </button>
+            </div>
             <div className="overflow-x-auto p-2">
-              {cargandoAlumnos ? (
-                <p className="text-center text-slate-500 py-10 font-bold">Cargando catálogo de alumnos...</p>
-              ) : alumnosFiltrados.length === 0 ? (
-                <p className="text-center text-slate-500 py-10 font-bold">No se encontraron alumnos registrados.</p>
+              {retiros.length === 0 ? (
+                <p className="text-center text-slate-500 py-10 font-bold">No se han registrado retiros hoy.</p>
               ) : (
                 <table className="w-full text-left text-sm">
                   <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
                     <tr>
-                      <th className="px-3 py-4 text-center"><input type="checkbox" checked={idsSeleccionados.length === alumnosFiltrados.length && alumnosFiltrados.length > 0} onChange={seleccionarTodosActuales} className="cursor-pointer"/></th>
-                      <th className="px-4 py-4 font-bold">Nombre Completo</th>
-                      <th className="px-4 py-4 font-bold">Matrícula / QR</th>
-                      <th className="px-4 py-4 font-bold">Sem / Grupo / Turno</th>
-                      <th className="px-4 py-4 font-bold">Datos del Tutor</th>
-                      <th className="px-4 py-4 font-bold text-center">Boletos Disp.</th>
-                      <th className="px-4 py-4 font-bold text-center">Acciones</th>
+                      <th className="px-6 py-4 font-bold">Fecha / Hora</th>
+                      <th className="px-6 py-4 font-bold">Concepto</th>
+                      <th className="px-6 py-4 font-bold text-right">Monto</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {alumnosFiltrados.map((al) => (
-                      <tr key={al.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
-                        <td className="px-3 py-4 text-center"><input type="checkbox" checked={idsSeleccionados.includes(al.id)} onChange={() => toggleSeleccionAlumno(al.id)} className="cursor-pointer"/></td>
-                        <td className="px-4 py-4 text-white font-bold">{al.nombre_completo}</td>
-                        <td className="px-4 py-4">
-                          <p className="text-slate-300 font-mono text-xs">{al.matricula || 'Sin Matrícula'}</p>
-                          {al.codigo_qr ? <span className="bg-indigo-900/40 text-indigo-300 border border-indigo-800 px-1.5 py-0.5 rounded font-mono text-[10px] inline-block mt-1">🏷️ {al.codigo_qr}</span> : <span className="text-slate-600 italic text-[10px] block mt-1">Sin QR</span>}
-                        </td>
-                        <td className="px-4 py-4 text-xs">
-                          <p className="text-white font-bold">{al.semestre} - Grupo {al.grupo}</p>
-                          <p className="text-slate-400">{al.turno}</p>
-                        </td>
-                        <td className="px-4 py-4 text-xs">
-                          <p className="text-slate-300">✉️ {al.correo_tutor || 'No registrado'}</p>
-                          <p className="text-slate-400">📞 {al.telefono_tutor || 'No registrado'}</p>
-                        </td>
-                        {/* FORMATO CAMBIADO A BOLETOS ENTEROS */}
-                        <td className="px-4 py-4 text-center font-black text-emerald-400 text-lg">
-                          {al.saldo_actual || 0} <span className="text-sm">🎟️</span>
-                        </td>
-                        <td className="px-4 py-4 text-center">
-                          <div className="flex justify-center gap-1">
-                            <button onClick={() => abrirModalEditarAlumno(al)} className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-2 py-1 rounded text-xs font-bold transition-colors">✏️</button>
-                            <button onClick={() => eliminarAlumnoIndividual(al.id, al.nombre_completo)} className="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700 px-2 py-1 rounded text-xs font-bold transition-colors">🗑️</button>
-                          </div>
-                        </td>
+                    {retiros.map((r) => (
+                      <tr key={r.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
+                        <td className="px-6 py-4 text-slate-300">{new Date(r.created_at).toLocaleString('es-MX')}</td>
+                        <td className="px-6 py-4 text-white font-medium">{r.concepto}</td>
+                        <td className="px-6 py-4 text-right font-black text-red-400">- ${r.monto.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -882,41 +730,10 @@ export default function PanelAdministracion() {
               )}
             </div>
           </div>
-              <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">💳 Auditoría de Retiros (Hoy)</h2>
-                <button onClick={cargarDatosDashboard} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm font-bold transition-colors border border-slate-700">
-                  🔄 Actualizar
-                </button>
-              </div>
-              <div className="overflow-x-auto p-2">
-                {retiros.length === 0 ? (
-                  <p className="text-center text-slate-500 py-10 font-bold">No se han registrado retiros hoy.</p>
-                ) : (
-                  <table className="w-full text-left text-sm">
-                    <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
-                      <tr>
-                        <th className="px-6 py-4 font-bold">Fecha / Hora</th>
-                        <th className="px-6 py-4 font-bold">Concepto</th>
-                        <th className="px-6 py-4 font-bold text-right">Monto</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {retiros.map((r) => (
-                        <tr key={r.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
-                          <td className="px-6 py-4 text-slate-300">{new Date(r.created_at).toLocaleString('es-MX')}</td>
-                          <td className="px-6 py-4 text-white font-medium">{r.concepto}</td>
-                          <td className="px-6 py-4 text-right font-black text-red-400">- ${r.monto.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-         </div>
+        </>
       )}
 
-      {/* ================= CONTENIDO: VISTA SISTEMA (ALUMNOS) ================= */}
+      {/* ================= CONTENIDO: VISTA SISTEMA (SOLO SUPERADMIN) ================= */}
       {vista === 'SISTEMA' && rol === 'SUPERADMIN' && (
         <div className="max-w-6xl mx-auto space-y-8">
           
@@ -928,21 +745,35 @@ export default function PanelAdministracion() {
               Como Super Admin, puedes entrar a cualquier consola directamente sin requerir contraseñas adicionales.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <a href="/" target="_blank" className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group">
+              <a 
+                href="/" 
+                target="_blank" 
+                className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group"
+              >
                 <span className="text-2xl">🎟️</span>
                 <div>
                   <p className="text-white font-bold text-sm group-hover:text-indigo-400">Punto de Venta</p>
                   <p className="text-slate-500 text-xs">Venta de boletos / Escáner</p>
                 </div>
               </a>
-              <a href="/Chofer" target="_blank" className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group">
+
+              <a 
+                href="/Chofer" 
+                target="_blank" 
+                className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group"
+              >
                 <span className="text-2xl">🚌</span>
                 <div>
                   <p className="text-white font-bold text-sm group-hover:text-indigo-400">Módulo de Chofer</p>
                   <p className="text-slate-500 text-xs">Validación en unidad</p>
                 </div>
               </a>
-              <a href="/Coordinador" target="_blank" className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group">
+
+              <a 
+                href="/Coordinador" 
+                target="_blank" 
+                className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group"
+              >
                 <span className="text-2xl">📋</span>
                 <div>
                   <p className="text-white font-bold text-sm group-hover:text-indigo-400">Módulo de Coordinador</p>
@@ -967,17 +798,43 @@ export default function PanelAdministracion() {
                   onChange={(e) => setBusquedaAlumno(e.target.value)}
                   className="bg-[#020617] border border-slate-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-indigo-500 flex-1 md:w-40"
                 />
-                <button onClick={descargarBaseDatosAlumnos} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-slate-700 font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1">📥 Descargar BD</button>
-                <button onClick={() => setMostrarModalMasivo(true)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1">📁 Carga Masiva</button>
-                <button onClick={() => setMostrarModalEliminarMasivo(true)} className="bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-700 font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1">🗑️ Eliminar Generación</button>
-                <button onClick={abrirModalNuevoAlumno} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1">➕ Nuevo</button>
+                
+                <button 
+                  onClick={descargarBaseDatosAlumnos}
+                  className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-slate-700 font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1"
+                >
+                  📥 Descargar BD
+                </button>
+
+                <button 
+                  onClick={() => setMostrarModalMasivo(true)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1"
+                >
+                  📁 Carga Masiva
+                </button>
+
+                <button 
+                  onClick={() => setMostrarModalEliminarMasivo(true)}
+                  className="bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-700 font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1"
+                >
+                  🗑️ Eliminar Generación
+                </button>
+
+                <button 
+                  onClick={abrirModalNuevoAlumno}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition-colors shrink-0 flex items-center gap-1"
+                >
+                  ➕ Nuevo
+                </button>
               </div>
             </div>
 
             {idsSeleccionados.length > 0 && (
               <div className="bg-red-950/40 border-b border-red-900/50 px-6 py-3 flex justify-between items-center">
                 <span className="text-red-300 text-xs font-bold">{idsSeleccionados.length} alumnos seleccionados para borrado</span>
-                <button onClick={eliminarSeleccionadosDirecto} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Eliminar Selección Marcada</button>
+                <button onClick={eliminarSeleccionadosDirecto} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                  Eliminar Selección Marcada
+                </button>
               </div>
             )}
 
@@ -990,7 +847,14 @@ export default function PanelAdministracion() {
                 <table className="w-full text-left text-sm">
                   <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
                     <tr>
-                      <th className="px-3 py-4 text-center"><input type="checkbox" checked={idsSeleccionados.length === alumnosFiltrados.length && alumnosFiltrados.length > 0} onChange={seleccionarTodosActuales} className="cursor-pointer"/></th>
+                      <th className="px-3 py-4 text-center">
+                        <input 
+                          type="checkbox" 
+                          checked={idsSeleccionados.length === alumnosFiltrados.length && alumnosFiltrados.length > 0} 
+                          onChange={seleccionarTodosActuales}
+                          className="cursor-pointer"
+                        />
+                      </th>
                       <th className="px-4 py-4 font-bold">Nombre Completo</th>
                       <th className="px-4 py-4 font-bold">Matrícula / QR</th>
                       <th className="px-4 py-4 font-bold">Sem / Grupo / Turno</th>
@@ -1002,11 +866,24 @@ export default function PanelAdministracion() {
                   <tbody>
                     {alumnosFiltrados.map((al) => (
                       <tr key={al.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
-                        <td className="px-3 py-4 text-center"><input type="checkbox" checked={idsSeleccionados.includes(al.id)} onChange={() => toggleSeleccionAlumno(al.id)} className="cursor-pointer"/></td>
+                        <td className="px-3 py-4 text-center">
+                          <input 
+                            type="checkbox" 
+                            checked={idsSeleccionados.includes(al.id)}
+                            onChange={() => toggleSeleccionAlumno(al.id)}
+                            className="cursor-pointer"
+                          />
+                        </td>
                         <td className="px-4 py-4 text-white font-bold">{al.nombre_completo}</td>
                         <td className="px-4 py-4">
                           <p className="text-slate-300 font-mono text-xs">{al.matricula || 'Sin Matrícula'}</p>
-                          {al.codigo_qr ? <span className="bg-indigo-900/40 text-indigo-300 border border-indigo-800 px-1.5 py-0.5 rounded font-mono text-[10px] inline-block mt-1">🏷️ {al.codigo_qr}</span> : <span className="text-slate-600 italic text-[10px] block mt-1">Sin QR</span>}
+                          {al.codigo_qr ? (
+                            <span className="bg-indigo-900/40 text-indigo-300 border border-indigo-800 px-1.5 py-0.5 rounded font-mono text-[10px] inline-block mt-1">
+                              🏷️ {al.codigo_qr}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600 italic text-[10px] block mt-1">Sin QR</span>
+                          )}
                         </td>
                         <td className="px-4 py-4 text-xs">
                           <p className="text-white font-bold">{al.semestre} - Grupo {al.grupo}</p>
@@ -1016,77 +893,23 @@ export default function PanelAdministracion() {
                           <p className="text-slate-300">✉️ {al.correo_tutor || 'No registrado'}</p>
                           <p className="text-slate-400">📞 {al.telefono_tutor || 'No registrado'}</p>
                         </td>
-                        <td className="px-4 py-4 text-right font-black text-emerald-400">${(al.saldo_actual || 0).toFixed(2)}</td>
+                        <td className="px-4 py-4 text-right font-black text-emerald-400">
+                          ${(al.saldo_actual || 0).toFixed(2)}
+                        </td>
                         <td className="px-4 py-4 text-center">
                           <div className="flex justify-center gap-1">
-                            <button onClick={() => abrirModalEditarAlumno(al)} className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-2 py-1 rounded text-xs font-bold transition-colors">✏️</button>
-                            <button onClick={() => eliminarAlumnoIndividual(al.id, al.nombre_completo)} className="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700 px-2 py-1 rounded text-xs font-bold transition-colors">🗑️</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================= CONTENIDO: VISTA PERSONAL (NUEVO) ================= */}
-      {vista === 'PERSONAL' && rol === 'SUPERADMIN' && (
-        <div className="max-w-6xl mx-auto space-y-8">
-          <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
-            <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/50">
-              <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">👥 Gestión de Personal ({personal.length})</h2>
-                <p className="text-slate-400 text-xs mt-1">Cajeros, Choferes, Coordinadores y Administradores</p>
-              </div>
-              <button onClick={abrirModalNuevoPersonal} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded-xl text-sm transition-colors flex items-center gap-2">
-                ➕ Registrar Personal
-              </button>
-            </div>
-
-            <div className="overflow-x-auto p-2">
-              {cargandoPersonal ? (
-                <p className="text-center text-slate-500 py-10 font-bold">Cargando catálogo de personal...</p>
-              ) : personal.length === 0 ? (
-                <p className="text-center text-slate-500 py-10 font-bold">No hay personal registrado en el sistema.</p>
-              ) : (
-                <table className="w-full text-left text-sm">
-                  <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
-                    <tr>
-                      <th className="px-4 py-4 font-bold">Nombre / Correo (Usuario)</th>
-                      <th className="px-4 py-4 font-bold">Rol</th>
-                      <th className="px-4 py-4 font-bold">Detalles Asignados</th>
-                      <th className="px-4 py-4 font-bold">Teléfono</th>
-                      <th className="px-4 py-4 font-bold text-center">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {personal.map((p) => (
-                      <tr key={p.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
-                        <td className="px-4 py-4">
-                          <p className="text-white font-bold">{p.nombre}</p>
-                          <p className="text-slate-400 text-xs">✉️ {p.correo}</p>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className="bg-indigo-900/40 text-indigo-300 border border-indigo-800 px-2 py-1 rounded text-xs font-black uppercase">
-                            {p.rol}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 text-xs text-slate-300">
-                          {p.rol === 'CHOFER' && <p>Ruta: <span className="font-bold text-white">{p.ruta}</span> ({p.tipo_transporte})</p>}
-                          {p.rol === 'COORDINADOR' && <p>Semestre: <span className="font-bold text-white">{p.semestre_asignado}</span> - Turno: {p.turno}</p>}
-                          {(p.rol === 'CAJA' || p.rol === 'ADMIN' || p.rol === 'SUPERADMIN') && <p className="text-slate-500 italic">Acceso General</p>}
-                        </td>
-                        <td className="px-4 py-4 text-slate-300 text-xs">
-                          📞 {p.telefono || 'N/A'}
-                        </td>
-                        <td className="px-4 py-4 text-center">
-                          <div className="flex justify-center gap-2">
-                            <button onClick={() => abrirModalEditarPersonal(p)} className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">✏️ Editar</button>
-                            <button onClick={() => eliminarPersonal(p.id, p.nombre)} className="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">🗑️ Borrar</button>
+                            <button 
+                              onClick={() => abrirModalEditarAlumno(al)}
+                              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-2 py-1 rounded text-xs font-bold transition-colors"
+                            >
+                              ✏️
+                            </button>
+                            <button 
+                              onClick={() => eliminarAlumnoIndividual(al.id, al.nombre_completo)}
+                              className="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700 px-2 py-1 rounded text-xs font-bold transition-colors"
+                            >
+                              🗑️
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1103,104 +926,291 @@ export default function PanelAdministracion() {
         System by <span className="font-bold text-slate-500">Arturo Díaz</span>
       </div>
 
-      {/* ================= MODALES EXISTENTES (ALUMNOS, HISTORIAL, CORTE, REPORTES) ================= */}
-      {/* ... [Tus modales de alumnos, carga masiva e historiales permanecen exactamente igual, los omito visualmente aquí pero van integrados] ... */}
-
-      {/* ================= MODAL: NUEVO / EDITAR PERSONAL ================= */}
-      {mostrarModalPersonal && (
+      {/* ================= MODAL: CARGA MASIVA DE ALUMNOS ================= */}
+      {mostrarModalMasivo && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
-          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-white">
-                {personalEditando ? '✏️ Editar Personal' : '➕ Registrar Personal'}
+          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                📁 Carga Masiva de Alumnos
               </h2>
-              <button onClick={() => setMostrarModalPersonal(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
+              <button onClick={() => setMostrarModalMasivo(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
             </div>
 
-            <form onSubmit={guardarPersonal} className="space-y-4">
+            <p className="text-slate-400 text-xs mb-4">
+              Sube tus alumnos adjuntando un archivo `.csv` o pegando la lista con todos los campos requeridos.
+            </p>
+
+            <div className="flex gap-3 mb-4">
+              <button 
+                onClick={descargarPlantilla}
+                className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-800/50 px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+              >
+                📥 Descargar Plantilla .CSV
+              </button>
+
+              <label className="cursor-pointer bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-300 border border-emerald-800 px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1">
+                📂 Seleccionar Archivo
+                <input type="file" accept=".csv, .txt" onChange={(e) => cargarArchivoMasivo(e, 'CARGA')} className="hidden" />
+              </label>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs font-bold text-slate-400 uppercase mb-2">
+                Formato por línea: <br />
+                <span className="text-indigo-400 font-mono">Nombre, Matrícula, Semestre, Grupo, Turno, Código QR, Correo Tutor, Teléfono Tutor, Saldo</span>
+              </label>
+              <textarea 
+                rows={8}
+                value={textoMasivo}
+                onChange={(e) => setTextoMasivo(e.target.value)}
+                placeholder={"Ejemplo:\nJuan Perez Lopez, 2026-001, 6º, 1, Matutino, QR-1001, tutor@email.com, 5512345678, 0"}
+                className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-xs font-mono outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                type="button" 
+                onClick={() => setMostrarModalMasivo(false)}
+                className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors text-sm"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button" 
+                onClick={procesarCargaMasiva}
+                disabled={cargandoMasivo || !textoMasivo.trim()}
+                className="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors text-sm disabled:opacity-50"
+              >
+                {cargandoMasivo ? 'Procesando...' : '🚀 Procesar e Insertar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: ELIMINACIÓN MASIVA POR MATRÍCULAS ================= */}
+      {mostrarModalEliminarMasivo && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-red-900/50 p-6 md:p-8 rounded-2xl w-full max-w-xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-red-400 flex items-center gap-2">
+                🗑️ Eliminar Generación por Base de Datos
+              </h2>
+              <button onClick={() => setMostrarModalEliminarMasivo(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
+            </div>
+
+            <p className="text-slate-400 text-xs mb-4">
+              Descarga la plantilla, llénala con los datos (Nombre, Matricula, Semestre, Grupo, Turno) y súbela. El sistema extraerá automáticamente la matrícula para eliminar a los alumnos.
+            </p>
+
+            <div className="flex gap-3 mb-4">
+              <button 
+                onClick={descargarPlantillaEliminar}
+                className="bg-slate-800 hover:bg-slate-700 text-red-400 border border-red-800/50 px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+              >
+                📥 Descargar BD para Eliminar
+              </button>
+
+              <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 px-3 py-2 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1">
+                📂 Subir Archivo a Eliminar
+                <input type="file" accept=".csv, .txt" onChange={(e) => cargarArchivoMasivo(e, 'ELIMINAR')} className="hidden" />
+              </label>
+            </div>
+
+            <div className="mb-4">
+              <textarea 
+                rows={6}
+                value={textoEliminarMasivo}
+                onChange={(e) => setTextoEliminarMasivo(e.target.value)}
+                placeholder={"Las matrículas extraídas aparecerán aquí..."}
+                className="w-full bg-[#020617] border border-red-900/40 rounded-xl p-3 text-white text-xs font-mono outline-none focus:border-red-500"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                type="button" 
+                onClick={() => setMostrarModalEliminarMasivo(false)}
+                className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors text-sm"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button" 
+                onClick={procesarEliminacionMasiva}
+                disabled={!textoEliminarMasivo.trim()}
+                className="w-1/2 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-colors text-sm disabled:opacity-50"
+              >
+                ⚠️ Ejecutar Borrado Masivo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: NUEVO / EDITAR ALUMNO ================= */}
+      {mostrarModalAlumno && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-white">
+                {alumnoEditando ? '✏️ Editar Alumno' : '➕ Registrar Alumno'}
+              </h2>
+              <button onClick={() => { setMostrarModalAlumno(false); detenerCamara(); }} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
+            </div>
+
+            <form onSubmit={guardarAlumno} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Rol en el Sistema</label>
-                <select 
-                  value={formPersonalRol} 
-                  onChange={(e) => setFormPersonalRol(e.target.value)}
-                  className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-400 font-bold"
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Nombre Completo</label>
+                <input 
+                  type="text" 
+                  required 
+                  value={formNombre} 
+                  onChange={(e) => setFormNombre(e.target.value)}
+                  placeholder="Ej. Juan Pérez López"
+                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" 
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Matrícula / ID</label>
+                  <input 
+                    type="text" 
+                    value={formMatricula} 
+                    onChange={(e) => setFormMatricula(e.target.value)}
+                    placeholder="Ej. 2026-001"
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-mono" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Semestre</label>
+                  <select 
+                    value={formSemestre} 
+                    onChange={(e) => setFormSemestre(e.target.value)}
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500"
+                  >
+                    <option value="1º">1º Semestre</option>
+                    <option value="2º">2º Semestre</option>
+                    <option value="3º">3º Semestre</option>
+                    <option value="4º">4º Semestre</option>
+                    <option value="5º">5º Semestre</option>
+                    <option value="6º">6º Semestre</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Grupo (1 a 7)</label>
+                  <select 
+                    value={formGrupo} 
+                    onChange={(e) => setFormGrupo(e.target.value)}
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500"
+                  >
+                    <option value="1">Grupo 1</option>
+                    <option value="2">Grupo 2</option>
+                    <option value="3">Grupo 3</option>
+                    <option value="4">Grupo 4</option>
+                    <option value="5">Grupo 5</option>
+                    <option value="6">Grupo 6</option>
+                    <option value="7">Grupo 7</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Turno</label>
+                  <select 
+                    value={formTurno} 
+                    onChange={(e) => setFormTurno(e.target.value)}
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500"
+                  >
+                    <option value="Matutino">Matutino</option>
+                    <option value="Vespertino">Vespertino</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-bold text-indigo-400 uppercase">Código QR Vinculado</label>
+                  <button 
+                    type="button"
+                    onClick={usandoCamara ? () => detenerCamara() : iniciarCamara}
+                    className="cursor-pointer text-xs bg-indigo-900/60 hover:bg-indigo-800 text-indigo-300 border border-indigo-700 px-2 py-1 rounded font-bold transition-colors"
+                  >
+                    {usandoCamara ? '⏹️ Detener Cámara' : '📷 Abrir Cámara'}
+                  </button>
+                </div>
+
+                {usandoCamara && (
+                  <div className="w-full h-48 bg-black rounded-xl overflow-hidden mb-2 relative">
+                    <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 border-2 border-indigo-500/50 m-4 rounded pointer-events-none"></div>
+                  </div>
+                )}
+
+                <input 
+                  type="text" 
+                  value={formQr} 
+                  onChange={(e) => setFormQr(e.target.value)}
+                  placeholder="Escribe o escanea clave QR..."
+                  className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-400 font-mono" 
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Correo Tutor</label>
+                  <input 
+                    type="email" 
+                    value={formCorreoTutor} 
+                    onChange={(e) => setFormCorreoTutor(e.target.value)}
+                    placeholder="tutor@ejemplo.com"
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono Tutor</label>
+                  <input 
+                    type="tel" 
+                    value={formTelefonoTutor} 
+                    onChange={(e) => setFormTelefonoTutor(e.target.value)}
+                    placeholder="5512345678"
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-mono" 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Saldo Inicial / Ajuste ($)</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  value={formSaldo} 
+                  onChange={(e) => setFormSaldo(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-bold" 
+                />
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => { setMostrarModalAlumno(false); detenerCamara(); }}
+                  className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors text-sm"
                 >
-                  <option value="CAJA">Caja (Ventas)</option>
-                  <option value="CHOFER">Chofer (Unidad)</option>
-                  <option value="COORDINADOR">Coordinador (Paradas)</option>
-                  <option value="ADMIN">Administrador</option>
-                  <option value="SUPERADMIN">Super Administrador</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Nombre Completo</label>
-                  <input type="text" required value={formPersonalNombre} onChange={(e) => setFormPersonalNombre(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Correo (Usuario de Acceso)</label>
-                  <input type="email" required value={formPersonalCorreo} onChange={(e) => setFormPersonalCorreo(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono</label>
-                  <input type="tel" required value={formPersonalTelefono} onChange={(e) => setFormPersonalTelefono(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-mono" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contraseña</label>
-                  <input type="text" required value={formPersonalPassword} onChange={(e) => setFormPersonalPassword(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-mono" />
-                </div>
-              </div>
-
-              {/* CAMPOS CONDICIONALES SEGÚN ROL */}
-              {formPersonalRol === 'CHOFER' && (
-                <div className="p-4 bg-indigo-900/10 border border-indigo-900/30 rounded-xl mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-indigo-400 uppercase mb-1">Ruta Asignada</label>
-                    <input type="text" required value={formPersonalRuta} onChange={(e) => setFormPersonalRuta(e.target.value)} placeholder="Ej. Ruta 1 - Centro" className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-indigo-400 uppercase mb-1">Tipo de Transporte</label>
-                    <select value={formPersonalTipoTransporte} onChange={(e) => setFormPersonalTipoTransporte(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500">
-                      <option value="Autobús">Autobús</option>
-                      <option value="Van">Van / Camioneta</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {formPersonalRol === 'COORDINADOR' && (
-                <div className="p-4 bg-emerald-900/10 border border-emerald-900/30 rounded-xl mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-emerald-400 uppercase mb-1">Semestre Asignado</label>
-                    <select value={formPersonalSemestre} onChange={(e) => setFormPersonalSemestre(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500">
-                      <option value="1º">1º Semestre</option>
-                      <option value="2º">2º Semestre</option>
-                      <option value="3º">3º Semestre</option>
-                      <option value="4º">4º Semestre</option>
-                      <option value="5º">5º Semestre</option>
-                      <option value="6º">6º Semestre</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-emerald-400 uppercase mb-1">Turno</label>
-                    <select value={formPersonalTurno} onChange={(e) => setFormPersonalTurno(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500">
-                      <option value="Matutino">Matutino</option>
-                      <option value="Vespertino">Vespertino</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-6 flex gap-3">
-                <button type="button" onClick={() => setMostrarModalPersonal(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors text-sm">
                   Cancelar
                 </button>
-                <button type="submit" disabled={guardandoPersonal} className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors text-sm">
-                  {guardandoPersonal ? 'Guardando...' : 'Guardar Personal'}
+                <button 
+                  type="submit" 
+                  disabled={guardandoAlumno}
+                  className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors text-sm"
+                >
+                  {guardandoAlumno ? 'Guardando...' : 'Guardar Alumno'}
                 </button>
               </div>
             </form>
@@ -1208,8 +1218,227 @@ export default function PanelAdministracion() {
         </div>
       )}
 
-      {/* AQUÍ VAN TUS MODALES DE ALUMNOS, CARGA MASIVA Y FINANZAS (Corte Z, etc.) DE FORMA HABITUAL */}
-      
+      {/* ================= MODAL: REPORTE POR RANGO ================= */}
+      {mostrarReporteRango && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-50">
+          <div className="bg-[#0f172a] rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-700 p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black text-white flex items-center gap-2">📅 Balance por Rango de Fechas</h2>
+              <button onClick={() => setMostrarReporteRango(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-4 mb-8">
+              <div className="flex-1">
+                <label className="block text-sm font-bold text-slate-400 mb-2">Fecha Inicio:</label>
+                <input type="date" value={fechaInicioRango} onChange={(e) => setFechaInicioRango(e.target.value)} style={{ colorScheme: 'dark' }} className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl p-3 text-white font-bold outline-none focus:border-indigo-400" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-bold text-slate-400 mb-2">Fecha Fin:</label>
+                <input type="date" value={fechaFinRango} onChange={(e) => setFechaFinRango(e.target.value)} style={{ colorScheme: 'dark' }} className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl p-3 text-white font-bold outline-none focus:border-indigo-400" />
+              </div>
+              <div className="flex items-end">
+                <button onClick={calcularRangoFechas} disabled={calculandoRango} className="w-full md:w-auto bg-[#10b981] hover:bg-[#059669] text-white font-bold py-3 px-6 rounded-xl transition-colors">
+                  {calculandoRango ? 'Calculando...' : 'Calcular'}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-emerald-900/20 border border-emerald-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                <p className="text-emerald-400/80 text-xs font-bold uppercase mb-1">Ingresos</p>
+                <p className="text-emerald-400 font-black text-2xl">+ ${statsRango.ventas.toFixed(2)}</p>
+              </div>
+              <div className="bg-pink-900/20 border border-pink-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                <p className="text-pink-400/80 text-[10px] md:text-xs font-bold uppercase mb-1">Boletos</p>
+                <p className="text-pink-400 font-black text-2xl">{statsRango.boletos} bts</p>
+              </div>
+              <div className="bg-red-900/20 border border-red-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                <p className="text-red-400/80 text-xs font-bold uppercase mb-1">Retiros</p>
+                <p className="text-red-400 font-black text-2xl">- ${statsRango.retiros.toFixed(2)}</p>
+              </div>
+              <div className="bg-indigo-900/20 border border-indigo-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                <p className="text-indigo-400/80 text-xs font-bold uppercase mb-1">Neto</p>
+                <p className="text-indigo-400 font-black text-2xl">${statsRango.total.toFixed(2)}</p>
+              </div>
+            </div>
+
+            {rangoCalculado && (
+              <button onClick={generarDocumentoRango} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors flex justify-center items-center gap-2">
+                🖨️ Imprimir / Descargar PDF del Reporte
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: GENERAR CORTE Z ================= */}
+      {mostrarCorte && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-8 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">🖨️ Generar Corte Z</h2>
+              <button onClick={() => setMostrarCorte(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
+            </div>
+            
+            <label className="block text-sm font-bold text-slate-400 mb-2">Selecciona la Fecha:</label>
+            <div className="relative mb-6">
+              <input 
+                type="date" 
+                value={fechaCorte} 
+                onChange={(e) => setFechaCorte(e.target.value)} 
+                style={{ colorScheme: 'dark' }}
+                className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl p-4 text-white font-bold outline-none focus:border-indigo-400 cursor-pointer" 
+              />
+            </div>
+
+            <button onClick={generarCorteZ} className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-bold py-4 rounded-xl transition-colors shadow-lg">
+              Generar y Ver Ticket
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: HISTORIAL COMPLETO ================= */}
+      {mostrarHistorial && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40">
+          <div className="bg-[#0f172a] rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden border border-slate-700 flex flex-col max-h-[90vh]">
+            <div className="bg-slate-900 p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-white">Historial Financiero</h2>
+                <div className="mt-2 flex items-center gap-3">
+                  <label className="text-sm font-bold text-slate-400">Consultar fecha:</label>
+                  <input 
+                    type="date" 
+                    value={fechaHistorial} 
+                    onChange={(e) => setFechaHistorial(e.target.value)}
+                    style={{ colorScheme: 'dark' }} 
+                    className="bg-[#020617] border border-indigo-500/50 rounded-lg p-2.5 text-sm text-white font-bold outline-none cursor-pointer" 
+                  />
+                </div>
+              </div>
+              <button onClick={() => setMostrarHistorial(false)} className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-3 rounded-xl font-bold w-full md:w-auto">Cerrar Historial</button>
+            </div>
+
+            <div className="p-4 md:p-6 overflow-y-auto flex-grow bg-[#0f172a]">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-emerald-900/20 border border-emerald-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                  <p className="text-emerald-400/80 text-xs font-bold uppercase mb-1">Total Ingresos</p>
+                  <p className="text-emerald-400 font-black text-2xl">+ ${statsHistorial.ventas.toFixed(2)}</p>
+                </div>
+                <div className="bg-pink-900/20 border border-pink-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                  <p className="text-pink-400/80 text-[10px] md:text-xs font-bold uppercase mb-1">Boletos Vendidos</p>
+                  <p className="text-pink-400 font-black text-2xl">{statsHistorial.boletos} bts</p>
+                </div>
+                <div className="bg-red-900/20 border border-red-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                  <p className="text-red-400/80 text-xs font-bold uppercase mb-1">Total Retiros</p>
+                  <p className="text-red-400 font-black text-2xl">- ${statsHistorial.retiros.toFixed(2)}</p>
+                </div>
+                <div className="bg-indigo-900/20 border border-indigo-900/50 p-4 rounded-xl text-center flex flex-col justify-center">
+                  <p className="text-indigo-400/80 text-xs font-bold uppercase mb-1">Neto en Caja</p>
+                  <p className="text-indigo-400 font-black text-2xl">${statsHistorial.total.toFixed(2)}</p>
+                </div>
+              </div>
+
+              {historialUnificado.length === 0 ? (
+                <p className="text-slate-500 text-center py-10 font-bold">No hay movimientos en esta fecha.</p>
+              ) : (
+                <div className="overflow-x-auto bg-[#020617] rounded-xl border border-slate-800 p-2">
+                  <table className="w-full text-left text-sm min-w-[700px]">
+                    <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
+                      <tr>
+                        <th className="px-4 py-3 font-bold">Hora</th>
+                        <th className="px-4 py-3 font-bold">Folio / Tipo</th>
+                        <th className="px-4 py-3 font-bold">Descripción</th>
+                        <th className="px-4 py-3 font-bold text-right">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historialUnificado.map((mov, i) => (
+                        <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+                          <td className="px-4 py-4 text-slate-400">{new Date(mov.fecha).toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})}</td>
+                          <td className="px-4 py-4">
+                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${mov.tipo === 'VENTA' ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-800' : 'bg-red-900/40 text-red-400 border border-red-800'}`}>
+                              {mov.folio}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-white">{mov.descripcion}</td>
+                          <td className={`px-4 py-4 text-right font-black ${mov.tipo === 'VENTA' ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {mov.tipo === 'VENTA' ? '+' : '-'} ${mov.monto.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= DOCUMENTO PARA IMPRIMIR (CORTE Z O REPORTE) ================= */}
+      {documentoActual && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-[100] p-4 print:p-0 print:bg-white print:block">
+          <style>{`
+            @media print { 
+              @page { margin: 0; size: 80mm auto; } 
+              body { background: white; -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
+            }
+          `}</style>
+          <div className="bg-white text-black p-5 w-full max-w-[320px] print:w-[80mm] print:max-w-[80mm] print:p-2 print:m-0 font-mono shadow-2xl print:shadow-none text-[12px] md:text-[14px] print:text-[12px] flex flex-col rounded-xl print:rounded-none">
+            
+            <div className="flex justify-center mb-3">
+              <img src="/logo negro.png" alt="Logo" className="h-16 w-auto object-contain grayscale" onError={(e) => e.currentTarget.style.display = 'none'} />
+            </div>
+            
+            <div className="text-center font-bold text-lg mb-1">SITE - FINANZAS</div>
+            
+            <div className="text-center mb-4 border-b border-black pb-3 mt-2">
+              <p className="font-bold text-xl uppercase">
+                {documentoActual.tipo === 'CORTE_Z' ? 'CORTE Z' : 'BALANCE GENERAL'}
+              </p>
+              <p className="text-[11px] mt-1">Impresión: {documentoActual.fechaImpresion}</p>
+            </div>
+
+            <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
+              {documentoActual.tipo === 'CORTE_Z' ? (
+                <p><span className="font-bold">Fecha de Corte:</span> {documentoActual.fechaCorte}</p>
+              ) : (
+                <>
+                  <p><span className="font-bold">Del:</span> {documentoActual.fechaInicio}</p>
+                  <p><span className="font-bold">Al:</span> {documentoActual.fechaFin}</p>
+                </>
+              )}
+            </div>
+
+            <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
+              <div className="flex justify-between font-bold"><span>CONCEPTO</span><span>MONTO</span></div>
+              <div className="flex justify-between mt-2"><span>(+) Ventas ({documentoActual.boletos} bts):</span><span>${documentoActual.ventas.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span>(-) Retiros/Gastos:</span><span>${documentoActual.retiros.toFixed(2)}</span></div>
+            </div>
+
+            <div className="space-y-2 mb-8 border-b border-black pb-3">
+              <div className="flex justify-between font-black text-lg"><span>TOTAL NETO:</span><span>${documentoActual.totalNeto.toFixed(2)}</span></div>
+            </div>
+
+            <div className="mt-8 border-t border-black pt-2 text-center w-4/5 mx-auto">
+              <p className="text-[10px] uppercase font-bold">Firma Administración</p>
+            </div>
+            
+            <div className="h-4"></div>
+            
+            <div className="flex flex-col gap-2 print:hidden mt-6">
+              <button onClick={() => window.print()} className="w-full bg-[#10b981] hover:bg-[#059669] text-white py-4 rounded-xl font-sans font-black text-lg transition-colors shadow-lg">
+                🖨️ IMPRIMIR / PDF
+              </button>
+              <button onClick={() => setDocumentoActual(null)} className="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 py-3 rounded-xl font-sans font-bold text-sm transition-colors">
+                Cerrar Ticket
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   )
 }
