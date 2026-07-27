@@ -130,17 +130,21 @@ export default function PantallaChofer() {
       // NUEVO: GUARDAR EL REGISTRO CON GPS EN SUPABASE
       const enlaceMaps = ubicacion
         ? `https://maps.google.com/?q=${ubicacion.lat},${ubicacion.lng}`
-        : 'Ubicación no disponible';
+        : '';
 
-      await supabase.from('registros_transporte').insert([
+      const { error: errorRegistro } = await supabase.from('registros_transporte').insert([
         {
           alumno_id: alumno.id,
-          alumno_nombre: alumno.nombre_completo,
-          tipo_movimiento: modoRuta,
-          enlace_maps: enlaceMaps,
+          matricula: alumno.matricula,
+          tipo_movimiento: modoRuta === 'ASCENSO' ? 'Ascenso' : 'Descenso',
+          ubicacion_gps: enlaceMaps,
+          unidad_transporte: '1' // Por defecto unidad 1 (puedes cambiarlo después)
         },
       ]);
 
+      if (errorRegistro) {
+        console.error("🚨 Error bloqueando inserción en Supabase:", errorRegistro);
+      }
       // -------------------------------------------------------------
       // NUEVO: DISPARAR CORREO AUTOMÁTICO AL TUTOR
       // -------------------------------------------------------------
