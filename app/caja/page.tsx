@@ -4,8 +4,15 @@ import { supabase } from '@/lib/supabase'
 import { Scanner } from '@yudiel/react-qr-scanner'
 
 export default function ModuloCajaViajes() {
+  // ================= ESTADOS DE AUTENTICACIÓN =================
+  const [usuarioAutenticado, setUsuarioAutenticado] = useState<any>(null)
+  const [loginCorreo, setLoginCorreo] = useState('')
+  const [loginPass, setLoginPass] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const [cargandoLogin, setCargandoLogin] = useState(false)
+
   // ================= ESTADOS GENERALES =================
-  const [cargando, setCargando] = useState(true)
+  const [cargando, setCargando] = useState(false)
   const [alumnos, setAlumnos] = useState<any[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [escanearVenta, setEscanearVenta] = useState(false)
@@ -38,9 +45,13 @@ export default function ModuloCajaViajes() {
   // ================= CONTROL DE TICKETS =================
   const [ticketActual, setTicketActual] = useState<any>(null)
 
+  // ================= EFECTOS =================
   useEffect(() => {
-    verificarTurnoYAlumnos()
-  }, [])
+    // Solo cargar datos si el usuario ya inició sesión
+    if (usuarioAutenticado) {
+      verificarTurnoYAlumnos()
+    }
+  }, [usuarioAutenticado])
 
   useEffect(() => {
     if (turnoActual) cargarStatsTurno(turnoActual.id, turnoActual.fecha_apertura)
@@ -50,6 +61,46 @@ export default function ModuloCajaViajes() {
     if (mostrarHistorial) cargarHistorialVentas()
   }, [fechaFiltro, mostrarHistorial])
 
+  // ================= FUNCIONES DE AUTENTICACIÓN =================
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoginError('')
+    setCargandoLogin(true)
+
+    try {
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('correo', loginCorreo)
+        .eq('contrasena', loginPass)
+        .eq('rol', 'cajera')
+        .single()
+
+      if (error || !data) {
+        setLoginError('Credenciales incorrectas o acceso denegado (Solo Cajeras).')
+      } else {
+        setUsuarioAutenticado(data)
+      }
+    } catch (err) {
+      setLoginError('Error de conexión con el servidor.')
+    } finally {
+      setCargandoLogin(false)
+    }
+  }
+
+  const handleLogout = () => {
+    if (turnoActual && turnoActual.estado === 'abierta') {
+      if (!window.confirm('⚠️ Tienes una caja abierta. ¿Seguro que deseas cerrar sesión sin hacer el corte?')) {
+        return
+      }
+    }
+    setUsuarioAutenticado(null)
+    setTurnoActual(null)
+    setLoginCorreo('')
+    setLoginPass('')
+  }
+
+  // ================= FUNCIONES DE CAJA =================
   const verificarTurnoYAlumnos = async () => {
     setCargando(true)
     try {
@@ -87,7 +138,6 @@ export default function ModuloCajaViajes() {
     setStatsTurno({ ventas: totalVentas, retiros: totalRetiros, boletos: totalBoletos })
   }
 
-  // ================= FUNCIONES DE CAJA =================
   const abrirCaja = async (e: React.FormEvent) => {
     e.preventDefault()
     const montoInicial = Number(fondoApertura)
@@ -204,14 +254,70 @@ export default function ModuloCajaViajes() {
     } else {
       alert('❌ Error al vincular el QR');
     }
-  };
+  }
 
   const alumnosFiltrados = alumnos.filter(a => 
     a.nombre_completo?.toLowerCase().includes(busqueda.toLowerCase()) || 
     (a.matricula && a.matricula.toLowerCase().includes(busqueda.toLowerCase()))
   ).slice(0, 15)
 
-  if (cargando) return <div className="min-h-screen bg-[#020617] flex justify-center items-center text-white font-bold text-xl">Iniciando Sistema...</div>
+  // ================= PANTALLA: LOGIN =================
+  if (!usuarioAutenticado) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-4">
+        <div className="bg-[#0f172a] p-8 rounded-3xl shadow-2xl border border-slate-800 max-w-md w-full text-center">
+          <div className="bg-white p-3 rounded-2xl inline-block mb-6 shadow-lg shadow-white/5">
+            <img src="/logo negro.png" alt="Logo" className="h-16 object-contain" />
+          </div>
+          <h1 className="text-[#fbbf24] text-2xl font-black mb-1 tracking-wide">MÓDULO DE CAJA</h1>
+          <p className="text-slate-400 mb-8 text-sm">Ingresa tus credenciales para operar</p>
+          
+          <form onSubmit={handleLogin} className="text-left space-y-5">
+            {loginError && (
+              <div className="bg-red-900/30 border border-red-500/50 text-red-400 p-3 rounded-lg text-sm font-bold text-center">
+                {loginError}
+              </div>
+            )}
+            <div>
+              <label className="text-slate-300 font-bold text-sm ml-1 mb-2 block">Correo Electrónico:</label>
+              <input 
+                type="email" 
+                required 
+                value={loginCorreo} 
+                onChange={(e) => setLoginCorreo(e.target.value)} 
+                className="w-full bg-[#020617] text-white p-4 rounded-xl border border-slate-700 text-center outline-none focus:border-indigo-500 transition-colors" 
+                placeholder="cajera@escuela.edu.mx"
+              />
+            </div>
+            <div>
+              <label className="text-slate-300 font-bold text-sm ml-1 mb-2 block">Contraseña:</label>
+              <input 
+                type="password" 
+                required 
+                value={loginPass} 
+                onChange={(e) => setLoginPass(e.target.value)} 
+                className="w-full bg-[#020617] text-white p-4 rounded-xl border border-slate-700 text-center outline-none focus:border-indigo-500 transition-colors" 
+                placeholder="••••••••"
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={cargandoLogin}
+              className={`w-full text-white font-bold py-4 rounded-xl transition-all text-lg shadow-lg mt-4 ${cargandoLogin ? 'bg-indigo-800 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/50'}`}
+            >
+              {cargandoLogin ? 'Verificando...' : '🔐 Iniciar Sesión'}
+            </button>
+          </form>
+        </div>
+        <div className="mt-10 text-center text-slate-600 text-sm">
+          System by <span className="font-bold">Arturo Díaz</span>
+        </div>
+      </div>
+    )
+  }
+
+  // ================= PANTALLA: CARGANDO DATOS =================
+  if (cargando) return <div className="min-h-screen bg-[#020617] flex justify-center items-center text-indigo-400 font-bold text-xl">Sincronizando Sistema...</div>
 
   // ================= PANTALLA: APERTURA DE CAJA =================
   if (!turnoActual) {
@@ -221,6 +327,13 @@ export default function ModuloCajaViajes() {
           <RenderTicket ticket={ticketActual} onClose={() => setTicketActual(null)} />
         ) : (
           <>
+            {/* Header Mini para Logout en Apertura */}
+            <div className="absolute top-4 right-4 print:hidden">
+              <button onClick={handleLogout} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-bold text-sm border border-slate-700 transition-colors">
+                Cerrar Sesión
+              </button>
+            </div>
+
             <div className="bg-[#0f172a] p-8 rounded-3xl shadow-2xl border border-slate-800 max-w-md w-full text-center mt-auto">
               <div className="bg-white p-3 rounded-2xl inline-block mb-6">
                 <img src="/logo negro.png" alt="Logo" className="h-16 object-contain" />
@@ -236,8 +349,8 @@ export default function ModuloCajaViajes() {
                 </button>
               </form>
             </div>
-            <div className="mt-auto pb-8 pt-10 text-center text-slate-500 text-sm">
-              System by <span className="font-bold">Arturo Díaz</span>
+            <div className="mt-auto pb-8 pt-10 text-center text-slate-600 text-sm">
+              System by <span className="font-bold text-slate-500">Arturo Díaz</span>
             </div>
           </>
         )}
@@ -255,17 +368,18 @@ export default function ModuloCajaViajes() {
         
         {/* HEADER CONTROLES */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
-          <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-slate-800 w-full md:w-fit">
-            <div className="bg-white p-1.5 rounded-lg h-12 w-12 flex items-center justify-center">
+          <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-slate-800 w-full md:w-fit relative overflow-hidden">
+            <div className="bg-white p-1.5 rounded-lg h-12 w-12 flex items-center justify-center z-10">
               <img src="/logo negro.png" alt="Logo" className="h-full object-contain" />
             </div>
-            <div>
+            <div className="z-10">
               <h1 className="text-[#fbbf24] font-black text-xl tracking-wide">SITE - VIAJES</h1>
-              <p className="text-emerald-400 text-xs font-bold flex items-center gap-1">✅ Caja Abierta</p>
+              <p className="text-emerald-400 text-xs font-bold flex items-center gap-1">✅ Caja Abierta • {usuarioAutenticado.nombre}</p>
             </div>
+            <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-[#020617] to-transparent opacity-50 z-0 pointer-events-none"></div>
           </div>
           
-          <div className="flex gap-2 w-full md:w-auto">
+          <div className="flex gap-2 w-full md:w-auto flex-wrap md:flex-nowrap">
             <button onClick={() => setMostrarHistorial(true)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-indigo-500/50">
               <span>📜 Historial</span>
             </button>
@@ -274,6 +388,9 @@ export default function ModuloCajaViajes() {
             </button>
             <button onClick={prepararCierre} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-red-500/50">
               <span>🔒 Cierre</span>
+            </button>
+            <button onClick={handleLogout} className="flex-none bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center border border-slate-600 ml-auto md:ml-2">
+              <span>🚪 Salir</span>
             </button>
           </div>
         </div>
