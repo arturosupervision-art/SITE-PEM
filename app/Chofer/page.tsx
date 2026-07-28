@@ -41,10 +41,10 @@ export default function PantallaChofer() {
         return;
       }
 
-      // Validación estricta de Rol (Debe ser "chofer")
+      // Validación de Rol (Acepta 'conductor' o 'chofer')
       const rolUsuario = data.rol ? data.rol.toLowerCase().trim() : '';
-      if (rolUsuario !== 'chofer') {
-        setErrorLogin('Acceso denegado (Solo personal con rol Chofer).');
+      if (rolUsuario !== 'conductor' && rolUsuario !== 'chofer') {
+        setErrorLogin('Acceso denegado (Solo personal con rol Conductor).');
         setCargandoLogin(false);
         return;
       }
