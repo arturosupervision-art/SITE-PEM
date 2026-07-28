@@ -1,14 +1,21 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { Scanner } from '@yudiel/react-qr-scanner'
 
 export default function ModuloCajaViajes() {
+  // ================= ESTADOS DE AUTENTICACIÓN =================
+  const [usuarioAutenticado, setUsuarioAutenticado] = useState<any>(null)
+  const [loginCorreo, setLoginCorreo] = useState('')
+  const [loginPass, setLoginPass] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const [cargandoLogin, setCargandoLogin] = useState(false)
+
   // ================= ESTADOS GENERALES =================
-  const [cargando, setCargando] = useState(true)
+  const [cargando, setCargando] = useState(false)
   const [alumnos, setAlumnos] = useState<any[]>([])
   const [busqueda, setBusqueda] = useState('')
-  const [escaneandoBusqueda, setEscaneandoBusqueda] = useState(false)
+  const [escanearVenta, setEscanearVenta] = useState(false)
   const [precioBoleto, setPrecioBoleto] = useState(20)
 
   // ================= ESTADOS DE CAJA =================
@@ -27,7 +34,7 @@ export default function ModuloCajaViajes() {
 
   const [mostrarHistorial, setMostrarHistorial] = useState(false)
   const [ventasDia, setVentasDia] = useState<any[]>([])
-  const [fechaFiltro, setFechaFiltro] = useState(new Date().toLocaleDateString('en-CA')) // Formato YYYY-MM-DD local
+  const [fechaFiltro, setFechaFiltro] = useState(new Date().toLocaleDateString('en-CA'))
   const [cargandoHistorial, setCargandoHistorial] = useState(false)
 
   // ================= ESTADOS QR =================
@@ -38,9 +45,13 @@ export default function ModuloCajaViajes() {
   // ================= CONTROL DE TICKETS =================
   const [ticketActual, setTicketActual] = useState<any>(null)
 
+  // ================= EFECTOS =================
   useEffect(() => {
-    verificarTurnoYAlumnos()
-  }, [])
+    // Solo cargar datos si el usuario ya inició sesión
+    if (usuarioAutenticado) {
+      verificarTurnoYAlumnos()
+    }
+  }, [usuarioAutenticado])
 
   useEffect(() => {
     if (turnoActual) cargarStatsTurno(turnoActual.id, turnoActual.fecha_apertura)
@@ -50,16 +61,54 @@ export default function ModuloCajaViajes() {
     if (mostrarHistorial) cargarHistorialVentas()
   }, [fechaFiltro, mostrarHistorial])
 
+  // ================= FUNCIONES DE AUTENTICACIÓN =================
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoginError('')
+    setCargandoLogin(true)
+
+    try {
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('correo', loginCorreo)
+        .eq('contrasena', loginPass)
+        .eq('rol', 'cajera')
+        .single()
+
+      if (error || !data) {
+        setLoginError('Credenciales incorrectas o acceso denegado (Solo Cajeras).')
+      } else {
+        setUsuarioAutenticado(data)
+      }
+    } catch (err) {
+      setLoginError('Error de conexión con el servidor.')
+    } finally {
+      setCargandoLogin(false)
+    }
+  }
+
+  const handleLogout = () => {
+    if (turnoActual && turnoActual.estado === 'abierta') {
+      if (!window.confirm('⚠️ Tienes una caja abierta. ¿Seguro que deseas cerrar sesión sin hacer el corte?')) {
+        return
+      }
+    }
+    setUsuarioAutenticado(null)
+    setTurnoActual(null)
+    setLoginCorreo('')
+    setLoginPass('')
+  }
+
+  // ================= FUNCIONES DE CAJA =================
   const verificarTurnoYAlumnos = async () => {
     setCargando(true)
     try {
-      // Verificar si hay turno abierto
       const { data: turno } = await supabase.from('turnos_caja').select('*').eq('estado', 'abierta').maybeSingle()
       
       if (turno) {
         setTurnoActual(turno)
       } else {
-        // Si no hay turno abierto, buscar el último turno cerrado para ver si se quedaron con dinero
         const { data: ultimoTurno } = await supabase.from('turnos_caja').select('efectivo_esperado, efectivo_entregado').eq('estado', 'cerrada').order('fecha_cierre', { ascending: false }).limit(1).maybeSingle()
         if (ultimoTurno) {
           const remanente = (ultimoTurno.efectivo_esperado || 0) - (ultimoTurno.efectivo_entregado || 0)
@@ -89,7 +138,6 @@ export default function ModuloCajaViajes() {
     setStatsTurno({ ventas: totalVentas, retiros: totalRetiros, boletos: totalBoletos })
   }
 
-  // ================= FUNCIONES DE CAJA =================
   const abrirCaja = async (e: React.FormEvent) => {
     e.preventDefault()
     const montoInicial = Number(fondoApertura)
@@ -170,7 +218,6 @@ export default function ModuloCajaViajes() {
 
   const cargarHistorialVentas = async () => {
     setCargandoHistorial(true)
-    // SOLUCIÓN ZONA HORARIA: Convertimos la fecha seleccionada a rango estricto UTC
     const inicioDia = new Date(`${fechaFiltro}T00:00:00.000`).toISOString()
     const finDia = new Date(`${fechaFiltro}T23:59:59.999`).toISOString()
 
@@ -207,11 +254,70 @@ export default function ModuloCajaViajes() {
     } else {
       alert('❌ Error al vincular el QR');
     }
-  };
+  }
 
-  const alumnosFiltrados = alumnos.filter(a => a.nombre_completo.toLowerCase().includes(busqueda.toLowerCase()) || (a.matricula && a.matricula.toLowerCase().includes(busqueda.toLowerCase()))).slice(0, 15)
+  const alumnosFiltrados = alumnos.filter(a => 
+    a.nombre_completo?.toLowerCase().includes(busqueda.toLowerCase()) || 
+    (a.matricula && a.matricula.toLowerCase().includes(busqueda.toLowerCase()))
+  ).slice(0, 15)
 
-  if (cargando) return <div className="min-h-screen bg-[#020617] flex justify-center items-center text-white font-bold text-xl">Iniciando Sistema...</div>
+  // ================= PANTALLA: LOGIN =================
+  if (!usuarioAutenticado) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-4">
+        <div className="bg-[#0f172a] p-8 rounded-3xl shadow-2xl border border-slate-800 max-w-md w-full text-center">
+          <div className="bg-white p-3 rounded-2xl inline-block mb-6 shadow-lg shadow-white/5">
+            <img src="/logo negro.png" alt="Logo" className="h-16 object-contain" />
+          </div>
+          <h1 className="text-[#fbbf24] text-2xl font-black mb-1 tracking-wide">MÓDULO DE CAJA</h1>
+          <p className="text-slate-400 mb-8 text-sm">Ingresa tus credenciales para operar</p>
+          
+          <form onSubmit={handleLogin} className="text-left space-y-5">
+            {loginError && (
+              <div className="bg-red-900/30 border border-red-500/50 text-red-400 p-3 rounded-lg text-sm font-bold text-center">
+                {loginError}
+              </div>
+            )}
+            <div>
+              <label className="text-slate-300 font-bold text-sm ml-1 mb-2 block">Correo Electrónico:</label>
+              <input 
+                type="email" 
+                required 
+                value={loginCorreo} 
+                onChange={(e) => setLoginCorreo(e.target.value)} 
+                className="w-full bg-[#020617] text-white p-4 rounded-xl border border-slate-700 text-center outline-none focus:border-indigo-500 transition-colors" 
+                placeholder="cajera@escuela.edu.mx"
+              />
+            </div>
+            <div>
+              <label className="text-slate-300 font-bold text-sm ml-1 mb-2 block">Contraseña:</label>
+              <input 
+                type="password" 
+                required 
+                value={loginPass} 
+                onChange={(e) => setLoginPass(e.target.value)} 
+                className="w-full bg-[#020617] text-white p-4 rounded-xl border border-slate-700 text-center outline-none focus:border-indigo-500 transition-colors" 
+                placeholder="••••••••"
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={cargandoLogin}
+              className={`w-full text-white font-bold py-4 rounded-xl transition-all text-lg shadow-lg mt-4 ${cargandoLogin ? 'bg-indigo-800 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/50'}`}
+            >
+              {cargandoLogin ? 'Verificando...' : '🔐 Iniciar Sesión'}
+            </button>
+          </form>
+        </div>
+        <div className="mt-10 text-center text-slate-600 text-sm">
+          System by <span className="font-bold">Arturo Díaz</span>
+        </div>
+      </div>
+    )
+  }
+
+  // ================= PANTALLA: CARGANDO DATOS =================
+  if (cargando) return <div className="min-h-screen bg-[#020617] flex justify-center items-center text-indigo-400 font-bold text-xl">Sincronizando Sistema...</div>
 
   // ================= PANTALLA: APERTURA DE CAJA =================
   if (!turnoActual) {
@@ -221,6 +327,13 @@ export default function ModuloCajaViajes() {
           <RenderTicket ticket={ticketActual} onClose={() => setTicketActual(null)} />
         ) : (
           <>
+            {/* Header Mini para Logout en Apertura */}
+            <div className="absolute top-4 right-4 print:hidden">
+              <button onClick={handleLogout} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-bold text-sm border border-slate-700 transition-colors">
+                Cerrar Sesión
+              </button>
+            </div>
+
             <div className="bg-[#0f172a] p-8 rounded-3xl shadow-2xl border border-slate-800 max-w-md w-full text-center mt-auto">
               <div className="bg-white p-3 rounded-2xl inline-block mb-6">
                 <img src="/logo negro.png" alt="Logo" className="h-16 object-contain" />
@@ -236,8 +349,8 @@ export default function ModuloCajaViajes() {
                 </button>
               </form>
             </div>
-            <div className="mt-auto pb-8 pt-10 text-center text-slate-500 text-sm">
-              System by <span className="font-bold">Arturo Díaz</span>
+            <div className="mt-auto pb-8 pt-10 text-center text-slate-600 text-sm">
+              System by <span className="font-bold text-slate-500">Arturo Díaz</span>
             </div>
           </>
         )}
@@ -255,17 +368,18 @@ export default function ModuloCajaViajes() {
         
         {/* HEADER CONTROLES */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
-          <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-slate-800 w-full md:w-fit">
-            <div className="bg-white p-1.5 rounded-lg h-12 w-12 flex items-center justify-center">
+          <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-slate-800 w-full md:w-fit relative overflow-hidden">
+            <div className="bg-white p-1.5 rounded-lg h-12 w-12 flex items-center justify-center z-10">
               <img src="/logo negro.png" alt="Logo" className="h-full object-contain" />
             </div>
-            <div>
+            <div className="z-10">
               <h1 className="text-[#fbbf24] font-black text-xl tracking-wide">SITE - VIAJES</h1>
-              <p className="text-emerald-400 text-xs font-bold flex items-center gap-1">✅ Caja Abierta</p>
+              <p className="text-emerald-400 text-xs font-bold flex items-center gap-1">✅ Caja Abierta • {usuarioAutenticado.nombre}</p>
             </div>
+            <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-[#020617] to-transparent opacity-50 z-0 pointer-events-none"></div>
           </div>
           
-          <div className="flex gap-2 w-full md:w-auto">
+          <div className="flex gap-2 w-full md:w-auto flex-wrap md:flex-nowrap">
             <button onClick={() => setMostrarHistorial(true)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-indigo-500/50">
               <span>📜 Historial</span>
             </button>
@@ -275,10 +389,13 @@ export default function ModuloCajaViajes() {
             <button onClick={prepararCierre} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-red-500/50">
               <span>🔒 Cierre</span>
             </button>
+            <button onClick={handleLogout} className="flex-none bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center border border-slate-600 ml-auto md:ml-2">
+              <span>🚪 Salir</span>
+            </button>
           </div>
         </div>
 
-        {/* DASHBOARD CAJERO (Métricas en tiempo real) */}
+        {/* DASHBOARD CAJERO */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <div className="bg-[#0f172a] p-4 rounded-2xl border border-slate-800 text-center">
             <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Fondo Inicial</p>
@@ -298,45 +415,35 @@ export default function ModuloCajaViajes() {
           </div>
         </div>
 
-        {/* BUSCADOR */}
-        <div className="bg-[#0f172a] p-6 rounded-2xl mb-6 border border-slate-800 flex flex-col md:flex-row gap-4 justify-between items-center shadow-lg">
-          <div className="relative w-full md:w-2/3 flex gap-2">
-            <div className="relative w-full">
-              <span className="absolute left-4 top-3.5 text-slate-400">🔍</span>
-              <input type="text" placeholder="Escanear QR o teclear alumno/matrícula..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full bg-[#020617] text-white rounded-xl py-3 pl-12 pr-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" autoFocus />
-            </div>
-            <button onClick={() => setEscaneandoBusqueda(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-3 rounded-xl transition-colors flex items-center justify-center border border-indigo-500/50" title="Usar cámara">
-              📷
-            </button>
-          </div>
-          <div className="flex items-center gap-3 bg-[#020617] px-4 py-2 rounded-xl border border-slate-700">
-            <span className="text-slate-400 text-sm font-bold">Tarifa Viaje:</span>
-            <span className="font-black text-[#fbbf24] text-xl">${precioBoleto}</span>
-          </div>
-        </div>
-
-        {/* MODAL CÁMARA BUSCADOR */}
-        {escaneandoBusqueda && (
-          <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50 print:hidden">
-            <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md">
-              <h2 className="text-xl font-bold mb-4 text-white text-center">Escanear QR de Alumno</h2>
-              <div className="rounded-xl overflow-hidden border-2 border-indigo-500 shadow-lg shadow-indigo-500/20 mb-4">
-                <Scanner 
-                  onResult={(text) => { 
-                    if(text) {
-                      setBusqueda(text);
-                      setEscaneandoBusqueda(false);
-                    }
-                  }} 
-                  onError={(error) => console.log(error?.message)} 
-                />
-              </div>
-              <button onClick={() => setEscaneandoBusqueda(false)} className="w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-lg font-bold transition-colors border border-slate-600">
-                Cancelar y Cerrar Cámara
+        {/* BUSCADOR Y ESCÁNER */}
+        <div className="bg-[#0f172a] p-6 rounded-2xl mb-6 border border-slate-800 flex flex-col gap-4 shadow-lg">
+          <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+            <div className="w-full md:w-2/3 flex gap-2">
+              <input type="text" placeholder="Escanear QR o teclea alumno/matrícula..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full bg-[#020617] text-white rounded-xl py-3 px-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" autoFocus />
+              <button onClick={() => setEscanearVenta(!escanearVenta)} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 rounded-xl flex items-center justify-center shadow-md transition-colors whitespace-nowrap">
+                {escanearVenta ? '❌ Cerrar' : '📷 Cámara'}
               </button>
             </div>
+            <div className="flex items-center gap-3 bg-[#020617] px-4 py-2 rounded-xl border border-slate-700 w-full md:w-auto justify-between md:justify-start">
+              <span className="text-slate-400 text-sm font-bold">Tarifa Viaje:</span>
+              <span className="font-black text-[#fbbf24] text-xl">${precioBoleto}</span>
+            </div>
           </div>
-        )}
+
+          {escanearVenta && (
+            <div className="w-full max-w-sm mx-auto rounded-xl overflow-hidden border-2 border-indigo-500 shadow-lg bg-black">
+              <Scanner
+                onScan={(result) => {
+                  if (result && result.length > 0) {
+                    setBusqueda(result[0].rawValue);
+                    setEscanearVenta(false);
+                  }
+                }}
+                onError={(error) => console.log("Error de cámara:", error)}
+              />
+            </div>
+          )}
+        </div>
 
         {/* LISTA DE ALUMNOS */}
         <div className="bg-[#0f172a] p-6 rounded-2xl border border-slate-800 shadow-xl mb-6">
@@ -381,12 +488,11 @@ export default function ModuloCajaViajes() {
 
       </div>
 
-      {/* FOOTER CRÉDITOS */}
       <div className={`text-center pb-4 text-slate-600 text-sm ${ticketActual ? 'hidden print:hidden' : 'block print:hidden'}`}>
         System by <span className="font-bold text-slate-500">Arturo Díaz</span>
       </div>
 
-      {/* ================= MODAL VINCULAR QR (CON CÁMARA) ================= */}
+      {/* MODAL VINCULAR QR */}
       {alumnoVincular && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-40 print:hidden">
           <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md">
@@ -395,9 +501,9 @@ export default function ModuloCajaViajes() {
             
             {usarCamara ? (
               <div className="mb-6">
-                <div className="rounded-xl overflow-hidden border-2 border-indigo-500 shadow-lg shadow-indigo-500/20 mb-3">
+                <div className="rounded-xl overflow-hidden border-2 border-indigo-500 shadow-lg shadow-indigo-500/20 mb-3 bg-black">
                   <Scanner 
-                    onResult={(text) => { if(text) setNuevoQr(text) }} 
+                    onScan={(result) => { if(result && result.length > 0) setNuevoQr(result[0].rawValue) }} 
                     onError={(error) => console.log(error?.message)} 
                   />
                 </div>
@@ -429,7 +535,7 @@ export default function ModuloCajaViajes() {
         </div>
       )}
 
-      {/* ================= MODAL RETIRO ================= */}
+      {/* MODAL RETIRO */}
       {mostrarRetiro && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40 print:hidden">
           <div className="bg-[#0f172a] border border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-sm">
@@ -452,7 +558,7 @@ export default function ModuloCajaViajes() {
         </div>
       )}
 
-      {/* ================= MODAL CIERRE ================= */}
+      {/* MODAL CIERRE */}
       {mostrarCierre && resumenCierre && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40 print:hidden">
           <div className="bg-[#0f172a] border border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-md">
@@ -482,26 +588,17 @@ export default function ModuloCajaViajes() {
         </div>
       )}
 
-      {/* ================= MODAL HISTORIAL ================= */}
+      {/* MODAL HISTORIAL */}
       {mostrarHistorial && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40 print:hidden">
           <div className="bg-[#0f172a] rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-700 flex flex-col max-h-[90vh]">
             <div className="bg-indigo-900/40 p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
               <div>
                 <h2 className="text-2xl font-black text-white">Historial de Viajes (Ventas)</h2>
-               <div className="mt-2 flex items-center gap-3 bg-[#020617] px-3 py-1.5 rounded-lg border border-slate-700 w-fit">
-              <label htmlFor="fechaFiltro" className="text-sm font-bold text-indigo-400 cursor-pointer flex items-center gap-2">
-                📅 Fecha:
-              </label>
-              <input 
-                id="fechaFiltro" 
-                type="date" 
-                value={fechaFiltro} 
-                onChange={(e) => setFechaFiltro(e.target.value)} 
-                style={{ colorScheme: 'dark' }}
-                className="bg-transparent text-sm text-white font-bold outline-none cursor-pointer" 
-              />
-            </div>
+                <div className="mt-2 flex items-center gap-3">
+                  <label htmlFor="fechaFiltro" className="text-sm font-bold text-slate-400 cursor-pointer">Consultar fecha:</label>
+                  <input id="fechaFiltro" type="date" value={fechaFiltro} onChange={(e) => setFechaFiltro(e.target.value)} className="bg-[#020617] border border-indigo-500/50 rounded-lg p-2.5 text-sm text-white font-bold outline-none focus:border-indigo-400 shadow-sm cursor-pointer" />
+                </div>
               </div>
               <button onClick={() => setMostrarHistorial(false)} className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-2 rounded-xl font-bold w-full md:w-auto">Volver a Caja</button>
             </div>
@@ -546,7 +643,7 @@ export default function ModuloCajaViajes() {
         </div>
       )}
 
-      {/* ================= TICKET EN LA MISMA PANTALLA ================= */}
+      {/* TICKET EN PANTALLA E IMPRESIÓN */}
       {ticketActual && (
         <RenderTicket ticket={ticketActual} onClose={() => setTicketActual(null)} />
       )}
