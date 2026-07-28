@@ -96,7 +96,7 @@ export default function PanelAdministracion() {
     
     if (pasoLogin === 1) {
       // Paso 1: Validar Usuario y Contraseña
-      if (usuario === 'superadmin' && password === '3664') {
+      if (usuario === 'prueba.superadmin@pem.edu.mx' && password === 'prueba1234') {
         setRolTemporal('SUPERADMIN')
         setPasoLogin(2)
         setErrorAuth(false)
