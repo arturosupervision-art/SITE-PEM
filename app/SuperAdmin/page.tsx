@@ -38,25 +38,6 @@ export default function PanelAdministracion() {
   // ================= ESTADO DEL TICKET / REPORTE =================
   const [documentoActual, setDocumentoActual] = useState<any>(null)
 
-  // ================= ESTADOS DE GESTIÓN DE EMPLEADOS (SUPER ADMIN) =================
-  const [empleados, setEmpleados] = useState<any[]>([])
-  const [mostrarModalEmpleado, setMostrarModalEmpleado] = useState(false)
-  const [guardandoEmpleado, setGuardandoEmpleado] = useState(false)
-  
-  const [empRol, setEmpRol] = useState('CAJA')
-  const [empNombre, setEmpNombre] = useState('')
-  const [empCorreo, setEmpCorreo] = useState('')
-  const [empTelefono, setEmpTelefono] = useState('')
-  const [empPassword, setEmpPassword] = useState('')
-  
-  // Específicos para CHOFER
-  const [empRuta, setEmpRuta] = useState('')
-  const [empTransporte, setEmpTransporte] = useState('Autobus')
-  
-  // Específicos para COORDINADOR
-  const [empSemestre, setEmpSemestre] = useState('1º')
-  const [empTurno, setEmpTurno] = useState('Matutino')
-
   // ================= ESTADOS DE GESTIÓN DE ALUMNOS (SUPER ADMIN) =================
   const [alumnos, setAlumnos] = useState<any[]>([])
   const [busquedaAlumno, setBusquedaAlumno] = useState('')
@@ -96,7 +77,6 @@ export default function PanelAdministracion() {
       setErrorPin(false)
       cargarDatosDashboard()
       cargarAlumnos()
-      cargarEmpleados()
     } else if (pin === '8888') {
       setRol('ADMIN')
       setVista('FINANZAS')
@@ -247,75 +227,6 @@ export default function PanelAdministracion() {
     setMostrarCorte(false)
   }
 
-  // ================= FUNCIONES DE GESTIÓN DE EMPLEADOS =================
-  const cargarEmpleados = async () => {
-    try {
-      const { data, error } = await supabase.from('empleados').select('*').order('created_at', { ascending: false })
-      if (!error && data) setEmpleados(data)
-    } catch (err) {
-      console.error(err)
-    }
-  }
-
-  const abrirModalNuevoEmpleado = () => {
-    setEmpRol('CAJA')
-    setEmpNombre('')
-    setEmpCorreo('')
-    setEmpTelefono('')
-    setEmpPassword('')
-    setEmpRuta('')
-    setEmpTransporte('Autobus')
-    setEmpSemestre('1º')
-    setEmpTurno('Matutino')
-    setMostrarModalEmpleado(true)
-  }
-
-  const guardarEmpleado = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setGuardandoEmpleado(true)
-
-    try {
-      const nuevoEmpleado: any = {
-        rol: empRol,
-        nombre: empNombre,
-        correo: empCorreo,
-        telefono: empTelefono,
-        password: empPassword
-      }
-
-      if (empRol === 'CHOFER') {
-        nuevoEmpleado.ruta_asignada = empRuta
-        nuevoEmpleado.tipo_transporte = empTransporte
-      } else if (empRol === 'COORDINADOR') {
-        nuevoEmpleado.semestre_asignado = empSemestre
-        nuevoEmpleado.turno = empTurno
-      }
-
-      const { error } = await supabase.from('empleados').insert([nuevoEmpleado])
-      if (error) throw error
-
-      alert('Empleado registrado exitosamente.')
-      setMostrarModalEmpleado(false)
-      cargarEmpleados()
-    } catch (err: any) {
-      alert('Error al guardar empleado: ' + err.message)
-    } finally {
-      setGuardandoEmpleado(false)
-    }
-  }
-
-  const eliminarEmpleado = async (id: string, nombre: string) => {
-    if (confirm(`¿Estás seguro de eliminar al empleado: ${nombre}?`)) {
-      try {
-        const { error } = await supabase.from('empleados').delete().eq('id', id)
-        if (error) throw error
-        cargarEmpleados()
-      } catch (err: any) {
-        alert('Error al eliminar empleado: ' + err.message)
-      }
-    }
-  }
-
   // ================= FUNCIONES DE CÁMARA PARA PC =================
   const detenerCamara = (streamToStop?: MediaStream, intervalId?: NodeJS.Timeout) => {
     if (intervalId) clearInterval(intervalId);
@@ -335,6 +246,7 @@ export default function PanelAdministracion() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         
+        // Verifica si la API nativa de BarcodeDetector está disponible (Chrome/Edge/Android)
         if ('BarcodeDetector' in window) {
           const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
           const interval = setInterval(async () => {
@@ -425,14 +337,21 @@ export default function PanelAdministracion() {
         correo_tutor: formCorreoTutor,
         telefono_tutor: formTelefonoTutor,
         saldo_actual: formSaldo,
-        grado_grupo: gradoGrupoVal
+        grado_grupo: gradoGrupoVal // Satisface la restricción Not-Null de Supabase
       }
 
       if (alumnoEditando) {
-        const { error } = await supabase.from('alumnos').update(datosAlumno).eq('id', alumnoEditando.id)
+        const { error } = await supabase
+          .from('alumnos')
+          .update(datosAlumno)
+          .eq('id', alumnoEditando.id)
+
         if (error) throw error
       } else {
-        const { error } = await supabase.from('alumnos').insert([datosAlumno])
+        const { error } = await supabase
+          .from('alumnos')
+          .insert([datosAlumno])
+
         if (error) throw error
       }
 
@@ -459,7 +378,9 @@ export default function PanelAdministracion() {
   }
 
   const toggleSeleccionAlumno = (id: string) => {
-    setIdsSeleccionados(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+    setIdsSeleccionados(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    )
   }
 
   const seleccionarTodosActuales = () => {
@@ -494,7 +415,7 @@ export default function PanelAdministracion() {
 
       lineas.forEach(l => {
         const val = l.trim()
-        if (val && !val.toLowerCase().includes('matricula')) {
+        if (val && !val.toLowerCase().includes('matricula')) { // Omite encabezados si los hay
           matriculasAEliminar.push(val)
         }
       })
@@ -621,12 +542,14 @@ export default function PanelAdministracion() {
           if (tipo === 'CARGA') {
             setTextoMasivo(contenido)
           } else {
+            // Si suben un CSV completo, extraemos únicamente la columna de la matrícula (Columna 2 o la que coincida)
             const lineas = contenido.split('\n')
             const matriculasExtraidas: string[] = []
             lineas.forEach(l => {
               const row = l.trim()
               if (row) {
                 const partes = row.split(',')
+                // Si viene con comas, asumimos que la matrícula está en la segunda columna (índice 1), de lo contrario es el texto entero
                 const mat = partes.length > 1 ? partes[1].replace(/"/g, '').trim() : row.replace(/"/g, '').trim()
                 if (mat && !mat.toLowerCase().includes('matricula')) {
                   matriculasExtraidas.push(mat)
@@ -720,7 +643,7 @@ export default function PanelAdministracion() {
                 onClick={() => setVista('SISTEMA')} 
                 className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${vista === 'SISTEMA' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
               >
-                ⚙️ Sistema & Personal
+                ⚙️ Sistema & Alumnos
               </button>
             </div>
           )}
@@ -833,21 +756,35 @@ export default function PanelAdministracion() {
               Como Super Admin, puedes entrar a cualquier consola directamente sin requerir contraseñas adicionales.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <a href="/" target="_blank" className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group">
+              <a 
+                href="/" 
+                target="_blank" 
+                className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group"
+              >
                 <span className="text-2xl">🎟️</span>
                 <div>
                   <p className="text-white font-bold text-sm group-hover:text-indigo-400">Punto de Venta</p>
                   <p className="text-slate-500 text-xs">Venta de boletos / Escáner</p>
                 </div>
               </a>
-              <a href="/Chofer" target="_blank" className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group">
+
+              <a 
+                href="/Chofer" 
+                target="_blank" 
+                className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group"
+              >
                 <span className="text-2xl">🚌</span>
                 <div>
                   <p className="text-white font-bold text-sm group-hover:text-indigo-400">Módulo de Chofer</p>
                   <p className="text-slate-500 text-xs">Validación en unidad</p>
                 </div>
               </a>
-              <a href="/Coordinador" target="_blank" className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group">
+
+              <a 
+                href="/Coordinador" 
+                target="_blank" 
+                className="bg-slate-900 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-3 transition-colors group"
+              >
                 <span className="text-2xl">📋</span>
                 <div>
                   <p className="text-white font-bold text-sm group-hover:text-indigo-400">Módulo de Coordinador</p>
@@ -857,79 +794,6 @@ export default function PanelAdministracion() {
             </div>
           </div>
 
-          {/* ================= GESTIÓN DE EMPLEADOS (PERSONAL) ================= */}
-          <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
-            <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
-              <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">👥 Gestión de Personal (Empleados)</h2>
-                <p className="text-slate-400 text-xs mt-1">Alta de Caja, Choferes, Coordinadores y Administradores</p>
-              </div>
-              <button 
-                onClick={abrirModalNuevoEmpleado}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded-xl text-sm transition-colors flex items-center gap-2"
-              >
-                ➕ Nuevo Empleado
-              </button>
-            </div>
-            
-            <div className="overflow-x-auto p-2">
-              {empleados.length === 0 ? (
-                <p className="text-center text-slate-500 py-10 font-bold">No hay empleados registrados en la base de datos.</p>
-              ) : (
-                <table className="w-full text-left text-sm">
-                  <thead className="text-slate-400 border-b border-slate-800 uppercase text-xs">
-                    <tr>
-                      <th className="px-4 py-4 font-bold">Nombre / Rol</th>
-                      <th className="px-4 py-4 font-bold">Usuario (Correo)</th>
-                      <th className="px-4 py-4 font-bold">Teléfono</th>
-                      <th className="px-4 py-4 font-bold">Detalles Adicionales</th>
-                      <th className="px-4 py-4 font-bold text-center">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {empleados.map((emp) => (
-                      <tr key={emp.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
-                        <td className="px-4 py-4">
-                          <p className="text-white font-bold">{emp.nombre}</p>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase mt-1 inline-block ${
-                            emp.rol === 'CHOFER' ? 'bg-orange-900/40 text-orange-400 border border-orange-800' :
-                            emp.rol === 'COORDINADOR' ? 'bg-blue-900/40 text-blue-400 border border-blue-800' :
-                            emp.rol === 'CAJA' ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-800' :
-                            'bg-purple-900/40 text-purple-400 border border-purple-800'
-                          }`}>
-                            {emp.rol}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 text-slate-300">{emp.correo}</td>
-                        <td className="px-4 py-4 text-slate-300">{emp.telefono}</td>
-                        <td className="px-4 py-4 text-xs text-slate-400">
-                          {emp.rol === 'CHOFER' && (
-                            <>Ruta: <strong className="text-white">{emp.ruta_asignada}</strong> <br/> Vehículo: <strong className="text-white">{emp.tipo_transporte}</strong></>
-                          )}
-                          {emp.rol === 'COORDINADOR' && (
-                            <>Semestre: <strong className="text-white">{emp.semestre_asignado}</strong> <br/> Turno: <strong className="text-white">{emp.turno}</strong></>
-                          )}
-                          {(emp.rol === 'CAJA' || emp.rol === 'ADMIN' || emp.rol === 'SUPERADMIN') && (
-                            <span className="italic">Sin requerimientos extras</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4 text-center">
-                          <button 
-                            onClick={() => eliminarEmpleado(emp.id, emp.nombre)}
-                            className="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700 px-3 py-1.5 rounded text-xs font-bold transition-colors"
-                          >
-                            Eliminar
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-
-          {/* ================= GESTIÓN DE ALUMNOS ================= */}
           <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
             <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/50">
               <div>
@@ -1066,7 +930,6 @@ export default function PanelAdministracion() {
               )}
             </div>
           </div>
-
         </div>
       )}
 
@@ -1074,166 +937,10 @@ export default function PanelAdministracion() {
         System by <span className="font-bold text-slate-500">Arturo Díaz</span>
       </div>
 
-      {/* ================= MODAL: NUEVO EMPLEADO ================= */}
-      {mostrarModalEmpleado && (
-        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
-          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-white">➕ Registrar Personal</h2>
-              <button onClick={() => setMostrarModalEmpleado(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
-            </div>
-
-            <form onSubmit={guardarEmpleado} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Rol a Asignar</label>
-                <select 
-                  value={empRol} 
-                  onChange={(e) => setEmpRol(e.target.value)}
-                  className="w-full bg-[#020617] border border-indigo-500 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-400 font-bold"
-                >
-                  <option value="CAJA">Caja (Ventas)</option>
-                  <option value="CHOFER">Chofer (Transporte)</option>
-                  <option value="COORDINADOR">Coordinador</option>
-                  <option value="ADMIN">Administrador</option>
-                  <option value="SUPERADMIN">Super Administrador (DIOS)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Nombre Completo</label>
-                <input 
-                  type="text" 
-                  required 
-                  value={empNombre} 
-                  onChange={(e) => setEmpNombre(e.target.value)}
-                  placeholder="Ej. Roberto Sánchez"
-                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" 
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Correo (Usuario)</label>
-                  <input 
-                    type="email" 
-                    required 
-                    value={empCorreo} 
-                    onChange={(e) => setEmpCorreo(e.target.value)}
-                    placeholder="usuario@site.com"
-                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" 
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contraseña</label>
-                  <input 
-                    type="password" 
-                    required 
-                    value={empPassword} 
-                    onChange={(e) => setEmpPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" 
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono</label>
-                <input 
-                  type="tel" 
-                  required 
-                  value={empTelefono} 
-                  onChange={(e) => setEmpTelefono(e.target.value)}
-                  placeholder="Ej. 5512345678"
-                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-mono" 
-                />
-              </div>
-
-              {/* CAMPOS DINÁMICOS PARA CHOFER */}
-              {empRol === 'CHOFER' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-700 pt-4 mt-4">
-                  <div>
-                    <label className="block text-xs font-bold text-orange-400 uppercase mb-1">Ruta Asignada</label>
-                    <input 
-                      type="text" 
-                      required 
-                      value={empRuta} 
-                      onChange={(e) => setEmpRuta(e.target.value)}
-                      placeholder="Ej. Ruta Centro"
-                      className="w-full bg-[#020617] border border-orange-900/50 rounded-xl p-3 text-white text-sm outline-none focus:border-orange-500" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-orange-400 uppercase mb-1">Tipo de Transporte</label>
-                    <select 
-                      value={empTransporte} 
-                      onChange={(e) => setEmpTransporte(e.target.value)}
-                      className="w-full bg-[#020617] border border-orange-900/50 rounded-xl p-3 text-white text-sm outline-none focus:border-orange-500"
-                    >
-                      <option value="Autobus">Autobús</option>
-                      <option value="Van">Van / Camioneta</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {/* CAMPOS DINÁMICOS PARA COORDINADOR */}
-              {empRol === 'COORDINADOR' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-700 pt-4 mt-4">
-                  <div>
-                    <label className="block text-xs font-bold text-blue-400 uppercase mb-1">Semestre Asignado</label>
-                    <select 
-                      value={empSemestre} 
-                      onChange={(e) => setEmpSemestre(e.target.value)}
-                      className="w-full bg-[#020617] border border-blue-900/50 rounded-xl p-3 text-white text-sm outline-none focus:border-blue-500"
-                    >
-                      <option value="1º">1º Semestre</option>
-                      <option value="2º">2º Semestre</option>
-                      <option value="3º">3º Semestre</option>
-                      <option value="4º">4º Semestre</option>
-                      <option value="5º">5º Semestre</option>
-                      <option value="6º">6º Semestre</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-blue-400 uppercase mb-1">Turno</label>
-                    <select 
-                      value={empTurno} 
-                      onChange={(e) => setEmpTurno(e.target.value)}
-                      className="w-full bg-[#020617] border border-blue-900/50 rounded-xl p-3 text-white text-sm outline-none focus:border-blue-500"
-                    >
-                      <option value="Matutino">Matutino</option>
-                      <option value="Vespertino">Vespertino</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-4 flex gap-3">
-                <button 
-                  type="button" 
-                  onClick={() => setMostrarModalEmpleado(false)}
-                  className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors text-sm"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={guardandoEmpleado}
-                  className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors text-sm"
-                >
-                  {guardandoEmpleado ? 'Guardando...' : 'Guardar Personal'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* ================= MODAL: CARGA MASIVA DE ALUMNOS ================= */}
       {mostrarModalMasivo && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
           <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            {/* Contenido Modal Masivo intacto */}
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 📁 Carga Masiva de Alumnos
@@ -1358,7 +1065,6 @@ export default function PanelAdministracion() {
       {mostrarModalAlumno && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
           <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            {/* Contenido de nuevo/editar alumno, se mantiene intacto */}
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-white">
                 {alumnoEditando ? '✏️ Editar Alumno' : '➕ Registrar Alumno'}
@@ -1523,7 +1229,7 @@ export default function PanelAdministracion() {
         </div>
       )}
 
-      {/* ================= MODALES DE REPORTE Y CORTE Z INTACTOS ================= */}
+      {/* ================= MODAL: REPORTE POR RANGO ================= */}
       {mostrarReporteRango && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-50">
           <div className="bg-[#0f172a] rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-700 p-8">
@@ -1576,6 +1282,7 @@ export default function PanelAdministracion() {
         </div>
       )}
 
+      {/* ================= MODAL: GENERAR CORTE Z ================= */}
       {mostrarCorte && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
           <div className="bg-[#0f172a] border border-slate-700 p-8 rounded-2xl w-full max-w-md shadow-2xl">
@@ -1602,6 +1309,7 @@ export default function PanelAdministracion() {
         </div>
       )}
 
+      {/* ================= MODAL: HISTORIAL COMPLETO ================= */}
       {mostrarHistorial && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40">
           <div className="bg-[#0f172a] rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden border border-slate-700 flex flex-col max-h-[90vh]">
@@ -1679,6 +1387,7 @@ export default function PanelAdministracion() {
         </div>
       )}
 
+      {/* ================= DOCUMENTO PARA IMPRIMIR (CORTE Z O REPORTE) ================= */}
       {documentoActual && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-[100] p-4 print:p-0 print:bg-white print:block">
           <style>{`
