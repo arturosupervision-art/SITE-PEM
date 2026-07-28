@@ -1,9 +1,74 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Html5QrcodeScanner } from 'html5-qrcode';
 
 export default function PantallaChofer() {
+  // ==========================================
+  // ESTADOS Y LÓGICA DE AUTENTICACIÓN / LOGIN
+  // ==========================================
+  const [usuarioLogueado, setUsuarioLogueado] = useState(false);
+  const [correo, setCorreo] = useState('');
+  const [contrasena, setContrasena] = useState('');
+  const [errorLogin, setErrorLogin] = useState('');
+  const [cargandoLogin, setCargandoLogin] = useState(false);
+  const [choferInfo, setChoferInfo] = useState<any>(null);
+
+  // Mantener la sesión activa en el navegador al recargar
+  useEffect(() => {
+    const sesionGuardada = sessionStorage.getItem('sesion_chofer');
+    if (sesionGuardada) {
+      setChoferInfo(JSON.parse(sesionGuardada));
+      setUsuarioLogueado(true);
+    }
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorLogin('');
+    setCargandoLogin(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('correo', correo.trim())
+        .eq('contrasena', contrasena.trim())
+        .maybeSingle();
+
+      if (error || !data) {
+        setErrorLogin('Credenciales incorrectas.');
+        setCargandoLogin(false);
+        return;
+      }
+
+      // Validación estricta de Rol (Debe ser "chofer")
+      const rolUsuario = data.rol ? data.rol.toLowerCase().trim() : '';
+      if (rolUsuario !== 'chofer') {
+        setErrorLogin('Acceso denegado (Solo personal con rol Chofer).');
+        setCargandoLogin(false);
+        return;
+      }
+
+      // Login Exitoso
+      setChoferInfo(data);
+      setUsuarioLogueado(true);
+      sessionStorage.setItem('sesion_chofer', JSON.stringify(data));
+    } catch (err) {
+      setErrorLogin('Error de conexión al verificar el usuario.');
+    } finally {
+      setCargandoLogin(false);
+    }
+  };
+
+  const handleCerrarSesion = () => {
+    sessionStorage.removeItem('sesion_chofer');
+    setUsuarioLogueado(false);
+    setChoferInfo(null);
+  };
+
+  // ==========================================
+  // CÓDIGO ORIGINAL DEL MÓDULO CHOFER
+  // ==========================================
   const [busquedaManual, setBusquedaManual] = useState('');
   const [estadoPantalla, setEstadoPantalla] = useState<
     'ESPERANDO' | 'EXITO' | 'ERROR'
@@ -18,38 +83,11 @@ export default function PantallaChofer() {
     lng: number;
   } | null>(null);
 
-  // EFECTO PARA ACTIVAR LA CÁMARA
   useEffect(() => {
-    if (modoRuta && estadoPantalla === 'ESPERANDO') {
-      // Configuramos el escáner para que lea códigos QR y de barras
-      const scanner = new Html5QrcodeScanner(
-        'reader',
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        false
-      );
-
-      scanner.render(
-        (decodedText) => {
-          scanner.clear(); // Apagamos la cámara al leer con éxito
-          procesarCodigo(decodedText);
-        },
-        (errorMessage) => {
-          // Ignoramos errores continuos de lectura para no saturar la consola
-        }
-      );
-
-      return () => {
-        // Limpiamos el escáner si el componente se desmonta o cambia de estado
-        scanner.clear().catch((error) => console.error('Error al limpiar cámara', error));
-      };
-    }
-  }, [modoRuta, estadoPantalla]);
-
-  useEffect(() => {
-    if (modoRuta && inputRef.current && estadoPantalla === 'ESPERANDO') {
+    if (usuarioLogueado && modoRuta && inputRef.current && estadoPantalla === 'ESPERANDO') {
       inputRef.current.focus();
     }
-  }, [estadoPantalla, modoRuta]);
+  }, [estadoPantalla, modoRuta, usuarioLogueado]);
 
   const reproducirSonido = (tipo: 'EXITO' | 'ERROR') => {
     try {
@@ -157,23 +195,6 @@ export default function PantallaChofer() {
         ? `https://maps.google.com/?q=${ubicacion.lat},${ubicacion.lng}`
         : '';
 
-      // ==============================================================
-      // SOLUCIÓN ZONA HORARIA DEFINITIVA
-      // ==============================================================
-      // 1. Obtenemos la hora local forzada a Ciudad de México
-      const mxDate = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Mexico_City"}));
-      
-      // 2. Extraemos cada componente para armar el formato ISO nosotros mismos
-      const year = mxDate.getFullYear();
-      const month = String(mxDate.getMonth() + 1).padStart(2, '0');
-      const day = String(mxDate.getDate()).padStart(2, '0');
-      const hours = String(mxDate.getHours()).padStart(2, '0');
-      const minutes = String(mxDate.getMinutes()).padStart(2, '0');
-      const seconds = String(mxDate.getSeconds()).padStart(2, '0');
-      
-      // 3. Le añadimos explícitamente el indicador -06:00 (Hora del Centro) 
-      const fechaHoraLocal = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}-06:00`;
-
       const { error: errorRegistro } = await supabase.from('registros_transporte').insert([
         {
           alumno_id: alumno.id,
@@ -182,8 +203,7 @@ export default function PantallaChofer() {
           telefono_tutor: alumno.telefono_tutor, 
           tipo_movimiento: modoRuta === 'ASCENSO' ? 'Ascenso' : 'Descenso',
           ubicacion_gps: enlaceMaps,
-          unidad_transporte: '1',
-          fecha_hora: fechaHoraLocal // <-- AHORA SÍ IMPACTA DIRECTO EN TU COLUMNA
+          unidad_transporte: '1'
         },
       ]);
 
@@ -192,7 +212,7 @@ export default function PantallaChofer() {
       }
 
       if (alumno.correo_tutor) {
-        const horaActual = mxDate.toLocaleTimeString('es-MX', { 
+        const horaActual = new Date().toLocaleTimeString('es-MX', { 
           hour: '2-digit', minute: '2-digit', hour12: true 
         });
 
@@ -225,6 +245,87 @@ export default function PantallaChofer() {
     procesarCodigo(busquedaManual);
   };
 
+  // ==========================================
+  // VISTA 1: FORMULARIO DE LOGIN (SI NO ESTÁ LOGUEADO)
+  // ==========================================
+  if (!usuarioLogueado) {
+    return (
+      <main className="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center p-6 select-none">
+        <div className="w-full max-w-md bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-6">
+          
+          <div className="text-center space-y-3">
+            <div className="bg-white p-3 rounded-2xl inline-block shadow-md">
+              <img
+                src="/logo negro.png"
+                alt="Logo"
+                className="h-12 w-auto object-contain mx-auto"
+              />
+            </div>
+            <h1 className="text-2xl font-bold text-amber-500 uppercase tracking-wide">
+              Módulo Chofer
+            </h1>
+            <p className="text-xs text-slate-400">
+              Ingresa tus credenciales para operar la unidad
+            </p>
+          </div>
+
+          {errorLogin && (
+            <div className="bg-red-950/80 border border-red-500/50 p-4 rounded-xl text-center">
+              <p className="text-red-300 text-sm font-semibold">{errorLogin}</p>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Correo Electrónico:
+              </label>
+              <input
+                type="email"
+                required
+                value={correo}
+                onChange={(e) => setCorreo(e.target.value)}
+                placeholder="ejemplo@pem.edu.mx"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:border-amber-500 outline-none transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Contraseña:
+              </label>
+              <input
+                type="password"
+                required
+                value={contrasena}
+                onChange={(e) => setContrasena(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:border-amber-500 outline-none transition-colors"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={cargandoLogin}
+              className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 text-white font-bold py-3.5 rounded-xl transition-colors shadow-lg mt-2 flex items-center justify-center gap-2"
+            >
+              {cargandoLogin ? 'Verificando...' : '🔐 Iniciar Sesión'}
+            </button>
+          </form>
+
+          <footer className="text-center pt-2">
+            <p className="text-[11px] text-slate-500 font-medium">
+              System by <span className="text-slate-400">Arturo Díaz</span>
+            </p>
+          </footer>
+        </div>
+      </main>
+    );
+  }
+
+  // ==========================================
+  // VISTA 2: PANTALLA PRINCIPAL (LOGUEADO)
+  // ==========================================
   return (
     <main className="min-h-screen bg-slate-900 text-white flex flex-col justify-between p-6 select-none">
       <header className="flex justify-between items-center bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-lg">
@@ -241,26 +342,35 @@ export default function PantallaChofer() {
               Módulo Chofer - Escáner
             </h1>
             <p className="text-xs text-slate-400">
-              Control de Abordaje Escolar
+              Conductor: <span className="text-slate-200 font-semibold">{choferInfo?.nombre || 'Chofer Activo'}</span>
             </p>
           </div>
         </div>
-        <div className="text-right">
-          {modoRuta ? (
-            <div className="flex flex-col items-end">
-              <span className="text-xs bg-indigo-900/50 border border-indigo-700 text-indigo-300 px-3 py-1 rounded-lg font-bold">
-                🚌 Unidad Activa
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            {modoRuta ? (
+              <div className="flex flex-col items-end">
+                <span className="text-xs bg-indigo-900/50 border border-indigo-700 text-indigo-300 px-3 py-1 rounded-lg font-bold">
+                  🚌 Unidad Activa
+                </span>
+                <span className="text-[10px] text-slate-400 mt-1">
+                  {modoRuta === 'ASCENSO' ? '🟢 Ascenso' : '🔴 Descenso'}{' '}
+                  {ubicacion ? '📍 GPS' : ''}
+                </span>
+              </div>
+            ) : (
+              <span className="text-xs bg-slate-700 border border-slate-600 text-slate-300 px-3 py-1 rounded-lg font-bold">
+                ⚠️ Selecciona Ruta
               </span>
-              <span className="text-[10px] text-slate-400 mt-1">
-                {modoRuta === 'ASCENSO' ? '🟢 Ascenso' : '🔴 Descenso'}{' '}
-                {ubicacion ? '📍 GPS' : ''}
-              </span>
-            </div>
-          ) : (
-            <span className="text-xs bg-slate-700 border border-slate-600 text-slate-300 px-3 py-1 rounded-lg font-bold">
-              ⚠️ Selecciona Ruta
-            </span>
-          )}
+            )}
+          </div>
+          <button
+            onClick={handleCerrarSesion}
+            title="Cerrar Sesión"
+            className="bg-slate-700 hover:bg-red-900/60 hover:border-red-500 border border-slate-600 text-xs px-3 py-2 rounded-xl transition-all text-slate-300"
+          >
+            🚪 Salir
+          </button>
         </div>
       </header>
 
@@ -296,23 +406,22 @@ export default function PantallaChofer() {
           <div className="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-6 relative">
             <button
               onClick={() => setModoRuta(null)}
-              className="absolute top-4 right-4 text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded border border-slate-500 transition-colors z-10"
+              className="absolute top-4 right-4 text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded border border-slate-500 transition-colors"
             >
               Cambiar Ruta
             </button>
 
+            <div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center mx-auto border-4 border-amber-500/30 animate-pulse mt-4">
+              <span className="text-4xl">📱</span>
+            </div>
             <div>
               <h2 className="text-2xl font-bold text-white mb-2">
                 Listo para escanear
               </h2>
-              <p className="text-slate-400 text-sm mb-4">
-                Enfoca el código QR/Barras del alumno o ingresa la matrícula manualmente.
+              <p className="text-slate-400 text-sm">
+                Escanea con la cámara de tu celular o ingresa la matrícula del
+                alumno.
               </p>
-            </div>
-
-            {/* CONTENEDOR DE LA CÁMARA */}
-            <div className="w-full max-w-sm mx-auto overflow-hidden rounded-2xl border-4 border-amber-500/30 bg-slate-950 mb-4 shadow-inner">
-              <div id="reader" className="w-full"></div>
             </div>
 
             <form onSubmit={handleSubmit} className="flex gap-2">
