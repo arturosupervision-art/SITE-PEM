@@ -5,6 +5,10 @@ import { supabase } from '../../lib/supabase'
 export default function PanelAdministracion() {
   // ================= ESTADOS DE AUTENTICACIÓN =================
   const [rol, setRol] = useState<'ADMIN' | 'SUPERADMIN' | null>(null)
+  const [loginStep, setLoginStep] = useState<'CREDENTIALS' | 'PIN'>('CREDENTIALS')
+  const [correo, setCorreo] = useState('')
+  const [password, setPassword] = useState('')
+  const [loginError, setLoginError] = useState('')
   const [pin, setPin] = useState('')
   const [errorPin, setErrorPin] = useState(false)
   
@@ -69,43 +73,67 @@ export default function PanelAdministracion() {
   const [textoEliminarMasivo, setTextoEliminarMasivo] = useState('')
   const [idsSeleccionados, setIdsSeleccionados] = useState<string[]>([])
 
-  // ================= ESTADOS DE PERSONAL ADMINISTRATIVO =================
-  const [mostrarModalPersonal, setMostrarModalPersonal] = useState(false)
-  const [guardandoPersonal, setGuardandoPersonal] = useState(false)
-  const [formRolPersonal, setFormRolPersonal] = useState('CAJA')
-  const [formNombrePersonal, setFormNombrePersonal] = useState('')
-  const [formCorreoPersonal, setFormCorreoPersonal] = useState('')
-  const [formTelefonoPersonal, setFormTelefonoPersonal] = useState('')
-  const [formPasswordPersonal, setFormPasswordPersonal] = useState('')
-  const [formRutaChofer, setFormRutaChofer] = useState('')
-  const [formTransporteChofer, setFormTransporteChofer] = useState('Autobús')
-  const [formSemestreCoordinador, setFormSemestreCoordinador] = useState('1º')
-  const [formTurnoCoordinador, setFormTurnoCoordinador] = useState('Matutino')
-
   // ================= FUNCIONES DE LOGIN Y CIERRE =================
-  const iniciarSesion = (e: React.FormEvent) => {
+  const iniciarSesion = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (pin === '7777') {
-      setRol('SUPERADMIN')
-      setErrorPin(false)
-      cargarDatosDashboard()
-      cargarAlumnos()
-    } else if (pin === '8888') {
-      setRol('ADMIN')
-      setVista('FINANZAS')
-      setErrorPin(false)
-      cargarDatosDashboard()
+    setLoginError('')
+
+    if (loginStep === 'CREDENTIALS') {
+      // 1. Iniciar sesión con Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: correo,
+        password: password
+      })
+
+      if (authError) {
+        setLoginError('Correo o contraseña incorrectos.')
+        return
+      }
+
+      // 2. Verificar el rol en la tabla usuarios
+      const { data: userData, error: userError } = await supabase
+        .from('usuarios')
+        .select('rol')
+        .eq('correo', correo)
+        .single()
+
+      if (userError || !userData || userData.rol !== 'super_admin') {
+        setLoginError('Acceso denegado: El rol no coincide.')
+        await supabase.auth.signOut()
+        return
+      }
+
+      // Si todo es correcto, pasamos al paso del NIP
+      setLoginStep('PIN')
     } else {
-      setErrorPin(true)
-      setPin('')
+      // Verificación de NIP
+      if (pin === '3664') {
+        setRol('SUPERADMIN')
+        setErrorPin(false)
+        cargarDatosDashboard()
+        cargarAlumnos()
+      } else if (pin === '0987') {
+        setRol('ADMIN')
+        setVista('FINANZAS')
+        setErrorPin(false)
+        cargarDatosDashboard()
+      } else {
+        setErrorPin(true)
+        setPin('')
+      }
     }
   }
 
-  const cerrarSesion = () => {
+  const cerrarSesion = async () => {
+    await supabase.auth.signOut()
     setRol(null)
+    setLoginStep('CREDENTIALS')
+    setCorreo('')
+    setPassword('')
     setPin('')
     setVista('FINANZAS')
     setErrorPin(false)
+    setLoginError('')
   }
 
   useEffect(() => {
@@ -577,51 +605,6 @@ export default function PanelAdministracion() {
     }
   }
 
-  // ================= FUNCIÓN PARA GUARDAR PERSONAL ADMINISTRATIVO =================
-  const guardarPersonal = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setGuardandoPersonal(true)
-
-    try {
-      const datosPersonal: any = {
-        rol: formRolPersonal,
-        nombre: formNombrePersonal,
-        correo: formCorreoPersonal,
-        telefono: formTelefonoPersonal,
-        password: formPasswordPersonal // Nota: Si manejas Auth en Supabase, esto debería ir a la API de Auth, aquí se guarda en la tabla.
-      }
-      
-      if (formRolPersonal === 'CHOFER') {
-        datosPersonal.ruta_asignada = formRutaChofer
-        datosPersonal.tipo_transporte = formTransporteChofer
-      }
-      
-      if (formRolPersonal === 'COORDINADOR') {
-        datosPersonal.semestre_asignado = formSemestreCoordinador
-        datosPersonal.turno = formTurnoCoordinador
-      }
-
-      // IMPORTANTE: Asegúrate de que tengas una tabla llamada 'usuarios' o cambia el nombre aquí abajo.
-      const { error } = await supabase.from('usuarios').insert([datosPersonal])
-      if (error) throw error
-
-      alert('Personal dado de alta correctamente.')
-      setMostrarModalPersonal(false)
-      
-      // Limpiar Formulario
-      setFormNombrePersonal('')
-      setFormCorreoPersonal('')
-      setFormTelefonoPersonal('')
-      setFormPasswordPersonal('')
-      setFormRutaChofer('')
-      
-    } catch (err: any) {
-      alert('Error al registrar personal: ' + err.message)
-    } finally {
-      setGuardandoPersonal(false)
-    }
-  }
-
   const alumnosFiltrados = alumnos.filter(a => 
     a.nombre_completo?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
     a.matricula?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
@@ -641,32 +624,88 @@ export default function PanelAdministracion() {
           </div>
           
           <form onSubmit={iniciarSesion} className="flex flex-col gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                Clave de Acceso
-              </label>
-              <input
-                type="password"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                placeholder="••••"
-                className={`w-full bg-[#020617] border ${errorPin ? 'border-red-500' : 'border-slate-700'} rounded-xl p-4 text-center text-white text-2xl font-black tracking-widest outline-none focus:border-indigo-500 transition-colors`}
-                maxLength={4}
-                autoFocus
-              />
-              {errorPin && (
-                <p className="text-red-400 text-xs font-bold mt-2 text-center animate-pulse">
-                  Clave incorrecta. Intente de nuevo.
-                </p>
-              )}
-            </div>
-            
-            <button 
-              type="submit" 
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors mt-2"
-            >
-              Ingresar al Panel
-            </button>
+            {loginStep === 'CREDENTIALS' ? (
+              <>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Correo Electrónico
+                  </label>
+                  <input
+                    type="email"
+                    value={correo}
+                    onChange={(e) => setCorreo(e.target.value)}
+                    placeholder="tucorreo@ejemplo.com"
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Contraseña
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors"
+                    required
+                  />
+                </div>
+                {loginError && (
+                  <p className="text-red-400 text-xs font-bold mt-2 text-center animate-pulse">
+                    {loginError}
+                  </p>
+                )}
+                <button 
+                  type="submit" 
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors mt-2"
+                >
+                  Verificar Credenciales
+                </button>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 text-center">
+                    NIP de Seguridad
+                  </label>
+                  <input
+                    type="password"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    placeholder="••••"
+                    className={`w-full bg-[#020617] border ${errorPin ? 'border-red-500' : 'border-slate-700'} rounded-xl p-4 text-center text-white text-2xl font-black tracking-widest outline-none focus:border-indigo-500 transition-colors`}
+                    maxLength={4}
+                    autoFocus
+                  />
+                  {errorPin && (
+                    <p className="text-red-400 text-xs font-bold mt-2 text-center animate-pulse">
+                      NIP incorrecto. Intente de nuevo.
+                    </p>
+                  )}
+                </div>
+                
+                <button 
+                  type="submit" 
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors mt-2"
+                >
+                  Ingresar al Panel
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setLoginStep('CREDENTIALS');
+                    setPin('');
+                    setErrorPin(false);
+                  }}
+                  className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2 rounded-xl transition-colors text-xs mt-2"
+                >
+                  Volver
+                </button>
+              </>
+            )}
           </form>
         </div>
       </div>
@@ -841,17 +880,6 @@ export default function PanelAdministracion() {
             </div>
           </div>
 
-          {/* ================= SECCIÓN: ALTA DE PERSONAL ================= */}
-          <div className="bg-[#0f172a] rounded-2xl border border-indigo-900/40 p-6 shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
-             <div>
-               <h2 className="text-xl font-black text-white flex items-center gap-2">👥 Gestión de Personal Administrativo</h2>
-               <p className="text-slate-400 text-sm">Da de alta a Cajeros, Choferes, Coordinadores y Administradores.</p>
-             </div>
-             <button onClick={() => setMostrarModalPersonal(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded-xl transition-colors flex items-center gap-2 shrink-0">
-               ➕ Registrar Personal
-             </button>
-          </div>
-
           <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
             <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/50">
               <div>
@@ -928,8 +956,7 @@ export default function PanelAdministracion() {
                       <th className="px-4 py-4 font-bold">Matrícula / QR</th>
                       <th className="px-4 py-4 font-bold">Sem / Grupo / Turno</th>
                       <th className="px-4 py-4 font-bold">Datos del Tutor</th>
-                      {/* CAMBIO AQUÍ: de Saldo a Boletos Disp. */}
-                      <th className="px-4 py-4 font-bold text-right">Boletos Disp.</th>
+                      <th className="px-4 py-4 font-bold text-right">Saldo</th>
                       <th className="px-4 py-4 font-bold text-center">Acciones</th>
                     </tr>
                   </thead>
@@ -963,9 +990,8 @@ export default function PanelAdministracion() {
                           <p className="text-slate-300">✉️ {al.correo_tutor || 'No registrado'}</p>
                           <p className="text-slate-400">📞 {al.telefono_tutor || 'No registrado'}</p>
                         </td>
-                        {/* CAMBIO AQUÍ: Sin signo de pesos, y mostrando 'bts' */}
                         <td className="px-4 py-4 text-right font-black text-emerald-400">
-                          {al.saldo_actual || 0} bts
+                          ${(al.saldo_actual || 0).toFixed(2)}
                         </td>
                         <td className="px-4 py-4 text-center">
                           <div className="flex justify-center gap-1">
@@ -996,161 +1022,6 @@ export default function PanelAdministracion() {
       <div className="text-center mt-10 pb-4 text-slate-600 text-sm">
         System by <span className="font-bold text-slate-500">Arturo Díaz</span>
       </div>
-
-      {/* ================= MODAL: ALTA DE PERSONAL ================= */}
-      {mostrarModalPersonal && (
-        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
-          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-white">➕ Registro de Personal</h2>
-              <button onClick={() => setMostrarModalPersonal(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
-            </div>
-
-            <form onSubmit={guardarPersonal} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Rol / Módulo Asignado</label>
-                <select 
-                  value={formRolPersonal} 
-                  onChange={(e) => setFormRolPersonal(e.target.value)}
-                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-bold text-indigo-300"
-                >
-                  <option value="CAJA">CAJA (Ventas)</option>
-                  <option value="CHOFER">CHOFER (Unidades)</option>
-                  <option value="COORDINADOR">COORDINADOR (Ascensos)</option>
-                  <option value="ADMIN">ADMINISTRADOR</option>
-                  <option value="SUPERADMIN">SUPER ADMINISTRADOR</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Nombre Completo</label>
-                <input 
-                  type="text" 
-                  required 
-                  value={formNombrePersonal} 
-                  onChange={(e) => setFormNombrePersonal(e.target.value)}
-                  placeholder="Nombre del personal"
-                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" 
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Correo (Usuario)</label>
-                  <input 
-                    type="email" 
-                    required 
-                    value={formCorreoPersonal} 
-                    onChange={(e) => setFormCorreoPersonal(e.target.value)}
-                    placeholder="usuario@email.com"
-                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" 
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono</label>
-                  <input 
-                    type="tel" 
-                    required 
-                    value={formTelefonoPersonal} 
-                    onChange={(e) => setFormTelefonoPersonal(e.target.value)}
-                    placeholder="10 dígitos"
-                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-mono" 
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contraseña de Acceso</label>
-                <input 
-                  type="password" 
-                  required 
-                  value={formPasswordPersonal} 
-                  onChange={(e) => setFormPasswordPersonal(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" 
-                />
-              </div>
-
-              {/* CAMPOS ESPECÍFICOS PARA CHOFER */}
-              {formRolPersonal === 'CHOFER' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-indigo-900/20 p-4 rounded-xl border border-indigo-900/50">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Ruta Asignada</label>
-                    <input 
-                      type="text" 
-                      required 
-                      value={formRutaChofer} 
-                      onChange={(e) => setFormRutaChofer(e.target.value)}
-                      placeholder="Ej. Ruta Centro"
-                      className="w-full bg-[#020617] border border-slate-700 rounded-xl p-2.5 text-white text-sm outline-none focus:border-indigo-500" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tipo Transporte</label>
-                    <select 
-                      value={formTransporteChofer} 
-                      onChange={(e) => setFormTransporteChofer(e.target.value)}
-                      className="w-full bg-[#020617] border border-slate-700 rounded-xl p-2.5 text-white text-sm outline-none focus:border-indigo-500"
-                    >
-                      <option value="Autobús">Autobús</option>
-                      <option value="Van">Van / Camioneta</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {/* CAMPOS ESPECÍFICOS PARA COORDINADOR */}
-              {formRolPersonal === 'COORDINADOR' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-emerald-900/20 p-4 rounded-xl border border-emerald-900/50">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Semestre Asignado</label>
-                    <select 
-                      value={formSemestreCoordinador} 
-                      onChange={(e) => setFormSemestreCoordinador(e.target.value)}
-                      className="w-full bg-[#020617] border border-slate-700 rounded-xl p-2.5 text-white text-sm outline-none focus:border-indigo-500"
-                    >
-                      <option value="1º">1º Semestre</option>
-                      <option value="2º">2º Semestre</option>
-                      <option value="3º">3º Semestre</option>
-                      <option value="4º">4º Semestre</option>
-                      <option value="5º">5º Semestre</option>
-                      <option value="6º">6º Semestre</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Turno</label>
-                    <select 
-                      value={formTurnoCoordinador} 
-                      onChange={(e) => setFormTurnoCoordinador(e.target.value)}
-                      className="w-full bg-[#020617] border border-slate-700 rounded-xl p-2.5 text-white text-sm outline-none focus:border-indigo-500"
-                    >
-                      <option value="Matutino">Matutino</option>
-                      <option value="Vespertino">Vespertino</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-4 flex gap-3">
-                <button 
-                  type="button" 
-                  onClick={() => setMostrarModalPersonal(false)}
-                  className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors text-sm"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={guardandoPersonal}
-                  className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors text-sm"
-                >
-                  {guardandoPersonal ? 'Guardando...' : 'Crear Usuario'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ================= MODAL: CARGA MASIVA DE ALUMNOS ================= */}
       {mostrarModalMasivo && (
@@ -1413,13 +1284,12 @@ export default function PanelAdministracion() {
               </div>
 
               <div>
-                {/* CAMBIO AQUÍ: de Saldo a Boletos */}
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Boletos Iniciales / Ajuste</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Saldo Inicial / Ajuste ($)</label>
                 <input 
                   type="number" 
-                  step="1" 
+                  step="0.01" 
                   value={formSaldo} 
-                  onChange={(e) => setFormSaldo(parseInt(e.target.value) || 0)}
+                  onChange={(e) => setFormSaldo(parseFloat(e.target.value) || 0)}
                   className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 font-bold" 
                 />
               </div>
