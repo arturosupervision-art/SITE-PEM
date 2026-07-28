@@ -6,15 +6,16 @@ export default function PanelAdministracion() {
   // ================= ESTADOS DE AUTENTICACIÓN =================
   const [rol, setRol] = useState<'ADMIN' | 'SUPERADMIN' | null>(null)
   
-  // Estados para Login Dual
-  const [tipoLogin, setTipoLogin] = useState<'NIP' | 'CREDENCIALES'>('NIP')
-  const [pin, setPin] = useState('')
-  const [errorPin, setErrorPin] = useState(false)
+  // Estados para Login Secuencial (Doble Factor)
+  const [pasoLogin, setPasoLogin] = useState<1 | 2>(1)
+  const [rolTemporal, setRolTemporal] = useState<'ADMIN' | 'SUPERADMIN' | null>(null)
+  
   const [usuario, setUsuario] = useState('')
   const [password, setPassword] = useState('')
+  const [pin, setPin] = useState('')
+  const [errorAuth, setErrorAuth] = useState(false)
   
   // ================= ESTADO DE VISTA (SOLO SUPERADMIN) =================
-  // Se agregó 'EMPLEADOS' como vista independiente
   const [vista, setVista] = useState<'FINANZAS' | 'SISTEMA' | 'EMPLEADOS'>('FINANZAS')
 
   // ================= ESTADOS DEL DASHBOARD (FINANZAS) =================
@@ -90,50 +91,51 @@ export default function PanelAdministracion() {
   const [formEmpTurnoAsignado, setFormEmpTurnoAsignado] = useState('Matutino')
 
   // ================= FUNCIONES DE LOGIN Y CIERRE =================
-  const iniciarSesion = (e: React.FormEvent) => {
+  const procesarLogin = (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (tipoLogin === 'NIP') {
-      if (pin === '3664') { // SUPER ADMIN
-        setRol('SUPERADMIN')
-        setErrorPin(false)
-        cargarDatosDashboard()
-        cargarAlumnos()
-      } else if (pin === '0987') { // ADMIN
-        setRol('ADMIN')
-        setVista('FINANZAS')
-        setErrorPin(false)
-        cargarDatosDashboard()
-      } else {
-        setErrorPin(true)
-        setPin('')
-      }
-    } else {
-      // Lógica temporal para Usuario y Contraseña
+    if (pasoLogin === 1) {
+      // Paso 1: Validar Usuario y Contraseña
       if (usuario === 'superadmin' && password === '3664') {
+        setRolTemporal('SUPERADMIN')
+        setPasoLogin(2)
+        setErrorAuth(false)
+      } else if (usuario === 'admin' && password === '0987') {
+        setRolTemporal('ADMIN')
+        setPasoLogin(2)
+        setErrorAuth(false)
+      } else {
+        setErrorAuth(true)
+        setPassword('')
+      }
+    } else if (pasoLogin === 2) {
+      // Paso 2: Validar NIP
+      if (rolTemporal === 'SUPERADMIN' && pin === '3664') {
         setRol('SUPERADMIN')
-        setErrorPin(false)
+        setErrorAuth(false)
         cargarDatosDashboard()
         cargarAlumnos()
-      } else if (usuario === 'admin' && password === '0987') {
+      } else if (rolTemporal === 'ADMIN' && pin === '0987') {
         setRol('ADMIN')
         setVista('FINANZAS')
-        setErrorPin(false)
+        setErrorAuth(false)
         cargarDatosDashboard()
       } else {
-        setErrorPin(true)
-        setPassword('')
+        setErrorAuth(true)
+        setPin('')
       }
     }
   }
 
   const cerrarSesion = () => {
     setRol(null)
+    setRolTemporal(null)
+    setPasoLogin(1)
     setPin('')
     setUsuario('')
     setPassword('')
     setVista('FINANZAS')
-    setErrorPin(false)
+    setErrorAuth(false)
   }
 
   useEffect(() => {
@@ -616,7 +618,7 @@ export default function PanelAdministracion() {
   }
 
 
-  // ================= RENDERIZADO DEL LOGIN DUAL =================
+  // ================= RENDERIZADO DEL LOGIN SECUENCIAL =================
   if (!rol) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
@@ -626,49 +628,15 @@ export default function PanelAdministracion() {
             <h1 className="text-2xl font-black text-white mb-2">SITE-PEM</h1>
             <p className="text-slate-400 text-sm">Panel de Administración Central</p>
           </div>
-          
-          {/* Tabs del Login */}
-          <div className="flex bg-[#020617] rounded-xl p-1 mb-6 border border-slate-800">
-            <button 
-              onClick={() => {setTipoLogin('NIP'); setErrorPin(false)}}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${tipoLogin === 'NIP' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            >
-              🔢 Acceso con NIP
-            </button>
-            <button 
-              onClick={() => {setTipoLogin('CREDENCIALES'); setErrorPin(false)}}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${tipoLogin === 'CREDENCIALES' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            >
-              👤 Usuario / Contraseña
-            </button>
-          </div>
 
-          <form onSubmit={iniciarSesion} className="flex flex-col gap-4 relative z-10">
+          <form onSubmit={procesarLogin} className="flex flex-col gap-4 relative z-10">
             
-            {tipoLogin === 'NIP' ? (
-              // VISTA NIP
-              <div className="animate-fade-in">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  NIP de Acceso
-                </label>
-                <input
-                  type="password"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder="••••"
-                  className={`w-full bg-[#020617] border ${errorPin ? 'border-red-500' : 'border-slate-700'} rounded-xl p-4 text-center text-white text-2xl font-black tracking-widest outline-none focus:border-indigo-500 transition-colors`}
-                  maxLength={4}
-                  autoFocus
-                />
-                {errorPin && (
-                  <p className="text-red-400 text-xs font-bold mt-2 text-center animate-pulse">
-                    NIP incorrecto. Intente de nuevo.
-                  </p>
-                )}
-              </div>
-            ) : (
-              // VISTA CREDENCIALES
+            {pasoLogin === 1 ? (
+              // VISTA PASO 1: CREDENCIALES
               <div className="animate-fade-in space-y-4">
+                <p className="text-indigo-400 text-xs text-center font-bold mb-4 uppercase tracking-wider">
+                  Paso 1: Identificación
+                </p>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                     Usuario
@@ -678,7 +646,8 @@ export default function PanelAdministracion() {
                     value={usuario}
                     onChange={(e) => setUsuario(e.target.value)}
                     placeholder="Escriba su usuario"
-                    className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors"
+                    className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors`}
+                    autoFocus
                   />
                 </div>
                 <div>
@@ -690,23 +659,64 @@ export default function PanelAdministracion() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className={`w-full bg-[#020617] border ${errorPin ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors`}
+                    className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors`}
                   />
                 </div>
-                {errorPin && (
+                {errorAuth && (
                   <p className="text-red-400 text-xs font-bold mt-1 text-center animate-pulse">
                     Credenciales incorrectas.
                   </p>
                 )}
+                
+                <button 
+                  type="submit" 
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors mt-2"
+                >
+                  Continuar
+                </button>
+              </div>
+            ) : (
+              // VISTA PASO 2: NIP
+              <div className="animate-fade-in">
+                <div className="flex items-center gap-2 mb-4">
+                  <button 
+                    type="button" 
+                    onClick={() => {setPasoLogin(1); setErrorAuth(false); setPin('');}}
+                    className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 rounded-lg bg-slate-800 transition-colors"
+                  >
+                    ⬅️ Volver
+                  </button>
+                  <p className="text-emerald-400 text-xs text-center font-bold uppercase tracking-wider flex-1 pr-10">
+                    Paso 2: Validación
+                  </p>
+                </div>
+
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 text-center">
+                  Ingrese NIP ({rolTemporal === 'SUPERADMIN' ? 'Modo Dios' : 'Admin'})
+                </label>
+                <input
+                  type="password"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  placeholder="••••"
+                  className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-4 text-center text-white text-2xl font-black tracking-widest outline-none focus:border-emerald-500 transition-colors`}
+                  maxLength={4}
+                  autoFocus
+                />
+                {errorAuth && (
+                  <p className="text-red-400 text-xs font-bold mt-2 text-center animate-pulse">
+                    NIP incorrecto. Intente de nuevo.
+                  </p>
+                )}
+
+                <button 
+                  type="submit" 
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors mt-4"
+                >
+                  Ingresar al Sistema
+                </button>
               </div>
             )}
-            
-            <button 
-              type="submit" 
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors mt-2"
-            >
-              Ingresar al Panel
-            </button>
           </form>
         </div>
       </div>
