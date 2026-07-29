@@ -68,6 +68,7 @@ export default function PanelAdministracion() {
 
   // Estados para Cámara de PC
   const [usandoCamara, setUsandoCamara] = useState(false)
+  const [modoCamara, setModoCamara] = useState<'FORMULARIO' | 'BUSQUEDA' | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
   // Formulario Carga Masiva y Eliminación Masiva
@@ -95,7 +96,6 @@ export default function PanelAdministracion() {
     e.preventDefault()
     
     if (pasoLogin === 1) {
-      // Paso 1: Validar Usuario y Contraseña
       if (usuario === 'prueba.superadmin@pem.edu.mx' && password === 'prueba1234') {
         setRolTemporal('SUPERADMIN')
         setPasoLogin(2)
@@ -109,7 +109,6 @@ export default function PanelAdministracion() {
         setPassword('')
       }
     } else if (pasoLogin === 2) {
-      // Paso 2: Validar NIP
       if (rolTemporal === 'SUPERADMIN' && pin === '3664') {
         setRol('SUPERADMIN')
         setErrorAuth(false)
@@ -280,9 +279,11 @@ export default function PanelAdministracion() {
       s.getTracks().forEach(t => t.stop());
     }
     setUsandoCamara(false);
+    setModoCamara(null);
   }
 
-  const iniciarCamara = async () => {
+  const iniciarCamara = async (modo: 'FORMULARIO' | 'BUSQUEDA' = 'FORMULARIO') => {
+    setModoCamara(modo);
     setUsandoCamara(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -296,7 +297,11 @@ export default function PanelAdministracion() {
               try {
                 const barcodes = await detector.detect(videoRef.current);
                 if (barcodes.length > 0) {
-                  setFormQr(barcodes[0].rawValue);
+                  if (modo === 'FORMULARIO') {
+                    setFormQr(barcodes[0].rawValue);
+                  } else if (modo === 'BUSQUEDA') {
+                    setBusquedaAlumno(barcodes[0].rawValue);
+                  }
                   detenerCamara(stream, interval);
                 }
               } catch (e) {
@@ -309,6 +314,7 @@ export default function PanelAdministracion() {
     } catch (err: any) {
       alert("Error al acceder a la cámara web: " + err.message);
       setUsandoCamara(false);
+      setModoCamara(null);
     }
   }
 
@@ -337,6 +343,7 @@ export default function PanelAdministracion() {
     setFormTelefonoTutor('')
     setFormSaldo(0)
     setUsandoCamara(false)
+    setModoCamara(null)
     setMostrarModalAlumno(true)
   }
 
@@ -352,6 +359,7 @@ export default function PanelAdministracion() {
     setFormTelefonoTutor(al.telefono_tutor || '')
     setFormSaldo(al.saldo_actual || 0)
     setUsandoCamara(false)
+    setModoCamara(null)
     setMostrarModalAlumno(true)
   }
 
@@ -632,7 +640,6 @@ export default function PanelAdministracion() {
           <form onSubmit={procesarLogin} className="flex flex-col gap-4 relative z-10">
             
             {pasoLogin === 1 ? (
-              // VISTA PASO 1: CREDENCIALES
               <div className="animate-fade-in space-y-4">
                 <p className="text-indigo-400 text-xs text-center font-bold mb-4 uppercase tracking-wider">
                   Paso 1: Identificación
@@ -676,7 +683,6 @@ export default function PanelAdministracion() {
                 </button>
               </div>
             ) : (
-              // VISTA PASO 2: NIP
               <div className="animate-fade-in">
                 <div className="flex items-center gap-2 mb-4">
                   <button 
@@ -902,13 +908,28 @@ export default function PanelAdministracion() {
 
             <div className="p-6">
               <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
-                <input
-                  type="text"
-                  placeholder="Buscar por nombre, matrícula, correo o QR..."
-                  value={busquedaAlumno}
-                  onChange={(e) => setBusquedaAlumno(e.target.value)}
-                  className="w-full md:w-1/2 bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500"
-                />
+                
+                {/* AQUI ESTÁ EL CONTENEDOR DE BÚSQUEDA CORREGIDO CON SU BOTÓN DE ESCÁNER */}
+                <div className="relative w-full md:w-1/2">
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre, matrícula, correo o QR..."
+                    value={busquedaAlumno}
+                    onChange={(e) => setBusquedaAlumno(e.target.value)}
+                    className="w-full bg-[#020617] border border-slate-700 rounded-xl py-3 pl-4 pr-12 text-white text-sm outline-none focus:border-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => iniciarCamara('BUSQUEDA')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-indigo-400 transition-colors"
+                    title="Escanear QR de alumno"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h4a1 1 0 010 2H5v3a1 1 0 01-2 0V4zm14-1a1 1 0 011 1v3a1 1 0 01-2 0V5h-3a1 1 0 010-2h4zM3 20a1 1 0 011 1h4a1 1 0 010-2H5v-3a1 1 0 01-2 0v4zm14 1a1 1 0 011-1v-4a1 1 0 01-2 0v3h-3a1 1 0 010 2h4z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6v6H9z" />
+                    </svg>
+                  </button>
+                </div>
                 
                 <div className="flex flex-wrap gap-2">
                   {idsSeleccionados.length > 0 && (
@@ -1019,6 +1040,23 @@ export default function PanelAdministracion() {
       {/* ====================================================================================== */}
       {/* ======================================= MODALES ====================================== */}
       {/* ====================================================================================== */}
+
+      {/* MODAL CÁMARA PARA BÚSQUEDA (SEPARA LA VISTA DE LA DE FORMULARIO) */}
+      {usandoCamara && modoCamara === 'BUSQUEDA' && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-4 text-center">Escanear QR de Alumno</h2>
+            <p className="text-slate-400 text-xs text-center mb-4">Apunta el código QR del alumno a la cámara para buscarlo en la base de datos.</p>
+            <div className="relative rounded-xl overflow-hidden bg-black aspect-video border border-slate-700 flex justify-center items-center">
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover"></video>
+              <div className="absolute inset-0 border-2 border-indigo-500/50 m-8 rounded-lg pointer-events-none"></div>
+            </div>
+            <button onClick={() => detenerCamara()} className="w-full mt-6 bg-slate-800 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors">
+              Cancelar Escaneo
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: CORTE Z */}
       {mostrarCorte && (
@@ -1174,9 +1212,9 @@ export default function PanelAdministracion() {
                 <label className="block text-xs font-bold text-indigo-400 uppercase mb-2">Asignación de Código QR</label>
                 <div className="flex gap-2">
                   <input type="text" value={formQr} onChange={(e) => setFormQr(e.target.value)} placeholder="Ej. QR-0001" className="flex-1 bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm font-mono outline-none focus:border-indigo-500" />
-                  <button type="button" onClick={iniciarCamara} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 rounded-xl text-sm font-bold transition-colors whitespace-nowrap">📷 Escanear con PC</button>
+                  <button type="button" onClick={() => iniciarCamara('FORMULARIO')} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 rounded-xl text-sm font-bold transition-colors whitespace-nowrap">📷 Escanear con PC</button>
                 </div>
-                {usandoCamara && (
+                {usandoCamara && modoCamara === 'FORMULARIO' && (
                   <div className="mt-4 relative rounded-xl overflow-hidden bg-black aspect-video border border-slate-700 flex justify-center items-center">
                     <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover"></video>
                     <div className="absolute inset-0 border-2 border-indigo-500/50 m-8 rounded-lg pointer-events-none"></div>
