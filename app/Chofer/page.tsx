@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
+import { QrReader } from 'react-qr-reader'; // IMPORTANTE: Ejecutar npm install react-qr-reader
 
 export default function PantallaChofer() {
   // ==========================================
@@ -75,6 +76,7 @@ export default function PantallaChofer() {
   >('ESPERANDO');
   const [mensaje, setMensaje] = useState('');
   const [alumnoActual, setAlumnoActual] = useState<any>(null);
+  const [mostrarCamara, setMostrarCamara] = useState(false); // Estado para controlar la cámara
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [modoRuta, setModoRuta] = useState<'ASCENSO' | 'DESCENSO' | null>(null);
@@ -170,30 +172,38 @@ export default function PantallaChofer() {
         return;
       }
 
-      if (alumno.boletos_disponibles <= 0) {
-        reproducirSonido('ERROR');
-        setEstadoPantalla('ERROR');
-        setAlumnoActual(alumno);
-        setMensaje('⚠️ Sin boletos disponibles');
-        return;
-      }
+      let nuevoSaldo = alumno.boletos_disponibles;
 
-      const nuevoSaldo = alumno.boletos_disponibles - 1;
-      const { error: updateError } = await supabase
-        .from('alumnos')
-        .update({ boletos_disponibles: nuevoSaldo })
-        .eq('id', alumno.id);
+      // SOLO DESCONTAR SI ES ASCENSO
+      if (modoRuta === 'ASCENSO') {
+        if (alumno.boletos_disponibles <= 0) {
+          reproducirSonido('ERROR');
+          setEstadoPantalla('ERROR');
+          setAlumnoActual(alumno);
+          setMensaje('⚠️ Sin boletos disponibles');
+          return;
+        }
 
-      if (updateError) {
-        reproducirSonido('ERROR');
-        setEstadoPantalla('ERROR');
-        setMensaje('❌ Error al procesar el pase');
-        return;
+        nuevoSaldo = alumno.boletos_disponibles - 1;
+        const { error: updateError } = await supabase
+          .from('alumnos')
+          .update({ boletos_disponibles: nuevoSaldo })
+          .eq('id', alumno.id);
+
+        if (updateError) {
+          reproducirSonido('ERROR');
+          setEstadoPantalla('ERROR');
+          setMensaje('❌ Error al procesar el pase');
+          return;
+        }
       }
 
       const enlaceMaps = ubicacion
         ? `https://maps.google.com/?q=${ubicacion.lat},${ubicacion.lng}`
         : '';
+
+      // Corregir la zona horaria a México para evitar el desfase de 6 horas
+      const fechaActualMexico = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
 
       const { error: errorRegistro } = await supabase.from('registros_transporte').insert([
         {
@@ -203,7 +213,8 @@ export default function PantallaChofer() {
           telefono_tutor: alumno.telefono_tutor, 
           tipo_movimiento: modoRuta === 'ASCENSO' ? 'Ascenso' : 'Descenso',
           ubicacion_gps: enlaceMaps,
-          unidad_transporte: '1'
+          unidad_transporte: '1',
+          created_at: fechaActualMexico.toISOString() // Fuerza la hora local en DB
         },
       ]);
 
@@ -212,7 +223,7 @@ export default function PantallaChofer() {
       }
 
       if (alumno.correo_tutor) {
-        const horaActual = new Date().toLocaleTimeString('es-MX', { 
+        const horaActual = fechaActualMexico.toLocaleTimeString('es-MX', { 
           hour: '2-digit', minute: '2-digit', hour12: true 
         });
 
@@ -232,7 +243,7 @@ export default function PantallaChofer() {
       reproducirSonido('EXITO');
       setEstadoPantalla('EXITO');
       setAlumnoActual({ ...alumno, boletos_disponibles: nuevoSaldo });
-      setMensaje('✅ ¡Abordaje Permitido!');
+      setMensaje(modoRuta === 'ASCENSO' ? '✅ ¡Abordaje Permitido!' : '✅ ¡Descenso Registrado!');
     } catch (err) {
       reproducirSonido('ERROR');
       setEstadoPantalla('ERROR');
@@ -405,7 +416,10 @@ export default function PantallaChofer() {
         {modoRuta && estadoPantalla === 'ESPERANDO' && (
           <div className="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-6 relative">
             <button
-              onClick={() => setModoRuta(null)}
+              onClick={() => {
+                setModoRuta(null);
+                setMostrarCamara(false);
+              }}
               className="absolute top-4 right-4 text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded border border-slate-500 transition-colors"
             >
               Cambiar Ruta
@@ -418,10 +432,31 @@ export default function PantallaChofer() {
               <h2 className="text-2xl font-bold text-white mb-2">
                 Listo para escanear
               </h2>
-              <p className="text-slate-400 text-sm">
-                Escanea con la cámara de tu celular o ingresa la matrícula del
-                alumno.
+              <p className="text-slate-400 text-sm mb-4">
+                Usa la cámara del celular o ingresa la matrícula manualmente.
               </p>
+              
+              <button
+                onClick={() => setMostrarCamara(!mostrarCamara)}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-xl transition-colors mb-4 shadow-md"
+              >
+                {mostrarCamara ? 'Ocultar Cámara 📷' : 'Abrir Cámara 📷'}
+              </button>
+
+              {mostrarCamara && (
+                <div className="w-full max-w-sm mx-auto rounded-xl overflow-hidden shadow-lg border-2 border-indigo-500 mb-4 bg-black">
+                  <QrReader
+                    constraints={{ facingMode: 'environment' }}
+                    onResult={(result, error) => {
+                      if (result) {
+                        procesarCodigo(result.getText());
+                        setMostrarCamara(false);
+                      }
+                    }}
+                    className="w-full"
+                  />
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleSubmit} className="flex gap-2">
@@ -450,7 +485,7 @@ export default function PantallaChofer() {
               ✓
             </div>
             <h2 className="text-3xl font-extrabold text-emerald-400">
-              ¡ACCESO AUTORIZADO!
+              {modoRuta === 'ASCENSO' ? '¡ACCESO AUTORIZADO!' : '¡DESCENSO REGISTRADO!'}
             </h2>
             {alumnoActual && (
               <div className="bg-slate-900/80 p-4 rounded-xl border border-emerald-500/40 space-y-1">
