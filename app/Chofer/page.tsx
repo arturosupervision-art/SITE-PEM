@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
-import { QrReader } from 'react-qr-reader'; // IMPORTANTE: Ejecutar npm install react-qr-reader
+import { Scanner } from '@yudiel/react-qr-scanner'; 
 
 export default function PantallaChofer() {
   // ==========================================
@@ -14,7 +14,6 @@ export default function PantallaChofer() {
   const [cargandoLogin, setCargandoLogin] = useState(false);
   const [choferInfo, setChoferInfo] = useState<any>(null);
 
-  // Mantener la sesión activa en el navegador al recargar
   useEffect(() => {
     const sesionGuardada = sessionStorage.getItem('sesion_chofer');
     if (sesionGuardada) {
@@ -42,7 +41,6 @@ export default function PantallaChofer() {
         return;
       }
 
-      // Validación de Rol (Acepta 'conductor' o 'chofer')
       const rolUsuario = data.rol ? data.rol.toLowerCase().trim() : '';
       if (rolUsuario !== 'conductor' && rolUsuario !== 'chofer') {
         setErrorLogin('Acceso denegado (Solo personal con rol Conductor).');
@@ -50,7 +48,6 @@ export default function PantallaChofer() {
         return;
       }
 
-      // Login Exitoso
       setChoferInfo(data);
       setUsuarioLogueado(true);
       sessionStorage.setItem('sesion_chofer', JSON.stringify(data));
@@ -68,7 +65,7 @@ export default function PantallaChofer() {
   };
 
   // ==========================================
-  // CÓDIGO ORIGINAL DEL MÓDULO CHOFER
+  // ESTADOS Y LÓGICA DEL ESCÁNER
   // ==========================================
   const [busquedaManual, setBusquedaManual] = useState('');
   const [estadoPantalla, setEstadoPantalla] = useState<
@@ -76,7 +73,7 @@ export default function PantallaChofer() {
   >('ESPERANDO');
   const [mensaje, setMensaje] = useState('');
   const [alumnoActual, setAlumnoActual] = useState<any>(null);
-  const [mostrarCamara, setMostrarCamara] = useState(false); // Estado para controlar la cámara
+  const [mostrarCamara, setMostrarCamara] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [modoRuta, setModoRuta] = useState<'ASCENSO' | 'DESCENSO' | null>(null);
@@ -156,7 +153,8 @@ export default function PantallaChofer() {
     setBusquedaManual('');
 
     try {
-      let { data: alumno, error } = await supabase
+      // 1. Buscar alumno en la base de datos
+      let { data: alumno, error: errorAlumno } = await supabase
         .from('alumnos')
         .select('*')
         .or(
@@ -164,7 +162,7 @@ export default function PantallaChofer() {
         )
         .maybeSingle();
 
-      if (error || !alumno) {
+      if (errorAlumno || !alumno) {
         reproducirSonido('ERROR');
         setEstadoPantalla('ERROR');
         setAlumnoActual(null);
@@ -174,7 +172,7 @@ export default function PantallaChofer() {
 
       let nuevoSaldo = alumno.boletos_disponibles;
 
-      // SOLO DESCONTAR SI ES ASCENSO
+      // 2. Descontar boleto únicamente si es ASCENSO
       if (modoRuta === 'ASCENSO') {
         if (alumno.boletos_disponibles <= 0) {
           reproducirSonido('ERROR');
@@ -193,7 +191,7 @@ export default function PantallaChofer() {
         if (updateError) {
           reproducirSonido('ERROR');
           setEstadoPantalla('ERROR');
-          setMensaje('❌ Error al procesar el pase');
+          setMensaje(`❌ Error al actualizar saldo: ${updateError.message}`);
           return;
         }
       }
@@ -202,27 +200,43 @@ export default function PantallaChofer() {
         ? `https://maps.google.com/?q=${ubicacion.lat},${ubicacion.lng}`
         : '';
 
-      // Corregir la zona horaria a México para evitar el desfase de 6 horas
-      const fechaActualMexico = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
+      // 3. Registrar viaje en Supabase
+      const { error: errorRegistro } = await supabase
+        .from('registros_transporte')
+        .insert([
+          {
+            alumno_id: alumno.id,
+            matricula: alumno.matricula,
+            alumno_nombre: alumno.nombre_completo,
+            telefono_tutor: alumno.telefono_tutor,
+            tipo_movimiento: modoRuta === 'ASCENSO' ? 'Ascenso' : 'Descenso',
+            ubicacion_gps: enlaceMaps,
+            unidad_transporte: '1',
+          },
+        ]);
 
-      const { error: errorRegistro } = await supabase.from('registros_transporte').insert([
-        {
-          alumno_id: alumno.id,
-          matricula: alumno.matricula,
-          alumno_nombre: alumno.nombre_completo, 
-          telefono_tutor: alumno.telefono_tutor, 
-          tipo_movimiento: modoRuta === 'ASCENSO' ? 'Ascenso' : 'Descenso',
-          ubicacion_gps: enlaceMaps,
-          unidad_transporte: '1',
-          created_at: fechaActualMexico.toISOString() // Fuerza la hora local en DB
-        },
-      ]);
-
+      // SI SUPABASE RECHAZA GUARDAR, DETENER Y MOSTRAR ERROR
       if (errorRegistro) {
-        console.error("🚨 Error bloqueando inserción en Supabase:", errorRegistro);
+        console.error("🚨 Error insertando en registros_transporte:", errorRegistro);
+
+        // Revertir el boleto cobrado para no perjudicar al alumno por falla de BD
+        if (modoRuta === 'ASCENSO') {
+          await supabase
+            .from('alumnos')
+            .update({ boletos_disponibles: alumno.boletos_disponibles })
+            .eq('id', alumno.id);
+        }
+
+        reproducirSonido('ERROR');
+        setEstadoPantalla('ERROR');
+        setAlumnoActual(alumno);
+        setMensaje(`❌ Error BD: ${errorRegistro.message}`);
+        return; // ¡DETENER AQUÍ! No mostrar pantalla verde.
       }
 
+      // 4. Disparar correo al tutor
       if (alumno.correo_tutor) {
+        const fechaActualMexico = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
         const horaActual = fechaActualMexico.toLocaleTimeString('es-MX', { 
           hour: '2-digit', minute: '2-digit', hour12: true 
         });
@@ -237,17 +251,19 @@ export default function PantallaChofer() {
             hora: horaActual,
             ubicacion: enlaceMaps
           })
-        }).catch(err => console.error("Error disparando el correo:", err));
+        }).catch(err => console.error("Error al enviar correo:", err));
       }
 
+      // 5. Mostrar Pantalla Verde de Éxito SOLO SI SE GUARDÓ EN LA BASE DE DATOS
       reproducirSonido('EXITO');
       setEstadoPantalla('EXITO');
       setAlumnoActual({ ...alumno, boletos_disponibles: nuevoSaldo });
       setMensaje(modoRuta === 'ASCENSO' ? '✅ ¡Abordaje Permitido!' : '✅ ¡Descenso Registrado!');
-    } catch (err) {
+
+    } catch (err: any) {
       reproducirSonido('ERROR');
       setEstadoPantalla('ERROR');
-      setMensaje('❌ Error de conexión');
+      setMensaje(`❌ Error de conexión: ${err?.message || 'Sistemas no disponibles'}`);
     }
   };
 
@@ -445,15 +461,14 @@ export default function PantallaChofer() {
 
               {mostrarCamara && (
                 <div className="w-full max-w-sm mx-auto rounded-xl overflow-hidden shadow-lg border-2 border-indigo-500 mb-4 bg-black">
-                  <QrReader
-                    constraints={{ facingMode: 'environment' }}
-                    onResult={(result, error) => {
-                      if (result) {
-                        procesarCodigo(result.getText());
+                  <Scanner
+                    onResult={(text) => {
+                      if (text) {
+                        procesarCodigo(text);
                         setMostrarCamara(false);
                       }
                     }}
-                    className="w-full"
+                    onError={(error) => console.log(error?.message)}
                   />
                 </div>
               )}
@@ -518,7 +533,7 @@ export default function PantallaChofer() {
               ✕
             </div>
             <h2 className="text-3xl font-extrabold text-red-400">
-              ACCESO DENEGADO
+              ERROR REGISTRADO
             </h2>
             <p className="text-lg font-bold text-slate-200">{mensaje}</p>
             {alumnoActual && (
@@ -526,9 +541,6 @@ export default function PantallaChofer() {
                 <p className="text-lg font-bold text-white uppercase">
                   {alumnoActual.nombre_completo}
                 </p>
-                <div className="mt-2 inline-block bg-red-500/20 border border-red-500 text-red-300 px-4 py-1.5 rounded-full font-bold text-sm">
-                  🎟️ Saldo actual: 0 Boletos
-                </div>
               </div>
             )}
             <button
