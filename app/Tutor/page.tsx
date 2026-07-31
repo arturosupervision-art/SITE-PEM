@@ -10,6 +10,14 @@ export default function ModuloTutor() {
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState('');
 
+  // FUNCIÓN CORREGIDA PARA LA HORA
+  const formatearFechaHora = (fechaString: string) => {
+    if (!fechaString) return 'Sin fecha';
+    // Forzamos el formato UTC agregando la 'Z' si no la tiene
+    const fechaUTC = fechaString.endsWith('Z') ? fechaString : `${fechaString}Z`;
+    return new Date(fechaUTC).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+  };
+
   const buscarAlumno = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!matricula) return;
@@ -39,7 +47,7 @@ export default function ModuloTutor() {
       .from('registros_transporte')
       .select('*')
       .eq('matricula', matricula)
-      .order('fecha_hora', { ascending: false }) // <-- CORRECCIÓN: ORDENADO ESTRICTAMENTE POR FECHA Y HORA
+      .order('fecha_hora', { ascending: false }) 
       .limit(10); // Muestra los últimos 10 movimientos
 
     if (viajesData) {
@@ -152,8 +160,8 @@ export default function ModuloTutor() {
                     >
                       <div className="flex justify-between items-center border-b border-slate-50 pb-2">
                         <span className="text-xs text-slate-400 font-medium">
-                          {/* CORRECCIÓN: ZONA HORARIA DE MÉXICO RE-APLICADA */}
-                          {new Date(viaje.fecha_hora).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}
+                          {/* SE APLICA LA FUNCIÓN CORREGIDA AQUÍ */}
+                          {formatearFechaHora(viaje.fecha_hora)}
                         </span>
                         <span
                           className={`text-xs font-bold px-2 py-1 rounded-md ${
