@@ -68,6 +68,8 @@ export default function Coordinador() {
   // LÓGICA DEL MÓDULO COORDINADOR (CORREGIDA)
   // ==========================================
   const [registros, setRegistros] = useState<any[]>([]);
+  // NUEVO ESTADO PARA EL BUSCADOR
+  const [busqueda, setBusqueda] = useState('');
 
   const cargarRegistros = async () => {
     // CORRECCIÓN 1: Hacemos un JOIN con la tabla alumnos para obtener nombre y matrícula
@@ -150,6 +152,15 @@ export default function Coordinador() {
       
     window.open(url, '_blank');
   };
+
+  // NUEVA LÓGICA DE FILTRADO
+  const registrosFiltrados = registros.filter((registro) => {
+    if (!busqueda) return true;
+    const termino = busqueda.toLowerCase();
+    const nombre = (registro.alumnos?.nombre_completo || '').toLowerCase();
+    const fechaStr = obtenerHoraCorregida(registro.fecha_hora).toLowerCase();
+    return nombre.includes(termino) || fechaStr.includes(termino);
+  });
 
   // ==========================================
   // VISTA 1: FORMULARIO DE LOGIN 
@@ -279,6 +290,17 @@ export default function Coordinador() {
           </div>
         </div>
 
+        {/* INPUT DE BUSCADOR AÑADIDO AQUÍ */}
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="🔍 Buscar por nombre de alumno o fecha..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 text-sm text-white focus:border-blue-500 outline-none transition-colors shadow-md"
+          />
+        </div>
+
         <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-md overflow-hidden mb-8">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -293,7 +315,8 @@ export default function Coordinador() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
-                {registros.length === 0 ? (
+                {/* AHORA ITERAMOS SOBRE registrosFiltrados */}
+                {registrosFiltrados.length === 0 ? (
                   <tr>
                     <td
                       colSpan={6}
@@ -303,7 +326,7 @@ export default function Coordinador() {
                     </td>
                   </tr>
                 ) : (
-                  registros.map((registro) => {
+                  registrosFiltrados.map((registro) => {
                     // Extraemos los datos haciendo el fallback al cruce de tablas (JOIN)
                     const nombre = registro.alumnos?.nombre_completo || 'Desconocido';
                     const matricula = registro.alumnos?.matricula || 'N/A';
