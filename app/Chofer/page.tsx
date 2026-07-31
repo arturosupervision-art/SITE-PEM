@@ -196,30 +196,25 @@ export default function PantallaChofer() {
         }
       }
 
-      const enlaceMaps = ubicacion
-        ? `https://maps.google.com/?q=${ubicacion.lat},${ubicacion.lng}`
-        : '';
-
-      // 3. Registrar viaje en Supabase
+      // 3. Registrar viaje en Supabase mapeando las columnas REALES de tu tabla
       const { error: errorRegistro } = await supabase
         .from('registros_transporte')
         .insert([
           {
             alumno_id: alumno.id,
-            matricula: alumno.matricula,
-            alumno_nombre: alumno.nombre_completo,
-            telefono_tutor: alumno.telefono_tutor,
             tipo_movimiento: modoRuta === 'ASCENSO' ? 'Ascenso' : 'Descenso',
-            ubicacion_gps: enlaceMaps,
-            unidad_transporte: '1',
+            tipo_evento: modoRuta,
+            latitud: ubicacion ? ubicacion.lat : null,
+            longitud: ubicacion ? ubicacion.lng : null,
+            registrado_por: choferInfo?.id || null,
+            fecha_hora: new Date().toISOString()
           },
         ]);
 
-      // SI SUPABASE RECHAZA GUARDAR, DETENER Y MOSTRAR ERROR
       if (errorRegistro) {
         console.error("🚨 Error insertando en registros_transporte:", errorRegistro);
 
-        // Revertir el boleto cobrado para no perjudicar al alumno por falla de BD
+        // Revertir boleto si falla la inserción
         if (modoRuta === 'ASCENSO') {
           await supabase
             .from('alumnos')
@@ -231,11 +226,15 @@ export default function PantallaChofer() {
         setEstadoPantalla('ERROR');
         setAlumnoActual(alumno);
         setMensaje(`❌ Error BD: ${errorRegistro.message}`);
-        return; // ¡DETENER AQUÍ! No mostrar pantalla verde.
+        return;
       }
 
       // 4. Disparar correo al tutor
       if (alumno.correo_tutor) {
+        const enlaceMaps = ubicacion
+          ? `https://maps.google.com/?q=${ubicacion.lat},${ubicacion.lng}`
+          : '';
+
         const fechaActualMexico = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
         const horaActual = fechaActualMexico.toLocaleTimeString('es-MX', { 
           hour: '2-digit', minute: '2-digit', hour12: true 
@@ -254,7 +253,7 @@ export default function PantallaChofer() {
         }).catch(err => console.error("Error al enviar correo:", err));
       }
 
-      // 5. Mostrar Pantalla Verde de Éxito SOLO SI SE GUARDÓ EN LA BASE DE DATOS
+      // 5. Pantalla verde de Éxito
       reproducirSonido('EXITO');
       setEstadoPantalla('EXITO');
       setAlumnoActual({ ...alumno, boletos_disponibles: nuevoSaldo });
