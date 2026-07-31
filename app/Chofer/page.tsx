@@ -126,25 +126,27 @@ export default function PantallaChofer() {
     }
   };
 
-  const iniciarRuta = (tipo: 'ASCENSO' | 'DESCENSO') => {
-    if (!navigator.geolocation) {
-      alert('Tu navegador no soporta GPS. Se continuará sin ubicación.');
-      setModoRuta(tipo);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUbicacion({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setModoRuta(tipo);
-      },
-      (err) => {
-        alert(
-          'GPS denegado o no disponible. Se continuará sin ubicación exacta.'
-        );
-        setModoRuta(tipo);
+  const obtenerUbicacionActual = (): Promise<{ lat: number; lng: number } | null> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(ubicacion);
+        return;
       }
-    );
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const nuevaUbicacion = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setUbicacion(nuevaUbicacion);
+          resolve(nuevaUbicacion);
+        },
+        () => resolve(ubicacion),
+        { timeout: 5000, enableHighAccuracy: true }
+      );
+    });
+  };
+
+  const iniciarRuta = async (tipo: 'ASCENSO' | 'DESCENSO') => {
+    await obtenerUbicacionActual();
+    setModoRuta(tipo);
   };
 
   const procesarCodigo = async (codigo: string) => {
@@ -153,6 +155,9 @@ export default function PantallaChofer() {
     setBusquedaManual('');
 
     try {
+      // Intentar refrescar ubicación GPS al escanear
+      const gpsActual = await obtenerUbicacionActual();
+
       // 1. Buscar alumno en la base de datos
       let { data: alumno, error: errorAlumno } = await supabase
         .from('alumnos')
@@ -196,18 +201,32 @@ export default function PantallaChofer() {
         }
       }
 
-      // 3. Registrar viaje en Supabase mapeando las columnas REALES de tu tabla
+      // Preparar enlace de Maps e Iso String ajustado a hora de México (UTC-6)
+      const enlaceMaps = gpsActual
+        ? `https://maps.google.com/?q=${gpsActual.lat},${gpsActual.lng}`
+        : '';
+
+      const fechaHoraMexico = new Date()
+        .toLocaleString('sv-SE', { timeZone: 'America/Mexico_City' })
+        .replace(' ', 'T');
+
+      // 3. Registrar viaje enviando TODOS los campos compatibles
       const { error: errorRegistro } = await supabase
         .from('registros_transporte')
         .insert([
           {
             alumno_id: alumno.id,
+            matricula: alumno.matricula,
+            alumno_nombre: alumno.nombre_completo,
+            telefono_tutor: alumno.telefono_tutor,
             tipo_movimiento: modoRuta === 'ASCENSO' ? 'Ascenso' : 'Descenso',
             tipo_evento: modoRuta,
-            latitud: ubicacion ? ubicacion.lat : null,
-            longitud: ubicacion ? ubicacion.lng : null,
+            latitud: gpsActual ? gpsActual.lat : null,
+            longitud: gpsActual ? gpsActual.lng : null,
+            ubicacion_gps: enlaceMaps,
+            unidad_transporte: 'Autobús 1',
             registrado_por: choferInfo?.id || null,
-            fecha_hora: new Date().toISOString()
+            fecha_hora: fechaHoraMexico
           },
         ]);
 
@@ -231,12 +250,8 @@ export default function PantallaChofer() {
 
       // 4. Disparar correo al tutor
       if (alumno.correo_tutor) {
-        const enlaceMaps = ubicacion
-          ? `https://maps.google.com/?q=${ubicacion.lat},${ubicacion.lng}`
-          : '';
-
-        const fechaActualMexico = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
-        const horaActual = fechaActualMexico.toLocaleTimeString('es-MX', { 
+        const horaFormateada = new Date().toLocaleTimeString('es-MX', { 
+          timeZone: 'America/Mexico_City',
           hour: '2-digit', minute: '2-digit', hour12: true 
         });
 
@@ -247,7 +262,7 @@ export default function PantallaChofer() {
             correoTutor: alumno.correo_tutor,
             nombreAlumno: alumno.nombre_completo,
             tipoMovimiento: modoRuta,
-            hora: horaActual,
+            hora: horaFormateada,
             ubicacion: enlaceMaps
           })
         }).catch(err => console.error("Error al enviar correo:", err));
