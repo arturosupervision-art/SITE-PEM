@@ -14,7 +14,6 @@ export default function Coordinador() {
   const [cargandoLogin, setCargandoLogin] = useState(false);
   const [coordinadorInfo, setCoordinadorInfo] = useState<any>(null);
 
-  // Mantener la sesión activa en el navegador al recargar
   useEffect(() => {
     const sesionGuardada = sessionStorage.getItem('sesion_coordinacion');
     if (sesionGuardada) {
@@ -42,7 +41,6 @@ export default function Coordinador() {
         return;
       }
 
-      // Validación de Rol (Debe ser "coordinacion")
       const rolUsuario = data.rol ? data.rol.toLowerCase().trim() : '';
       if (rolUsuario !== 'coordinacion') {
         setErrorLogin('Acceso denegado (Solo personal con rol Coordinación).');
@@ -50,7 +48,6 @@ export default function Coordinador() {
         return;
       }
 
-      // Login Exitoso
       setCoordinadorInfo(data);
       setUsuarioLogueado(true);
       sessionStorage.setItem('sesion_coordinacion', JSON.stringify(data));
@@ -68,14 +65,22 @@ export default function Coordinador() {
   };
 
   // ==========================================
-  // CÓDIGO ORIGINAL DEL MÓDULO COORDINADOR
+  // LÓGICA DEL MÓDULO COORDINADOR (CORREGIDA)
   // ==========================================
   const [registros, setRegistros] = useState<any[]>([]);
 
   const cargarRegistros = async () => {
+    // CORRECCIÓN 1: Hacemos un JOIN con la tabla alumnos para obtener nombre y matrícula
     const { data, error } = await supabase
       .from('registros_transporte')
-      .select('*')
+      .select(`
+        *,
+        alumnos (
+          nombre_completo,
+          matricula,
+          telefono_tutor
+        )
+      `)
       .order('fecha_hora', { ascending: false })
       .limit(50);
 
@@ -96,8 +101,9 @@ export default function Coordinador() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'registros_transporte' },
-        (payload) => {
-          setRegistros((prev) => [payload.new, ...prev]);
+        () => {
+          // CORRECCIÓN 4: Recargamos los datos para obtener los "joins" del alumno correctamente
+          cargarRegistros();
         }
       )
       .subscribe();
@@ -107,19 +113,36 @@ export default function Coordinador() {
     };
   }, [usuarioLogueado]);
 
-  // Función MEJORADA para WhatsApp
+  // CORRECCIÓN 3: Ajuste de Zona Horaria
+  const obtenerHoraCorregida = (fechaString: string) => {
+    if (!fechaString) return 'Sin fecha';
+    // Se fuerza UTC agregando Z si no lo trae, para que JS convierta a la hora local correctamente
+    const fechaUTC = fechaString.endsWith('Z') ? fechaString : `${fechaString}Z`;
+    return new Date(fechaUTC).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+  };
+
   const notificarWhatsApp = (registro: any) => {
-    const fecha = new Date(registro.fecha_hora).toLocaleDateString('es-MX');
-    const hora = new Date(registro.fecha_hora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    // Extraemos datos cruzados
+    const nombreAlumno = registro.alumnos?.nombre_completo || 'Sin Nombre';
+    const telefonoTutor = registro.alumnos?.telefono_tutor || '';
+    
+    // Formatear Fecha y Hora Correctamente
+    const fechaUtc = registro.fecha_hora.endsWith('Z') ? registro.fecha_hora : `${registro.fecha_hora}Z`;
+    const objFecha = new Date(fechaUtc);
+    const fecha = objFecha.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' });
+    const hora = objFecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' });
     
     const unidad = registro.unidad_transporte || '1';
-    const ubicacion = registro.ubicacion_gps || 'No disponible';
+    // CORRECCIÓN 2: Generar enlace dinámico
+    const ubicacion = (registro.latitud && registro.longitud) 
+      ? `https://maps.google.com/?q=${registro.latitud},${registro.longitud}` 
+      : 'No disponible';
+      
     const movimiento = registro.tipo_movimiento ? registro.tipo_movimiento.toUpperCase() : 'MOVIMIENTO';
-    const nombre = registro.alumno_nombre || 'Sin Nombre';
     
-    const mensaje = `*SITE-PEM: Aviso de Transporte*\n\nEstimado tutor, le informamos que el alumno *${nombre}* ha registrado un *${movimiento}*.\n\n*Detalles del movimiento:*\n- *Hora:* ${hora}\n- *Fecha:* ${fecha}\n- *Unidad:* Autobús ${unidad}\n- *Ubicación:* ${ubicacion}\n\n_Mensaje automático del Sistema de Control SITE-PEM._`;
+    const mensaje = `*SITE-PEM: Aviso de Transporte*\n\nEstimado tutor, le informamos que el alumno *${nombreAlumno}* ha registrado un *${movimiento}*.\n\n*Detalles del movimiento:*\n- *Hora:* ${hora}\n- *Fecha:* ${fecha}\n- *Unidad:* Autobús ${unidad}\n- *Ubicación:* ${ubicacion}\n\n_Mensaje automático del Sistema de Control SITE-PEM._`;
 
-    const numeroLimpio = registro.telefono_tutor ? registro.telefono_tutor.replace(/\D/g, '') : '';
+    const numeroLimpio = telefonoTutor ? telefonoTutor.replace(/\D/g, '') : '';
     
     const url = numeroLimpio 
       ? `https://wa.me/${numeroLimpio}?text=${encodeURIComponent(mensaje)}`
@@ -129,13 +152,12 @@ export default function Coordinador() {
   };
 
   // ==========================================
-  // VISTA 1: FORMULARIO DE LOGIN (SI NO ESTÁ LOGUEADO)
+  // VISTA 1: FORMULARIO DE LOGIN 
   // ==========================================
   if (!usuarioLogueado) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-200 flex flex-col justify-center items-center p-6 select-none font-sans">
         <div className="w-full max-w-md bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl space-y-6">
-          
           <div className="text-center space-y-3">
             <div className="bg-white p-3 rounded-2xl inline-block shadow-md">
               <img
@@ -177,7 +199,6 @@ export default function Coordinador() {
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-blue-500 outline-none transition-colors"
               />
             </div>
-
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Contraseña:
@@ -191,7 +212,6 @@ export default function Coordinador() {
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-blue-500 outline-none transition-colors"
               />
             </div>
-
             <button
               type="submit"
               disabled={cargandoLogin}
@@ -212,12 +232,11 @@ export default function Coordinador() {
   }
 
   // ==========================================
-  // VISTA 2: PANTALLA PRINCIPAL (LOGUEADO)
+  // VISTA 2: PANTALLA PRINCIPAL 
   // ==========================================
   return (
     <div className="min-h-screen bg-slate-950 p-6 font-sans text-slate-200 flex flex-col justify-between">
       <div className="max-w-6xl mx-auto w-full">
-        
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
           <div className="flex items-center gap-4 flex-wrap justify-center text-center md:text-left">
             <div className="bg-white rounded-xl p-2 shadow-lg shrink-0 h-20 flex items-center justify-center">
@@ -284,62 +303,71 @@ export default function Coordinador() {
                     </td>
                   </tr>
                 ) : (
-                  registros.map((registro) => (
-                    <tr
-                      key={registro.id || registro.fecha_hora}
-                      className="hover:bg-slate-800/30 transition-colors"
-                    >
-                      <td className="px-6 py-4 text-slate-300">
-                        {new Date(registro.fecha_hora).toLocaleString('es-MX')}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-blue-300">
-                          {registro.alumno_nombre || 'Desconocido'}
-                        </div>
-                        <div className="text-xs text-slate-500 font-mono mt-1">
-                          {registro.matricula}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                            registro.tipo_movimiento === 'Ascenso'
-                              ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800'
-                              : 'bg-amber-900/30 text-amber-400 border-amber-800'
-                          }`}
-                        >
-                          {registro.tipo_movimiento}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 font-bold text-slate-400">
-                        Autobús {registro.unidad_transporte || '1'}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {registro.ubicacion_gps ? (
-                          <a
-                            href={registro.ubicacion_gps}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 underline font-medium text-xs flex items-center justify-center gap-1"
+                  registros.map((registro) => {
+                    // Extraemos los datos haciendo el fallback al cruce de tablas (JOIN)
+                    const nombre = registro.alumnos?.nombre_completo || 'Desconocido';
+                    const matricula = registro.alumnos?.matricula || 'N/A';
+                    const enlaceGPS = (registro.latitud && registro.longitud) 
+                      ? `https://maps.google.com/?q=${registro.latitud},${registro.longitud}` 
+                      : null;
+
+                    return (
+                      <tr
+                        key={registro.id || registro.fecha_hora}
+                        className="hover:bg-slate-800/30 transition-colors"
+                      >
+                        <td className="px-6 py-4 text-slate-300">
+                          {obtenerHoraCorregida(registro.fecha_hora)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-blue-300">
+                            {nombre}
+                          </div>
+                          <div className="text-xs text-slate-500 font-mono mt-1">
+                            {matricula}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                              registro.tipo_movimiento === 'Ascenso'
+                                ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800'
+                                : 'bg-amber-900/30 text-amber-400 border-amber-800'
+                            }`}
                           >
-                            📍 Ver Mapa
-                          </a>
-                        ) : (
-                          <span className="text-slate-600 text-xs">
-                            Sin ubicación
+                            {registro.tipo_movimiento}
                           </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => notificarWhatsApp(registro)}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors w-full border border-emerald-500/50 shadow-sm"
-                        >
-                          💬 Notificar
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="px-6 py-4 font-bold text-slate-400">
+                          Autobús {registro.unidad_transporte || '1'}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {enlaceGPS ? (
+                            <a
+                              href={enlaceGPS}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 underline font-medium text-xs flex items-center justify-center gap-1"
+                            >
+                              📍 Ver Mapa
+                            </a>
+                          ) : (
+                            <span className="text-slate-600 text-xs">
+                              Sin ubicación
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button
+                            onClick={() => notificarWhatsApp(registro)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors w-full border border-emerald-500/50 shadow-sm"
+                          >
+                            💬 Notificar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
