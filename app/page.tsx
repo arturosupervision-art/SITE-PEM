@@ -258,7 +258,8 @@ export default function ModuloCajaViajes() {
 
   const alumnosFiltrados = alumnos.filter(a => 
     a.nombre_completo?.toLowerCase().includes(busqueda.toLowerCase()) || 
-    (a.matricula && a.matricula.toLowerCase().includes(busqueda.toLowerCase()))
+    (a.matricula && a.matricula.toLowerCase().includes(busqueda.toLowerCase())) ||
+    (a.codigo_qr_vinculado && a.codigo_qr_vinculado === busqueda)
   ).slice(0, 15)
 
   // ================= PANTALLA: LOGIN =================
@@ -327,7 +328,6 @@ export default function ModuloCajaViajes() {
           <RenderTicket ticket={ticketActual} onClose={() => setTicketActual(null)} />
         ) : (
           <>
-            {/* Header Mini para Logout en Apertura */}
             <div className="absolute top-4 right-4 print:hidden">
               <button onClick={handleLogout} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-bold text-sm border border-slate-700 transition-colors">
                 Cerrar Sesión
@@ -415,12 +415,39 @@ export default function ModuloCajaViajes() {
           </div>
         </div>
 
-        {/* BUSCADOR Y ESCÁNER */}
+        {/* BUSCADOR Y ESCÁNER (MODIFICADO PARA SOPORTAR LECTOR Y CÁMARA) */}
         <div className="bg-[#0f172a] p-6 rounded-2xl mb-6 border border-slate-800 flex flex-col gap-4 shadow-lg">
           <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
-            <div className="w-full md:w-2/3 flex gap-2">
-              <input type="text" placeholder="Escanear QR o teclea alumno/matrícula..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full bg-[#020617] text-white rounded-xl py-3 px-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" autoFocus />
-              <button onClick={() => setEscanearVenta(!escanearVenta)} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 rounded-xl flex items-center justify-center shadow-md transition-colors whitespace-nowrap">
+            <div className="w-full md:w-3/4 flex gap-2">
+              <input 
+                id="input-busqueda-qr"
+                type="text" 
+                placeholder="Escanea código QR, o teclea alumno/matrícula..." 
+                value={busqueda} 
+                onChange={(e) => setBusqueda(e.target.value)} 
+                onKeyDown={(e) => {
+                  // Prevenir comportamientos indeseados cuando la pistola QR manda la tecla 'Enter' automáticamente
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                  }
+                }}
+                className="w-full bg-[#020617] text-white rounded-xl py-3 px-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" 
+                autoFocus 
+              />
+              <button 
+                onClick={() => {
+                  setEscanearVenta(false);
+                  document.getElementById('input-busqueda-qr')?.focus();
+                }} 
+                className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 rounded-xl flex items-center justify-center shadow-md transition-colors whitespace-nowrap border border-slate-600"
+                title="Activar entrada para Pistola Lector QR"
+              >
+                📟 Lector
+              </button>
+              <button 
+                onClick={() => setEscanearVenta(!escanearVenta)} 
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 rounded-xl flex items-center justify-center shadow-md transition-colors whitespace-nowrap"
+              >
                 {escanearVenta ? '❌ Cerrar' : '📷 Cámara'}
               </button>
             </div>
@@ -492,7 +519,7 @@ export default function ModuloCajaViajes() {
         System by <span className="font-bold text-slate-500">Arturo Díaz</span>
       </div>
 
-      {/* MODAL VINCULAR QR */}
+      {/* MODAL VINCULAR QR (MODIFICADO PARA LECTOR) */}
       {alumnoVincular && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-40 print:hidden">
           <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md">
@@ -518,7 +545,21 @@ export default function ModuloCajaViajes() {
               </div>
             ) : (
               <div className="mb-6">
-                <input type="text" autoFocus value={nuevoQr} onChange={(e) => setNuevoQr(e.target.value)} placeholder="Escanea con pistola o teclea aquí..." className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl px-4 py-3 text-white outline-none mb-3 font-mono focus:border-indigo-400" />
+                <input 
+                  type="text" 
+                  autoFocus 
+                  value={nuevoQr} 
+                  onChange={(e) => setNuevoQr(e.target.value)} 
+                  onKeyDown={(e) => {
+                    // Si se usa pistola, ésta envía un 'Enter' al final. Esto guarda automáticamente al detectarlo.
+                    if (e.key === 'Enter' && nuevoQr.trim() !== '') {
+                      e.preventDefault();
+                      guardarNuevoQr();
+                    }
+                  }}
+                  placeholder="Escanea con pistola Lector o teclea aquí..." 
+                  className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl px-4 py-3 text-white outline-none mb-3 font-mono focus:border-indigo-400" 
+                />
                 <button onClick={() => setUsarCamara(true)} className="w-full bg-indigo-900/40 hover:bg-indigo-800/60 text-indigo-300 border border-indigo-500/50 py-3 rounded-lg text-sm flex justify-center items-center gap-2 font-bold transition-colors">
                   📷 Activar Cámara del Dispositivo
                 </button>
