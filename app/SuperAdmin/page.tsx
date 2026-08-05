@@ -6,8 +6,10 @@ export default function PanelAdministracion() {
   // ================= ESTADOS DE AUTENTICACIÓN =================
   const [rol, setRol] = useState<'ADMIN' | 'SUPERADMIN' | null>(null)
   
+  const [pasoLogin, setPasoLogin] = useState(1)
   const [usuario, setUsuario] = useState('')
   const [password, setPassword] = useState('')
+  const [pin, setPin] = useState('')
   const [errorAuth, setErrorAuth] = useState(false)
   
   // ================= ESTADO DE VISTA (SOLO SUPERADMIN) =================
@@ -93,33 +95,62 @@ export default function PanelAdministracion() {
   const procesarLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    try {
-      const { data, error } = await supabase
-        .from('usuarios')
-        .select('*')
-        .eq('correo', usuario)
-        .eq('contrasena', password)
-        .single();
+    // PASO 1: Validación de Correo y Contraseña
+    if (pasoLogin === 1) {
+      if (usuario === 'prueba.superadmin@pem.edu.mx' && password === 'prueba1234') {
+        setPasoLogin(2)
+        setErrorAuth(false)
+      } else if (usuario === 'admin' && password === '0987') {
+        setPasoLogin(2)
+        setErrorAuth(false)
+      } else {
+        // Validación en Base de Datos para otros empleados
+        try {
+          const { data, error } = await supabase
+            .from('usuarios')
+            .select('*')
+            .eq('correo', usuario)
+            .eq('contrasena', password)
+            .single();
 
-      if (error || !data) {
-        setErrorAuth(true);
-        setPassword('');
-        return;
-      }
+          if (error || !data) {
+            setErrorAuth(true);
+            setPassword('');
+            return;
+          }
 
-      setErrorAuth(false);
-      setRol(data.rol.toUpperCase());
-      
-      if (data.rol.toUpperCase() === 'SUPERADMIN' || data.rol.toUpperCase() === 'ADMIN') {
-        cargarDatosDashboard();
-        if (data.rol.toUpperCase() === 'SUPERADMIN') {
-          cargarAlumnos();
-          cargarEmpleados();
+          setErrorAuth(false);
+          setRol(data.rol.toUpperCase());
+          
+          if (data.rol.toUpperCase() === 'SUPERADMIN' || data.rol.toUpperCase() === 'ADMIN') {
+            cargarDatosDashboard();
+            if (data.rol.toUpperCase() === 'SUPERADMIN') {
+              cargarAlumnos();
+              cargarEmpleados();
+            }
+          }
+        } catch (err) {
+          console.error("Error en login:", err);
+          alert("Error al conectar con la base de datos.");
         }
       }
-    } catch (err) {
-      console.error("Error en login:", err);
-      alert("Error al conectar con la base de datos.");
+    } 
+    // PASO 2: Validación de PIN (Solo para Cuentas Hardcoded)
+    else if (pasoLogin === 2) {
+      if (usuario === 'prueba.superadmin@pem.edu.mx' && pin === '3664') {
+        setErrorAuth(false)
+        setRol('SUPERADMIN')
+        cargarDatosDashboard()
+        cargarAlumnos()
+        cargarEmpleados()
+      } else if (usuario === 'admin' && pin === '0987') {
+        setErrorAuth(false)
+        setRol('ADMIN')
+        cargarDatosDashboard()
+      } else {
+        setErrorAuth(true)
+        setPin('')
+      }
     }
   }
 
@@ -127,6 +158,8 @@ export default function PanelAdministracion() {
     setRol(null)
     setUsuario('')
     setPassword('')
+    setPasoLogin(1)
+    setPin('')
     setVista('FINANZAS')
     setErrorAuth(false)
   }
@@ -686,48 +719,90 @@ export default function PanelAdministracion() {
           </div>
 
           <form onSubmit={procesarLogin} className="flex flex-col gap-4 relative z-10">
-            <div className="animate-fade-in space-y-4">
-              <p className="text-indigo-400 text-xs text-center font-bold mb-4 uppercase tracking-wider">
-                Identificación de Usuario
-              </p>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Usuario / Correo
-                </label>
-                <input
-                  type="text"
-                  value={usuario}
-                  onChange={(e) => setUsuario(e.target.value)}
-                  placeholder="Escriba su usuario"
-                  className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors`}
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Contraseña
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors`}
-                />
-              </div>
-              {errorAuth && (
-                <p className="text-red-400 text-xs font-bold mt-1 text-center animate-pulse">
-                  Credenciales incorrectas.
+            {pasoLogin === 1 ? (
+              <div className="animate-fade-in space-y-4">
+                <p className="text-indigo-400 text-xs text-center font-bold mb-4 uppercase tracking-wider">
+                  Identificación de Usuario
                 </p>
-              )}
-              
-              <button 
-                type="submit" 
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors mt-2"
-              >
-                Ingresar al Sistema
-              </button>
-            </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Usuario / Correo
+                  </label>
+                  <input
+                    type="text"
+                    value={usuario}
+                    onChange={(e) => setUsuario(e.target.value)}
+                    placeholder="Escriba su usuario"
+                    className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors`}
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Contraseña
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors`}
+                  />
+                </div>
+                {errorAuth && (
+                  <p className="text-red-400 text-xs font-bold mt-1 text-center animate-pulse">
+                    Credenciales incorrectas o usuario no encontrado.
+                  </p>
+                )}
+                
+                <button 
+                  type="submit" 
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors mt-2"
+                >
+                  Siguiente / Ingresar
+                </button>
+              </div>
+            ) : (
+              <div className="animate-fade-in space-y-4">
+                <p className="text-indigo-400 text-xs text-center font-bold mb-4 uppercase tracking-wider">
+                  Verificación de Seguridad
+                </p>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    PIN de Acceso
+                  </label>
+                  <input
+                    type="password"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    placeholder="••••"
+                    maxLength={4}
+                    className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-white text-center tracking-[1em] font-bold text-lg outline-none focus:border-indigo-500 transition-colors`}
+                    autoFocus
+                  />
+                </div>
+                {errorAuth && (
+                  <p className="text-red-400 text-xs font-bold mt-1 text-center animate-pulse">
+                    PIN incorrecto.
+                  </p>
+                )}
+                <div className="flex gap-2 mt-2">
+                  <button 
+                    type="button" 
+                    onClick={() => { setPasoLogin(1); setErrorAuth(false); setPin(''); }}
+                    className="w-1/3 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors"
+                  >
+                    Atrás
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="w-2/3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors"
+                  >
+                    Ingresar
+                  </button>
+                </div>
+              </div>
+            )}
           </form>
         </div>
       </div>
