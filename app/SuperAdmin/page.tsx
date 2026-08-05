@@ -6,13 +6,8 @@ export default function PanelAdministracion() {
   // ================= ESTADOS DE AUTENTICACIÓN =================
   const [rol, setRol] = useState<'ADMIN' | 'SUPERADMIN' | null>(null)
   
-  // Estados para Login Secuencial (Doble Factor)
-  const [pasoLogin, setPasoLogin] = useState<1 | 2>(1)
-  const [rolTemporal, setRolTemporal] = useState<'ADMIN' | 'SUPERADMIN' | null>(null)
-  
   const [usuario, setUsuario] = useState('')
   const [password, setPassword] = useState('')
-  const [pin, setPin] = useState('')
   const [errorAuth, setErrorAuth] = useState(false)
   
   // ================= ESTADO DE VISTA (SOLO SUPERADMIN) =================
@@ -78,6 +73,9 @@ export default function PanelAdministracion() {
   const [idsSeleccionados, setIdsSeleccionados] = useState<string[]>([])
 
   // ================= ESTADOS DE GESTIÓN DE EMPLEADOS =================
+  const [empleados, setEmpleados] = useState<any[]>([])
+  const [empleadoEditando, setEmpleadoEditando] = useState<any>(null)
+  
   const [mostrarModalEmpleado, setMostrarModalEmpleado] = useState(false)
   const [guardandoEmpleado, setGuardandoEmpleado] = useState(false)
   
@@ -92,45 +90,41 @@ export default function PanelAdministracion() {
   const [formEmpTurnoAsignado, setFormEmpTurnoAsignado] = useState('Matutino')
 
   // ================= FUNCIONES DE LOGIN Y CIERRE =================
-  const procesarLogin = (e: React.FormEvent) => {
+  const procesarLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (pasoLogin === 1) {
-      if (usuario === 'prueba.superadmin@pem.edu.mx' && password === 'prueba1234') {
-        setRolTemporal('SUPERADMIN')
-        setPasoLogin(2)
-        setErrorAuth(false)
-      } else if (usuario === 'admin' && password === '0987') {
-        setRolTemporal('ADMIN')
-        setPasoLogin(2)
-        setErrorAuth(false)
-      } else {
-        setErrorAuth(true)
-        setPassword('')
+    try {
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('correo', usuario)
+        .eq('contrasena', password)
+        .single();
+
+      if (error || !data) {
+        setErrorAuth(true);
+        setPassword('');
+        return;
       }
-    } else if (pasoLogin === 2) {
-      if (rolTemporal === 'SUPERADMIN' && pin === '3664') {
-        setRol('SUPERADMIN')
-        setErrorAuth(false)
-        cargarDatosDashboard()
-        cargarAlumnos()
-      } else if (rolTemporal === 'ADMIN' && pin === '0987') {
-        setRol('ADMIN')
-        setVista('FINANZAS')
-        setErrorAuth(false)
-        cargarDatosDashboard()
-      } else {
-        setErrorAuth(true)
-        setPin('')
+
+      setErrorAuth(false);
+      setRol(data.rol.toUpperCase());
+      
+      if (data.rol.toUpperCase() === 'SUPERADMIN' || data.rol.toUpperCase() === 'ADMIN') {
+        cargarDatosDashboard();
+        if (data.rol.toUpperCase() === 'SUPERADMIN') {
+          cargarAlumnos();
+          cargarEmpleados();
+        }
       }
+    } catch (err) {
+      console.error("Error en login:", err);
+      alert("Error al conectar con la base de datos.");
     }
   }
 
   const cerrarSesion = () => {
     setRol(null)
-    setRolTemporal(null)
-    setPasoLogin(1)
-    setPin('')
     setUsuario('')
     setPassword('')
     setVista('FINANZAS')
@@ -580,7 +574,21 @@ export default function PanelAdministracion() {
   )
 
   // ================= FUNCIONES DE EMPLEADOS =================
+  const cargarEmpleados = async () => {
+    const { data, error } = await supabase
+      .from('usuarios')
+      .select('*')
+      .order('id', { ascending: false });
+
+    if (error) {
+      console.error("Error cargando empleados:", error);
+    } else {
+      setEmpleados(data || []);
+    }
+  };
+
   const abrirModalNuevoEmpleado = () => {
+    setEmpleadoEditando(null)
     setFormEmpRol('CAJA')
     setFormEmpNombre('')
     setFormEmpCorreo('')
@@ -593,6 +601,31 @@ export default function PanelAdministracion() {
     setMostrarModalEmpleado(true)
   }
 
+  const editarEmpleado = (emp: any) => {
+    setEmpleadoEditando(emp)
+    setFormEmpRol(emp.rol)
+    setFormEmpNombre(emp.nombre)
+    setFormEmpCorreo(emp.correo)
+    setFormEmpTelefono(emp.telefono || '')
+    setFormEmpPassword(emp.contrasena)
+    setMostrarModalEmpleado(true)
+  }
+
+  const eliminarEmpleado = async (id: string) => {
+    if(window.confirm("¿Estás seguro de que deseas eliminar a este empleado? Esta acción no se puede deshacer.")) {
+      const { error } = await supabase
+        .from('usuarios')
+        .delete()
+        .eq('id', id);
+        
+      if (error) {
+        alert("Error al eliminar el empleado.");
+        return;
+      }
+      cargarEmpleados();
+    }
+  }
+
   const guardarEmpleado = async (e: React.FormEvent) => {
     e.preventDefault()
     setGuardandoEmpleado(true)
@@ -603,7 +636,7 @@ export default function PanelAdministracion() {
         nombre: formEmpNombre,
         correo: formEmpCorreo,
         telefono: formEmpTelefono,
-        password: formEmpPassword
+        contrasena: formEmpPassword
       }
 
       if (formEmpRol === 'CHOFER') {
@@ -614,10 +647,25 @@ export default function PanelAdministracion() {
         datosEmpleado.turno_asignado = formEmpTurnoAsignado
       }
       
-      console.log('Empleado Guardado Exitosamente:', datosEmpleado)
-      alert(`Empleado ${formEmpNombre} (${formEmpRol}) dado de alta con éxito.`)
+      if (empleadoEditando) {
+        const { error } = await supabase
+          .from('usuarios')
+          .update(datosEmpleado)
+          .eq('id', empleadoEditando.id);
+          
+        if (error) throw error;
+        alert("Empleado actualizado con éxito.");
+      } else {
+        const { error } = await supabase
+          .from('usuarios')
+          .insert([datosEmpleado]);
+          
+        if (error) throw error;
+        alert(`Empleado ${formEmpNombre} (${formEmpRol}) dado de alta con éxito.`);
+      }
       
       setMostrarModalEmpleado(false)
+      cargarEmpleados();
     } catch (err: any) {
       alert('Error al guardar empleado: ' + err.message)
     } finally {
@@ -638,91 +686,48 @@ export default function PanelAdministracion() {
           </div>
 
           <form onSubmit={procesarLogin} className="flex flex-col gap-4 relative z-10">
-            
-            {pasoLogin === 1 ? (
-              <div className="animate-fade-in space-y-4">
-                <p className="text-indigo-400 text-xs text-center font-bold mb-4 uppercase tracking-wider">
-                  Paso 1: Identificación
-                </p>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    Usuario
-                  </label>
-                  <input
-                    type="text"
-                    value={usuario}
-                    onChange={(e) => setUsuario(e.target.value)}
-                    placeholder="Escriba su usuario"
-                    className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors`}
-                    autoFocus
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    Contraseña
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors`}
-                  />
-                </div>
-                {errorAuth && (
-                  <p className="text-red-400 text-xs font-bold mt-1 text-center animate-pulse">
-                    Credenciales incorrectas.
-                  </p>
-                )}
-                
-                <button 
-                  type="submit" 
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors mt-2"
-                >
-                  Continuar
-                </button>
+            <div className="animate-fade-in space-y-4">
+              <p className="text-indigo-400 text-xs text-center font-bold mb-4 uppercase tracking-wider">
+                Identificación de Usuario
+              </p>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Usuario / Correo
+                </label>
+                <input
+                  type="text"
+                  value={usuario}
+                  onChange={(e) => setUsuario(e.target.value)}
+                  placeholder="Escriba su usuario"
+                  className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors`}
+                  autoFocus
+                />
               </div>
-            ) : (
-              <div className="animate-fade-in">
-                <div className="flex items-center gap-2 mb-4">
-                  <button 
-                    type="button" 
-                    onClick={() => {setPasoLogin(1); setErrorAuth(false); setPin('');}}
-                    className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 rounded-lg bg-slate-800 transition-colors"
-                  >
-                    ⬅️ Volver
-                  </button>
-                  <p className="text-emerald-400 text-xs text-center font-bold uppercase tracking-wider flex-1 pr-10">
-                    Paso 2: Validación
-                  </p>
-                </div>
-
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 text-center">
-                  Ingrese NIP ({rolTemporal === 'SUPERADMIN' ? 'Modo Dios' : 'Admin'})
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Contraseña
                 </label>
                 <input
                   type="password"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder="••••"
-                  className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-4 text-center text-white text-2xl font-black tracking-widest outline-none focus:border-emerald-500 transition-colors`}
-                  maxLength={4}
-                  autoFocus
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className={`w-full bg-[#020617] border ${errorAuth ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500 transition-colors`}
                 />
-                {errorAuth && (
-                  <p className="text-red-400 text-xs font-bold mt-2 text-center animate-pulse">
-                    NIP incorrecto. Intente de nuevo.
-                  </p>
-                )}
-
-                <button 
-                  type="submit" 
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors mt-4"
-                >
-                  Ingresar al Sistema
-                </button>
               </div>
-            )}
+              {errorAuth && (
+                <p className="text-red-400 text-xs font-bold mt-1 text-center animate-pulse">
+                  Credenciales incorrectas.
+                </p>
+              )}
+              
+              <button 
+                type="submit" 
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors mt-2"
+              >
+                Ingresar al Sistema
+              </button>
+            </div>
           </form>
         </div>
       </div>
@@ -1027,10 +1032,55 @@ export default function PanelAdministracion() {
               </button>
             </div>
             
-            <div className="text-center text-slate-500 py-12 font-bold bg-[#020617] rounded-xl border border-slate-800 flex flex-col items-center">
-              <span className="text-4xl mb-4">🚧</span>
-              <p>Módulo de registro habilitado.</p>
-              <p className="text-xs font-normal mt-1">Da clic en "Nuevo Empleado" para registrar credenciales y asignar roles.</p>
+            <div className="bg-[#0f172a] rounded-lg shadow-lg border border-slate-800">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-slate-300">
+                  <thead className="bg-[#020617] text-slate-400 text-xs uppercase">
+                    <tr>
+                      <th className="p-4 rounded-tl-lg border-b border-slate-800">Nombre</th>
+                      <th className="p-4 border-b border-slate-800">Correo</th>
+                      <th className="p-4 border-b border-slate-800">Rol</th>
+                      <th className="p-4 border-b border-slate-800">Contraseña</th>
+                      <th className="p-4 rounded-tr-lg border-b border-slate-800">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {empleados.map((emp) => (
+                      <tr key={emp.id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="p-4 text-white font-medium text-sm">{emp.nombre}</td>
+                        <td className="p-4 text-sm">{emp.correo}</td>
+                        <td className="p-4 text-sm">
+                          <span className="px-2 py-1 rounded bg-slate-800 text-amber-400 text-[10px] font-bold">
+                            {emp.rol.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="p-4 text-sm font-mono">{emp.contrasena}</td>
+                        <td className="p-4">
+                          <button 
+                            onClick={() => editarEmpleado(emp)} 
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-md mr-2 text-xs transition-colors"
+                          >
+                            Editar
+                          </button>
+                          <button 
+                            onClick={() => eliminarEmpleado(emp.id)} 
+                            className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded-md text-xs transition-colors"
+                          >
+                            Eliminar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {empleados.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-6 text-center text-slate-500">
+                          No hay empleados registrados en la base de datos.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -1046,11 +1096,37 @@ export default function PanelAdministracion() {
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
           <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold text-white mb-4 text-center">Escanear QR de Alumno</h2>
-            <p className="text-slate-400 text-xs text-center mb-4">Apunta el código QR del alumno a la cámara para buscarlo en la base de datos.</p>
+            
+            {/* Opción 1: Lector Físico (Pistola) */}
+            <div className="mb-6 bg-slate-800 p-4 rounded-xl border border-slate-700">
+              <label className="block text-slate-300 text-xs font-bold mb-2 uppercase text-center">
+                Escáner Físico (Pistola)
+              </label>
+              <input
+                type="text"
+                autoFocus
+                placeholder="Haz clic aquí y dispara el lector..."
+                className="w-full bg-[#020617] text-white border border-slate-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-indigo-500 text-center"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const codigoEscaneado = (e.target as HTMLInputElement).value;
+                    setBusquedaAlumno(codigoEscaneado);
+                    (e.target as HTMLInputElement).value = '';
+                    detenerCamara(); // Cierra el modal y deja la búsqueda aplicada en la tabla principal
+                  }
+                }}
+              />
+            </div>
+
+            <p className="text-slate-400 text-xs text-center mb-4 uppercase font-bold">O usa la cámara de tu PC</p>
+            
+            {/* Opción 2: Cámara web */}
             <div className="relative rounded-xl overflow-hidden bg-black aspect-video border border-slate-700 flex justify-center items-center">
               <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover"></video>
               <div className="absolute inset-0 border-2 border-indigo-500/50 m-8 rounded-lg pointer-events-none"></div>
             </div>
+            
             <button onClick={() => detenerCamara()} className="w-full mt-6 bg-slate-800 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors">
               Cancelar Escaneo
             </button>
@@ -1310,12 +1386,14 @@ export default function PanelAdministracion() {
         </div>
       )}
 
-      {/* MODAL: NUEVO EMPLEADO (ALTA DE USUARIOS) */}
+      {/* MODAL: NUEVO/EDITAR EMPLEADO (ALTA DE USUARIOS) */}
       {mostrarModalEmpleado && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
           <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-white">➕ Alta de Empleado</h2>
+              <h2 className="text-xl font-bold text-white">
+                {empleadoEditando ? '✏️ Editar Empleado' : '➕ Alta de Empleado'}
+              </h2>
               <button onClick={() => setMostrarModalEmpleado(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
             </div>
 
@@ -1397,7 +1475,9 @@ export default function PanelAdministracion() {
 
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setMostrarModalEmpleado(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors text-sm">Cancelar</button>
-                <button type="submit" disabled={guardandoEmpleado} className="w-1/2 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-colors text-sm">{guardandoEmpleado ? 'Guardando...' : 'Registrar Empleado'}</button>
+                <button type="submit" disabled={guardandoEmpleado} className="w-1/2 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-colors text-sm">
+                  {guardandoEmpleado ? 'Guardando...' : empleadoEditando ? 'Actualizar Empleado' : 'Registrar Empleado'}
+                </button>
               </div>
             </form>
           </div>
