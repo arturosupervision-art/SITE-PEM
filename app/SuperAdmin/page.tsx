@@ -417,9 +417,15 @@ export default function PanelAdministracion() {
     }
   }
 
+  // MODIFICADO: Eliminación Individual con Opción 3 (Desvincular antes de borrar)
   const eliminarAlumnoIndividual = async (id: any, nombre: string) => {
     if (confirm(`¿Estás seguro de eliminar a ${nombre}?`)) {
       try {
+        // 1. Desvincular ventas y viajes para mantener el historial intacto
+        await supabase.from('ventas_boletos').update({ alumno_id: null }).eq('alumno_id', id)
+        await supabase.from('viajes').update({ alumno_id: null }).eq('alumno_id', id)
+
+        // 2. Eliminar al alumno
         const { error } = await supabase.from('alumnos').delete().eq('id', id)
         if (error) throw error
         cargarAlumnos()
@@ -438,10 +444,16 @@ export default function PanelAdministracion() {
     else setIdsSeleccionados(alumnosFiltrados.map(a => a.id))
   }
 
+  // MODIFICADO: Eliminación Seleccionados Directo con Opción 3 (Desvincular antes de borrar)
   const eliminarSeleccionadosDirecto = async () => {
     if (idsSeleccionados.length === 0) return
     if (confirm(`¿Eliminar los ${idsSeleccionados.length} alumnos seleccionados?`)) {
       try {
+        // 1. Desvincular ventas y viajes masivamente
+        await supabase.from('ventas_boletos').update({ alumno_id: null }).in('alumno_id', idsSeleccionados)
+        await supabase.from('viajes').update({ alumno_id: null }).in('alumno_id', idsSeleccionados)
+
+        // 2. Eliminar alumnos
         const { error } = await supabase.from('alumnos').delete().in('id', idsSeleccionados)
         if (error) throw error
         alert('Alumnos eliminados correctamente.')
@@ -453,6 +465,7 @@ export default function PanelAdministracion() {
     }
   }
 
+  // MODIFICADO: Eliminación Masiva vía Matrículas con Opción 3 (Desvincular antes de borrar)
   const procesarEliminacionMasiva = async () => {
     if (!textoEliminarMasivo.trim()) return
     try {
@@ -472,8 +485,21 @@ export default function PanelAdministracion() {
       }
 
       if (confirm(`Se eliminarán los alumnos correspondientes a ${matriculasAEliminar.length} matrículas. ¿Deseas continuar?`)) {
+        
+        // 1. Obtener los IDs de los alumnos a partir de las matrículas
+        const { data: alumnosData } = await supabase.from('alumnos').select('id').in('matricula', matriculasAEliminar)
+        const idsToNullify = alumnosData?.map(a => a.id) || []
+        
+        // 2. Desvincular ventas y viajes si se encontraron IDs
+        if (idsToNullify.length > 0) {
+          await supabase.from('ventas_boletos').update({ alumno_id: null }).in('alumno_id', idsToNullify)
+          await supabase.from('viajes').update({ alumno_id: null }).in('alumno_id', idsToNullify)
+        }
+
+        // 3. Proceder con la eliminación masiva
         const { error } = await supabase.from('alumnos').delete().in('matricula', matriculasAEliminar)
         if (error) throw error
+        
         alert('Eliminación masiva completada con éxito.')
         setTextoEliminarMasivo('')
         setMostrarModalEliminarMasivo(false)
