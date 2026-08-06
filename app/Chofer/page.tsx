@@ -149,9 +149,19 @@ export default function PantallaChofer() {
     setModoRuta(tipo);
   };
 
-  const procesarCodigo = async (codigo: string) => {
-    if (!codigo.trim()) return;
+  const procesarCodigo = async (codigoEntrada: any) => {
+    let codigo = '';
+
+    if (typeof codigoEntrada === 'string') {
+      codigo = codigoEntrada;
+    } else if (Array.isArray(codigoEntrada) && codigoEntrada.length > 0) {
+      codigo = codigoEntrada[0]?.rawValue || codigoEntrada[0]?.text || '';
+    } else if (typeof codigoEntrada === 'object' && codigoEntrada !== null) {
+      codigo = codigoEntrada.rawValue || codigoEntrada.text || '';
+    }
+
     const codigoLimpio = codigo.trim();
+    if (!codigoLimpio) return;
     setBusquedaManual('');
 
     try {
@@ -476,10 +486,13 @@ export default function PantallaChofer() {
               {mostrarCamara && (
                 <div className="w-full max-w-sm mx-auto rounded-xl overflow-hidden shadow-lg border-2 border-indigo-500 mb-4 bg-black">
                   <Scanner
-                    onResult={(text) => {
-                      if (text) {
-                        procesarCodigo(text);
-                        setMostrarCamara(false);
+                    onScan={(result) => {
+                      if (result && result.length > 0) {
+                        const textoDetectado = result[0]?.rawValue || result[0]?.text;
+                        if (textoDetectado) {
+                          procesarCodigo(textoDetectado);
+                          setMostrarCamara(false);
+                        }
                       }
                     }}
                     onError={(error) => console.log(error?.message)}
