@@ -69,7 +69,7 @@ export default function PantallaChofer() {
   // ==========================================
   const [busquedaManual, setBusquedaManual] = useState('');
   const [estadoPantalla, setEstadoPantalla] = useState<
-    'ESPERANDO' | 'EXITO' | 'ERROR'
+    'ESPERANDO' | 'EXITO' | 'ERROR' | 'ADVERTENCIA_SALDO'
   >('ESPERANDO');
   const [mensaje, setMensaje] = useState('');
   const [alumnoActual, setAlumnoActual] = useState<any>(null);
@@ -88,7 +88,7 @@ export default function PantallaChofer() {
     }
   }, [estadoPantalla, modoRuta, usuarioLogueado]);
 
-  const reproducirSonido = (tipo: 'EXITO' | 'ERROR') => {
+  const reproducirSonido = (tipo: 'EXITO' | 'ERROR' | 'ADVERTENCIA') => {
     try {
       const AudioContext =
         window.AudioContext || (window as any).webkitAudioContext;
@@ -104,20 +104,22 @@ export default function PantallaChofer() {
         osc.frequency.setValueAtTime(800, audioCtx.currentTime);
         osc.frequency.setValueAtTime(1200, audioCtx.currentTime + 0.1);
         gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(
-          0.01,
-          audioCtx.currentTime + 0.3
-        );
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
         osc.start();
         osc.stop(audioCtx.currentTime + 0.3);
-      } else {
+      } else if (tipo === 'ERROR') {
         osc.type = 'square';
         osc.frequency.setValueAtTime(250, audioCtx.currentTime);
         gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(
-          0.01,
-          audioCtx.currentTime + 0.4
-        );
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.4);
+      } else if (tipo === 'ADVERTENCIA') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(600, audioCtx.currentTime + 0.2);
+        gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
         osc.start();
         osc.stop(audioCtx.currentTime + 0.4);
       }
@@ -149,6 +151,7 @@ export default function PantallaChofer() {
     setModoRuta(tipo);
   };
 
+  // Función principal de procesamiento
   const procesarCodigo = async (codigoEntrada: any) => {
     let codigo = '';
 
@@ -165,16 +168,13 @@ export default function PantallaChofer() {
     setBusquedaManual('');
 
     try {
-      // Intentar refrescar ubicación GPS al escanear
       const gpsActual = await obtenerUbicacionActual();
 
       // 1. Buscar alumno en la base de datos
       let { data: alumno, error: errorAlumno } = await supabase
         .from('alumnos')
         .select('*')
-        .or(
-          `codigo_qr_vinculado.eq.${codigoLimpio},matricula.eq.${codigoLimpio}`
-        )
+        .or(`codigo_qr_vinculado.eq.${codigoLimpio},matricula.eq.${codigoLimpio}`)
         .maybeSingle();
 
       if (errorAlumno || !alumno) {
@@ -187,13 +187,13 @@ export default function PantallaChofer() {
 
       let nuevoSaldo = alumno.boletos_disponibles;
 
-      // 2. Descontar boleto únicamente si es ASCENSO
+      // 2. Descontar boleto y validar emergencias (SOLO ASCENSO)
       if (modoRuta === 'ASCENSO') {
         if (alumno.boletos_disponibles <= 0) {
-          reproducirSonido('ERROR');
-          setEstadoPantalla('ERROR');
+          reproducirSonido('ADVERTENCIA');
+          setEstadoPantalla('ADVERTENCIA_SALDO');
           setAlumnoActual(alumno);
-          setMensaje('⚠️ Sin boletos disponibles');
+          setMensaje('⚠️ El alumno no tiene boletos. ¿Deseas autorizar un viaje de emergencia?');
           return;
         }
 
@@ -211,46 +211,32 @@ export default function PantallaChofer() {
         }
       }
 
-      // Preparar enlace de Maps e Iso String ajustado a hora de México (UTC-6)
-      const enlaceMaps = gpsActual
-        ? `https://maps.google.com/?q=${gpsActual.lat},${gpsActual.lng}`
-        : '';
+      // 3. Registrar viaje NORMAL
+      const enlaceMaps = gpsActual ? `https://maps.google.com/?q=${gpsActual.lat},${gpsActual.lng}` : '';
+      const fechaHoraMexico = new Date().toLocaleString('sv-SE', { timeZone: 'America/Mexico_City' }).replace(' ', 'T');
 
-      const fechaHoraMexico = new Date()
-        .toLocaleString('sv-SE', { timeZone: 'America/Mexico_City' })
-        .replace(' ', 'T');
-
-      // 3. Registrar viaje enviando TODOS los campos compatibles
       const { error: errorRegistro } = await supabase
         .from('registros_transporte')
-        .insert([
-          {
-            alumno_id: alumno.id,
-            matricula: alumno.matricula,
-            alumno_nombre: alumno.nombre_completo,
-            telefono_tutor: alumno.telefono_tutor,
-            tipo_movimiento: modoRuta === 'ASCENSO' ? 'Ascenso' : 'Descenso',
-            tipo_evento: modoRuta,
-            latitud: gpsActual ? gpsActual.lat : null,
-            longitud: gpsActual ? gpsActual.lng : null,
-            ubicacion_gps: enlaceMaps,
-            unidad_transporte: 'Autobús 1',
-            registrado_por: choferInfo?.id || null,
-            fecha_hora: fechaHoraMexico
-          },
-        ]);
+        .insert([{
+          alumno_id: alumno.id,
+          matricula: alumno.matricula,
+          alumno_nombre: alumno.nombre_completo,
+          telefono_tutor: alumno.telefono_tutor,
+          tipo_movimiento: modoRuta === 'ASCENSO' ? 'Ascenso' : 'Descenso',
+          tipo_evento: modoRuta,
+          latitud: gpsActual ? gpsActual.lat : null,
+          longitud: gpsActual ? gpsActual.lng : null,
+          ubicacion_gps: enlaceMaps,
+          unidad_transporte: 'Autobús 1',
+          registrado_por: choferInfo?.id || null,
+          fecha_hora: fechaHoraMexico,
+          es_emergencia: false
+        }]);
 
       if (errorRegistro) {
-        console.error("🚨 Error insertando en registros_transporte:", errorRegistro);
-
-        // Revertir boleto si falla la inserción
         if (modoRuta === 'ASCENSO') {
-          await supabase
-            .from('alumnos')
-            .update({ boletos_disponibles: alumno.boletos_disponibles })
-            .eq('id', alumno.id);
+          await supabase.from('alumnos').update({ boletos_disponibles: alumno.boletos_disponibles }).eq('id', alumno.id);
         }
-
         reproducirSonido('ERROR');
         setEstadoPantalla('ERROR');
         setAlumnoActual(alumno);
@@ -258,27 +244,22 @@ export default function PantallaChofer() {
         return;
       }
 
-      // 4. Disparar correo al tutor
+      // 4. Disparar correo
       if (alumno.correo_tutor) {
         const horaFormateada = new Date().toLocaleTimeString('es-MX', { 
-          timeZone: 'America/Mexico_City',
-          hour: '2-digit', minute: '2-digit', hour12: true 
+          timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: true 
         });
-
         fetch('/api/enviar-correo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            correoTutor: alumno.correo_tutor,
-            nombreAlumno: alumno.nombre_completo,
-            tipoMovimiento: modoRuta,
-            hora: horaFormateada,
-            ubicacion: enlaceMaps
+            correoTutor: alumno.correo_tutor, nombreAlumno: alumno.nombre_completo,
+            tipoMovimiento: modoRuta, hora: horaFormateada, ubicacion: enlaceMaps
           })
-        }).catch(err => console.error("Error al enviar correo:", err));
+        }).catch(err => console.error("Error correo:", err));
       }
 
-      // 5. Pantalla verde de Éxito
+      // 5. Pantalla verde
       reproducirSonido('EXITO');
       setEstadoPantalla('EXITO');
       setAlumnoActual({ ...alumno, boletos_disponibles: nuevoSaldo });
@@ -288,6 +269,80 @@ export default function PantallaChofer() {
       reproducirSonido('ERROR');
       setEstadoPantalla('ERROR');
       setMensaje(`❌ Error de conexión: ${err?.message || 'Sistemas no disponibles'}`);
+    }
+  };
+
+  // Función exclusiva para autorizar viaje de emergencia
+  const autorizarEmergencia = async () => {
+    if (!alumnoActual) return;
+    
+    try {
+      const gpsActual = await obtenerUbicacionActual();
+      const nuevoSaldo = alumnoActual.boletos_disponibles - 1; // Saldo pasará a negativo
+      
+      // 1. Descontar boleto (saldo negativo)
+      const { error: updateError } = await supabase
+        .from('alumnos')
+        .update({ boletos_disponibles: nuevoSaldo })
+        .eq('id', alumnoActual.id);
+
+      if (updateError) {
+        setEstadoPantalla('ERROR');
+        setMensaje(`❌ Error al actualizar deuda: ${updateError.message}`);
+        return;
+      }
+
+      // 2. Registrar viaje indicando es_emergencia = true
+      const enlaceMaps = gpsActual ? `https://maps.google.com/?q=${gpsActual.lat},${gpsActual.lng}` : '';
+      const fechaHoraMexico = new Date().toLocaleString('sv-SE', { timeZone: 'America/Mexico_City' }).replace(' ', 'T');
+
+      const { error: errorRegistro } = await supabase
+        .from('registros_transporte')
+        .insert([{
+          alumno_id: alumnoActual.id,
+          matricula: alumnoActual.matricula,
+          alumno_nombre: alumnoActual.nombre_completo,
+          telefono_tutor: alumnoActual.telefono_tutor,
+          tipo_movimiento: 'Ascenso', 
+          tipo_evento: modoRuta,
+          latitud: gpsActual ? gpsActual.lat : null,
+          longitud: gpsActual ? gpsActual.lng : null,
+          ubicacion_gps: enlaceMaps,
+          unidad_transporte: 'Autobús 1',
+          registrado_por: choferInfo?.id || null,
+          fecha_hora: fechaHoraMexico,
+          es_emergencia: true // Guardamos que es viaje a crédito
+        }]);
+
+      if (errorRegistro) {
+        // Reversión de saldo
+        await supabase.from('alumnos').update({ boletos_disponibles: alumnoActual.boletos_disponibles }).eq('id', alumnoActual.id);
+        setEstadoPantalla('ERROR');
+        setMensaje(`❌ Error registrando emergencia: ${errorRegistro.message}`);
+        return;
+      }
+
+      // 3. Notificación al tutor (Opcional: Podrías modificar el body para indicar que fue de emergencia)
+      if (alumnoActual.correo_tutor) {
+        const horaFormateada = new Date().toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: true });
+        fetch('/api/enviar-correo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            correoTutor: alumnoActual.correo_tutor, nombreAlumno: alumnoActual.nombre_completo,
+            tipoMovimiento: modoRuta, hora: horaFormateada, ubicacion: enlaceMaps
+          })
+        }).catch(err => console.error("Error correo:", err));
+      }
+
+      reproducirSonido('EXITO');
+      setEstadoPantalla('EXITO');
+      setAlumnoActual({ ...alumnoActual, boletos_disponibles: nuevoSaldo });
+      setMensaje('⚠️ ¡Viaje de Emergencia Autorizado!');
+
+    } catch (err: any) {
+      setEstadoPantalla('ERROR');
+      setMensaje(`❌ Ocurrió un error inesperado`);
     }
   };
 
@@ -303,71 +358,33 @@ export default function PantallaChofer() {
     return (
       <main className="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center p-6 select-none">
         <div className="w-full max-w-md bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-6">
-          
           <div className="text-center space-y-3">
             <div className="bg-white p-3 rounded-2xl inline-block shadow-md">
-              <img
-                src="/logo negro.png"
-                alt="Logo"
-                className="h-12 w-auto object-contain mx-auto"
-              />
+              <img src="/logo negro.png" alt="Logo" className="h-12 w-auto object-contain mx-auto" />
             </div>
-            <h1 className="text-2xl font-bold text-amber-500 uppercase tracking-wide">
-              Módulo Chofer
-            </h1>
-            <p className="text-xs text-slate-400">
-              Ingresa tus credenciales para operar la unidad
-            </p>
+            <h1 className="text-2xl font-bold text-amber-500 uppercase tracking-wide">Módulo Chofer</h1>
+            <p className="text-xs text-slate-400">Ingresa tus credenciales para operar la unidad</p>
           </div>
-
           {errorLogin && (
             <div className="bg-red-950/80 border border-red-500/50 p-4 rounded-xl text-center">
               <p className="text-red-300 text-sm font-semibold">{errorLogin}</p>
             </div>
           )}
-
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Correo Electrónico:
-              </label>
-              <input
-                type="email"
-                required
-                value={correo}
-                onChange={(e) => setCorreo(e.target.value)}
-                placeholder="ejemplo@pem.edu.mx"
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:border-amber-500 outline-none transition-colors"
-              />
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Correo Electrónico:</label>
+              <input type="email" required value={correo} onChange={(e) => setCorreo(e.target.value)} placeholder="ejemplo@pem.edu.mx" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:border-amber-500 outline-none transition-colors" />
             </div>
-
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Contraseña:
-              </label>
-              <input
-                type="password"
-                required
-                value={contrasena}
-                onChange={(e) => setContrasena(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:border-amber-500 outline-none transition-colors"
-              />
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Contraseña:</label>
+              <input type="password" required value={contrasena} onChange={(e) => setContrasena(e.target.value)} placeholder="••••••••" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:border-amber-500 outline-none transition-colors" />
             </div>
-
-            <button
-              type="submit"
-              disabled={cargandoLogin}
-              className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 text-white font-bold py-3.5 rounded-xl transition-colors shadow-lg mt-2 flex items-center justify-center gap-2"
-            >
+            <button type="submit" disabled={cargandoLogin} className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 text-white font-bold py-3.5 rounded-xl transition-colors shadow-lg mt-2 flex items-center justify-center gap-2">
               {cargandoLogin ? 'Verificando...' : '🔐 Iniciar Sesión'}
             </button>
           </form>
-
           <footer className="text-center pt-2">
-            <p className="text-[11px] text-slate-500 font-medium">
-              System by <span className="text-slate-400">Arturo Díaz</span>
-            </p>
+            <p className="text-[11px] text-slate-500 font-medium">System by <span className="text-slate-400">Arturo Díaz</span></p>
           </footer>
         </div>
       </main>
@@ -382,46 +399,25 @@ export default function PantallaChofer() {
       <header className="flex justify-between items-center bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="bg-white p-2 rounded-xl h-12 flex items-center justify-center">
-            <img
-              src="/logo negro.png"
-              alt="Logo"
-              className="h-full w-auto object-contain"
-            />
+            <img src="/logo negro.png" alt="Logo" className="h-full w-auto object-contain" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-amber-500">
-              Módulo Chofer - Escáner
-            </h1>
-            <p className="text-xs text-slate-400">
-              Conductor: <span className="text-slate-200 font-semibold">{choferInfo?.nombre || 'Chofer Activo'}</span>
-            </p>
+            <h1 className="text-xl font-bold text-amber-500">Módulo Chofer - Escáner</h1>
+            <p className="text-xs text-slate-400">Conductor: <span className="text-slate-200 font-semibold">{choferInfo?.nombre || 'Chofer Activo'}</span></p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
             {modoRuta ? (
               <div className="flex flex-col items-end">
-                <span className="text-xs bg-indigo-900/50 border border-indigo-700 text-indigo-300 px-3 py-1 rounded-lg font-bold">
-                  🚌 Unidad Activa
-                </span>
-                <span className="text-[10px] text-slate-400 mt-1">
-                  {modoRuta === 'ASCENSO' ? '🟢 Ascenso' : '🔴 Descenso'}{' '}
-                  {ubicacion ? '📍 GPS' : ''}
-                </span>
+                <span className="text-xs bg-indigo-900/50 border border-indigo-700 text-indigo-300 px-3 py-1 rounded-lg font-bold">🚌 Unidad Activa</span>
+                <span className="text-[10px] text-slate-400 mt-1">{modoRuta === 'ASCENSO' ? '🟢 Ascenso' : '🔴 Descenso'} {ubicacion ? '📍 GPS' : ''}</span>
               </div>
             ) : (
-              <span className="text-xs bg-slate-700 border border-slate-600 text-slate-300 px-3 py-1 rounded-lg font-bold">
-                ⚠️ Selecciona Ruta
-              </span>
+              <span className="text-xs bg-slate-700 border border-slate-600 text-slate-300 px-3 py-1 rounded-lg font-bold">⚠️ Selecciona Ruta</span>
             )}
           </div>
-          <button
-            onClick={handleCerrarSesion}
-            title="Cerrar Sesión"
-            className="bg-slate-700 hover:bg-red-900/60 hover:border-red-500 border border-slate-600 text-xs px-3 py-2 rounded-xl transition-all text-slate-300"
-          >
-            🚪 Salir
-          </button>
+          <button onClick={handleCerrarSesion} title="Cerrar Sesión" className="bg-slate-700 hover:bg-red-900/60 hover:border-red-500 border border-slate-600 text-xs px-3 py-2 rounded-xl transition-all text-slate-300">🚪 Salir</button>
         </div>
       </header>
 
@@ -429,24 +425,14 @@ export default function PantallaChofer() {
         {!modoRuta && (
           <div className="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-white mb-2">
-                Iniciar Recorrido
-              </h2>
-              <p className="text-slate-400 text-sm">
-                Selecciona el tipo de ruta. Se solicitará acceso al GPS.
-              </p>
+              <h2 className="text-2xl font-bold text-white mb-2">Iniciar Recorrido</h2>
+              <p className="text-slate-400 text-sm">Selecciona el tipo de ruta. Se solicitará acceso al GPS.</p>
             </div>
             <div className="flex flex-col gap-4">
-              <button
-                onClick={() => iniciarRuta('ASCENSO')}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-lg"
-              >
+              <button onClick={() => iniciarRuta('ASCENSO')} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-lg">
                 <span className="text-2xl">🏫</span> ASCENSO (Rumbo a escuela)
               </button>
-              <button
-                onClick={() => iniciarRuta('DESCENSO')}
-                className="bg-amber-600 hover:bg-amber-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-lg"
-              >
+              <button onClick={() => iniciarRuta('DESCENSO')} className="bg-amber-600 hover:bg-amber-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-lg">
                 <span className="text-2xl">🏠</span> DESCENSO (Rumbo a casa)
               </button>
             </div>
@@ -455,100 +441,80 @@ export default function PantallaChofer() {
 
         {modoRuta && estadoPantalla === 'ESPERANDO' && (
           <div className="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-6 relative">
-            <button
-              onClick={() => {
-                setModoRuta(null);
-                setMostrarCamara(false);
-              }}
-              className="absolute top-4 right-4 text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded border border-slate-500 transition-colors"
-            >
-              Cambiar Ruta
-            </button>
-
-            <div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center mx-auto border-4 border-amber-500/30 animate-pulse mt-4">
-              <span className="text-4xl">📱</span>
-            </div>
+            <button onClick={() => { setModoRuta(null); setMostrarCamara(false); }} className="absolute top-4 right-4 text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded border border-slate-500 transition-colors">Cambiar Ruta</button>
+            <div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center mx-auto border-4 border-amber-500/30 animate-pulse mt-4"><span className="text-4xl">📱</span></div>
             <div>
-              <h2 className="text-2xl font-bold text-white mb-2">
-                Listo para escanear
-              </h2>
-              <p className="text-slate-400 text-sm mb-4">
-                Usa la cámara del celular o ingresa la matrícula manualmente.
-              </p>
-              
-              <button
-                onClick={() => setMostrarCamara(!mostrarCamara)}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-xl transition-colors mb-4 shadow-md"
-              >
+              <h2 className="text-2xl font-bold text-white mb-2">Listo para escanear</h2>
+              <p className="text-slate-400 text-sm mb-4">Usa la cámara del celular o ingresa la matrícula manualmente.</p>
+              <button onClick={() => setMostrarCamara(!mostrarCamara)} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-xl transition-colors mb-4 shadow-md">
                 {mostrarCamara ? 'Ocultar Cámara 📷' : 'Abrir Cámara 📷'}
               </button>
-
               {mostrarCamara && (
                 <div className="w-full max-w-sm mx-auto rounded-xl overflow-hidden shadow-lg border-2 border-indigo-500 mb-4 bg-black">
-                  <Scanner
-                    onScan={(result) => {
-                      if (result && result.length > 0) {
-                        const textoDetectado = result[0]?.rawValue || result[0]?.text;
-                        if (textoDetectado) {
-                          procesarCodigo(textoDetectado);
-                          setMostrarCamara(false);
-                        }
-                      }
-                    }}
-                    onError={(error) => console.log(error?.message)}
-                  />
+                  <Scanner onScan={(result) => { if (result && result.length > 0) { const textoDetectado = result[0]?.rawValue || result[0]?.text; if (textoDetectado) { procesarCodigo(textoDetectado); setMostrarCamara(false); } } }} onError={(error) => console.log(error?.message)} />
                 </div>
               )}
             </div>
-
             <form onSubmit={handleSubmit} className="flex gap-2">
-              <input
-                ref={inputRef}
-                type="text"
-                value={busquedaManual}
-                onChange={(e) => setBusquedaManual(e.target.value)}
-                placeholder="Escanea o escribe código..."
-                className="flex-grow bg-slate-900 border border-slate-600 rounded-xl p-4 text-lg text-white focus:border-amber-500 outline-none font-mono"
-                autoFocus
-              />
-              <button
-                type="submit"
-                className="bg-amber-600 hover:bg-amber-700 font-bold px-6 rounded-xl text-white transition-colors"
-              >
-                Validar
-              </button>
+              <input ref={inputRef} type="text" value={busquedaManual} onChange={(e) => setBusquedaManual(e.target.value)} placeholder="Escanea o escribe código..." className="flex-grow bg-slate-900 border border-slate-600 rounded-xl p-4 text-lg text-white focus:border-amber-500 outline-none font-mono" autoFocus />
+              <button type="submit" className="bg-amber-600 hover:bg-amber-700 font-bold px-6 rounded-xl text-white transition-colors">Validar</button>
             </form>
+          </div>
+        )}
+
+        {/* PANTALLA NUEVA: ADVERTENCIA SALDO */}
+        {modoRuta && estadoPantalla === 'ADVERTENCIA_SALDO' && (
+          <div className="bg-amber-950/80 border-4 border-amber-500 p-8 rounded-3xl shadow-2xl space-y-4">
+            <div className="w-24 h-24 bg-amber-500 rounded-full flex items-center justify-center mx-auto text-slate-950 text-6xl font-bold shadow-lg">
+              !
+            </div>
+            <h2 className="text-3xl font-extrabold text-amber-400">SIN SALDO</h2>
+            <p className="text-lg font-bold text-slate-200">{mensaje}</p>
+            {alumnoActual && (
+              <div className="bg-slate-900/80 p-4 rounded-xl border border-amber-500/40 space-y-1">
+                <p className="text-xl font-bold text-white uppercase">{alumnoActual.nombre_completo}</p>
+                <p className="text-sm text-slate-300">Matrícula: {alumnoActual.matricula}</p>
+                <div className="mt-3 inline-block bg-amber-500/20 border border-amber-500 text-amber-300 px-4 py-1.5 rounded-full font-bold text-sm">
+                  ⚠️ Saldo Actual: {alumnoActual.boletos_disponibles}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-col gap-3 mt-6">
+              <button
+                onClick={autorizarEmergencia}
+                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-4 rounded-xl text-lg shadow-lg transition-colors flex items-center justify-center gap-2"
+              >
+                ⚠️ Autorizar Viaje de Emergencia
+              </button>
+              <button
+                onClick={() => {
+                  setEstadoPantalla('ESPERANDO');
+                  setAlumnoActual(null);
+                }}
+                className="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-3 rounded-xl transition-colors"
+              >
+                ❌ Denegar Abordaje
+              </button>
+            </div>
           </div>
         )}
 
         {modoRuta && estadoPantalla === 'EXITO' && (
           <div className="bg-emerald-950/80 border-4 border-emerald-500 p-8 rounded-3xl shadow-2xl space-y-4">
-            <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mx-auto text-slate-950 text-5xl font-bold shadow-lg">
-              ✓
-            </div>
+            <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mx-auto text-slate-950 text-5xl font-bold shadow-lg">✓</div>
             <h2 className="text-3xl font-extrabold text-emerald-400">
-              {modoRuta === 'ASCENSO' ? '¡ACCESO AUTORIZADO!' : '¡DESCENSO REGISTRADO!'}
+              {mensaje.includes('Emergencia') ? 'VIAJE AUTORIZADO' : (modoRuta === 'ASCENSO' ? '¡ACCESO AUTORIZADO!' : '¡DESCENSO REGISTRADO!')}
             </h2>
             {alumnoActual && (
               <div className="bg-slate-900/80 p-4 rounded-xl border border-emerald-500/40 space-y-1">
-                <p className="text-xl font-bold text-white uppercase">
-                  {alumnoActual.nombre_completo}
-                </p>
-                <p className="text-sm text-slate-300">
-                  Matrícula: {alumnoActual.matricula}
-                </p>
-                <div className="mt-3 inline-block bg-emerald-500/20 border border-emerald-500 text-emerald-300 px-4 py-1.5 rounded-full font-bold text-sm">
-                  🎟️ Restantes: {alumnoActual.boletos_disponibles} Boletos
+                <p className="text-xl font-bold text-white uppercase">{alumnoActual.nombre_completo}</p>
+                <p className="text-sm text-slate-300">Matrícula: {alumnoActual.matricula}</p>
+                <div className={`mt-3 inline-block px-4 py-1.5 rounded-full font-bold text-sm ${alumnoActual.boletos_disponibles < 0 ? 'bg-red-500/20 border border-red-500 text-red-300' : 'bg-emerald-500/20 border border-emerald-500 text-emerald-300'}`}>
+                  🎟️ Saldo Restante: {alumnoActual.boletos_disponibles} Boletos
                 </div>
               </div>
             )}
-            <button
-              onClick={() => {
-                setEstadoPantalla('ESPERANDO');
-                setAlumnoActual(null);
-              }}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl text-lg shadow-lg mt-4 transition-colors"
-            >
+            <button onClick={() => { setEstadoPantalla('ESPERANDO'); setAlumnoActual(null); }} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl text-lg shadow-lg mt-4 transition-colors">
               Siguiente Alumno ➡️
             </button>
           </div>
@@ -556,27 +522,15 @@ export default function PantallaChofer() {
 
         {modoRuta && estadoPantalla === 'ERROR' && (
           <div className="bg-red-950/80 border-4 border-red-500 p-8 rounded-3xl shadow-2xl space-y-4">
-            <div className="w-24 h-24 bg-red-500 rounded-full flex items-center justify-center mx-auto text-white text-5xl font-bold shadow-lg">
-              ✕
-            </div>
-            <h2 className="text-3xl font-extrabold text-red-400">
-              ERROR REGISTRADO
-            </h2>
+            <div className="w-24 h-24 bg-red-500 rounded-full flex items-center justify-center mx-auto text-white text-5xl font-bold shadow-lg">✕</div>
+            <h2 className="text-3xl font-extrabold text-red-400">ERROR REGISTRADO</h2>
             <p className="text-lg font-bold text-slate-200">{mensaje}</p>
             {alumnoActual && (
               <div className="bg-slate-900/80 p-4 rounded-xl border border-red-500/40 space-y-1">
-                <p className="text-lg font-bold text-white uppercase">
-                  {alumnoActual.nombre_completo}
-                </p>
+                <p className="text-lg font-bold text-white uppercase">{alumnoActual.nombre_completo}</p>
               </div>
             )}
-            <button
-              onClick={() => {
-                setEstadoPantalla('ESPERANDO');
-                setAlumnoActual(null);
-              }}
-              className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl text-lg shadow-lg mt-4 transition-colors"
-            >
+            <button onClick={() => { setEstadoPantalla('ESPERANDO'); setAlumnoActual(null); }} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl text-lg shadow-lg mt-4 transition-colors">
               Intentar de Nuevo 🔄
             </button>
           </div>
@@ -584,9 +538,7 @@ export default function PantallaChofer() {
       </section>
 
       <footer className="text-center py-4">
-        <p className="text-xs text-slate-500 font-medium">
-          System by <span className="text-slate-400">Arturo Diaz</span>
-        </p>
+        <p className="text-xs text-slate-500 font-medium">System by <span className="text-slate-400">Arturo Diaz</span></p>
       </footer>
     </main>
   );
