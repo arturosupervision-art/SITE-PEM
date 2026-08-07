@@ -70,16 +70,24 @@ export default function ModuloCajaViajes() {
       const { data, error } = await supabase
         .from('usuarios')
         .select('*')
-        .eq('correo', loginCorreo)
-        .eq('contrasena', loginPass)
-        .eq('rol', 'cajera')
+        .eq('correo', loginCorreo.trim().toLowerCase())
+        .eq('contrasena', loginPass.trim())
         .single()
 
       if (error || !data) {
-        setLoginError('Credenciales incorrectas o acceso denegado (Solo Cajeras).')
+        setLoginError('Credenciales incorrectas.')
+        setCargandoLogin(false)
+        return
+      }
+
+      const rolUsuario = data.rol ? data.rol.toLowerCase().trim() : ''
+      
+      if (rolUsuario !== 'cajera' && rolUsuario !== 'caja') {
+        setLoginError('Acceso denegado (Solo personal de Caja).')
       } else {
         setUsuarioAutenticado(data)
       }
+
     } catch (err) {
       setLoginError('Error de conexión con el servidor.')
     } finally {
