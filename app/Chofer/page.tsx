@@ -65,6 +65,61 @@ export default function PantallaChofer() {
   };
 
   // ==========================================
+  // ESTADOS Y LÓGICA PARA OSOMOVIL (TRANSMISIÓN GPS)
+  // ==========================================
+  const [transmitiendoGPS, setTransmitiendoGPS] = useState(false);
+  const watchIdRef = useRef<number | null>(null);
+
+  const toggleTransmisionGPS = () => {
+    if (!transmitiendoGPS) {
+      if (navigator.geolocation) {
+        setTransmitiendoGPS(true);
+        const opcionesGPS = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+        
+        watchIdRef.current = navigator.geolocation.watchPosition(
+          async (posicion) => {
+            const lat = posicion.coords.latitude;
+            const lng = posicion.coords.longitude;
+            const nombreDeRuta = choferInfo?.nombre || 'Ruta_Desconocida';
+            
+            const { error } = await supabase
+              .from('osomovil_gps')
+              .upsert([{
+                nombre_ruta: nombreDeRuta,
+                latitud: lat,
+                longitud: lng,
+                ultima_actualizacion: new Date().toISOString()
+              }]);
+              
+            if (error) console.error("Error enviando ubicación OsoMovil:", error);
+          },
+          (err) => console.warn('Error de GPS (' + err.code + '): ' + err.message),
+          opcionesGPS
+        );
+        alert("Transmisión iniciada. Los padres ya pueden ver el autobús.");
+      } else {
+        alert("El navegador de este celular no soporta GPS.");
+      }
+    } else {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      setTransmitiendoGPS(false);
+      alert("Transmisión detenida.");
+    }
+  };
+
+  // Limpiar el GPS si el componente se desmonta (seguridad)
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  // ==========================================
   // ESTADOS Y LÓGICA DEL ESCÁNER
   // ==========================================
   const [busquedaManual, setBusquedaManual] = useState('');
@@ -422,6 +477,20 @@ export default function PantallaChofer() {
       </header>
 
       <section className="my-auto max-w-xl mx-auto w-full text-center space-y-6 mt-8">
+        
+        {/* === BOTÓN NUEVO DE OSOMOVIL === */}
+        <button
+          onClick={toggleTransmisionGPS}
+          className={`w-full font-bold py-3 px-4 rounded-xl shadow-lg transition-colors mb-2 flex items-center justify-center gap-2 border-2 ${
+            transmitiendoGPS
+              ? 'bg-red-900/50 border-red-500 text-red-300 hover:bg-red-800/60'
+              : 'bg-green-900/50 border-green-500 text-green-300 hover:bg-green-800/60'
+          }`}
+        >
+          {transmitiendoGPS ? '🔴 Detener Transmisión GPS' : '📍 Iniciar Transmisión de Ruta (OsoMovil)'}
+        </button>
+        {/* =============================== */}
+
         {!modoRuta && (
           <div className="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-6">
             <div>
