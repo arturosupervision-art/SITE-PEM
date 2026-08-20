@@ -68,10 +68,17 @@ export default function PantallaChofer() {
   // ESTADOS Y LÓGICA PARA OSOMOVIL (TRANSMISIÓN GPS)
   // ==========================================
   const [transmitiendoGPS, setTransmitiendoGPS] = useState(false);
+  const [rutaOsoMovil, setRutaOsoMovil] = useState(''); // Estado para el selector
   const watchIdRef = useRef<number | null>(null);
 
   const toggleTransmisionGPS = () => {
     if (!transmitiendoGPS) {
+      // Validar que haya seleccionado una ruta
+      if (!rutaOsoMovil) {
+        alert("⚠️ Por favor, selecciona tu ruta (LA LOMA o PACIFICO) antes de iniciar la transmisión.");
+        return;
+      }
+
       if (navigator.geolocation) {
         setTransmitiendoGPS(true);
         const opcionesGPS = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
@@ -80,12 +87,12 @@ export default function PantallaChofer() {
           async (posicion) => {
             const lat = posicion.coords.latitude;
             const lng = posicion.coords.longitude;
-            const nombreDeRuta = choferInfo?.nombre || 'Ruta_Desconocida';
             
+            // Usamos la ruta seleccionada en el menú
             const { error } = await supabase
               .from('osomovil_gps')
               .upsert([{
-                nombre_ruta: nombreDeRuta,
+                nombre_ruta: rutaOsoMovil,
                 latitud: lat,
                 longitud: lng,
                 ultima_actualizacion: new Date().toISOString()
@@ -96,7 +103,7 @@ export default function PantallaChofer() {
           (err) => console.warn('Error de GPS (' + err.code + '): ' + err.message),
           opcionesGPS
         );
-        alert("Transmisión iniciada. Los padres ya pueden ver el autobús.");
+        alert(`Transmisión iniciada para la ruta: ${rutaOsoMovil}`);
       } else {
         alert("El navegador de este celular no soporta GPS.");
       }
@@ -110,7 +117,6 @@ export default function PantallaChofer() {
     }
   };
 
-  // Limpiar el GPS si el componente se desmonta (seguridad)
   useEffect(() => {
     return () => {
       if (watchIdRef.current !== null) {
@@ -132,10 +138,7 @@ export default function PantallaChofer() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [modoRuta, setModoRuta] = useState<'ASCENSO' | 'DESCENSO' | null>(null);
-  const [ubicacion, setUbicacion] = useState<{
-    lat: number;
-    lng: number;
-  } | null>(null);
+  const [ubicacion, setUbicacion] = useState<{ lat: number; lng: number; } | null>(null);
 
   useEffect(() => {
     if (usuarioLogueado && modoRuta && inputRef.current && estadoPantalla === 'ESPERANDO') {
@@ -145,8 +148,7 @@ export default function PantallaChofer() {
 
   const reproducirSonido = (tipo: 'EXITO' | 'ERROR' | 'ADVERTENCIA') => {
     try {
-      const AudioContext =
-        window.AudioContext || (window as any).webkitAudioContext;
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
       const audioCtx = new AudioContext();
       const osc = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
@@ -206,10 +208,8 @@ export default function PantallaChofer() {
     setModoRuta(tipo);
   };
 
-  // Función principal de procesamiento
   const procesarCodigo = async (codigoEntrada: any) => {
     let codigo = '';
-
     if (typeof codigoEntrada === 'string') {
       codigo = codigoEntrada;
     } else if (Array.isArray(codigoEntrada) && codigoEntrada.length > 0) {
@@ -224,8 +224,6 @@ export default function PantallaChofer() {
 
     try {
       const gpsActual = await obtenerUbicacionActual();
-
-      // 1. Buscar alumno en la base de datos
       let { data: alumno, error: errorAlumno } = await supabase
         .from('alumnos')
         .select('*')
@@ -242,7 +240,6 @@ export default function PantallaChofer() {
 
       let nuevoSaldo = alumno.boletos_disponibles;
 
-      // 2. Descontar boleto y validar emergencias (SOLO ASCENSO)
       if (modoRuta === 'ASCENSO') {
         if (alumno.boletos_disponibles <= 0) {
           reproducirSonido('ADVERTENCIA');
@@ -266,7 +263,6 @@ export default function PantallaChofer() {
         }
       }
 
-      // 3. Registrar viaje NORMAL
       const enlaceMaps = gpsActual ? `https://maps.google.com/?q=${gpsActual.lat},${gpsActual.lng}` : '';
       const fechaHoraMexico = new Date().toLocaleString('sv-SE', { timeZone: 'America/Mexico_City' }).replace(' ', 'T');
 
@@ -299,7 +295,6 @@ export default function PantallaChofer() {
         return;
       }
 
-      // 4. Disparar correo
       if (alumno.correo_tutor) {
         const horaFormateada = new Date().toLocaleTimeString('es-MX', { 
           timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: true 
@@ -314,7 +309,6 @@ export default function PantallaChofer() {
         }).catch(err => console.error("Error correo:", err));
       }
 
-      // 5. Pantalla verde
       reproducirSonido('EXITO');
       setEstadoPantalla('EXITO');
       setAlumnoActual({ ...alumno, boletos_disponibles: nuevoSaldo });
@@ -327,15 +321,12 @@ export default function PantallaChofer() {
     }
   };
 
-  // Función exclusiva para autorizar viaje de emergencia
   const autorizarEmergencia = async () => {
     if (!alumnoActual) return;
-    
     try {
       const gpsActual = await obtenerUbicacionActual();
-      const nuevoSaldo = alumnoActual.boletos_disponibles - 1; // Saldo pasará a negativo
+      const nuevoSaldo = alumnoActual.boletos_disponibles - 1; 
       
-      // 1. Descontar boleto (saldo negativo)
       const { error: updateError } = await supabase
         .from('alumnos')
         .update({ boletos_disponibles: nuevoSaldo })
@@ -347,7 +338,6 @@ export default function PantallaChofer() {
         return;
       }
 
-      // 2. Registrar viaje indicando es_emergencia = true
       const enlaceMaps = gpsActual ? `https://maps.google.com/?q=${gpsActual.lat},${gpsActual.lng}` : '';
       const fechaHoraMexico = new Date().toLocaleString('sv-SE', { timeZone: 'America/Mexico_City' }).replace(' ', 'T');
 
@@ -366,18 +356,16 @@ export default function PantallaChofer() {
           unidad_transporte: 'Autobús 1',
           registrado_por: choferInfo?.id || null,
           fecha_hora: fechaHoraMexico,
-          es_emergencia: true // Guardamos que es viaje a crédito
+          es_emergencia: true 
         }]);
 
       if (errorRegistro) {
-        // Reversión de saldo
         await supabase.from('alumnos').update({ boletos_disponibles: alumnoActual.boletos_disponibles }).eq('id', alumnoActual.id);
         setEstadoPantalla('ERROR');
         setMensaje(`❌ Error registrando emergencia: ${errorRegistro.message}`);
         return;
       }
 
-      // 3. Notificación al tutor (Opcional: Podrías modificar el body para indicar que fue de emergencia)
       if (alumnoActual.correo_tutor) {
         const horaFormateada = new Date().toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: true });
         fetch('/api/enviar-correo', {
@@ -406,9 +394,6 @@ export default function PantallaChofer() {
     procesarCodigo(busquedaManual);
   };
 
-  // ==========================================
-  // VISTA 1: FORMULARIO DE LOGIN (SI NO ESTÁ LOGUEADO)
-  // ==========================================
   if (!usuarioLogueado) {
     return (
       <main className="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center p-6 select-none">
@@ -446,9 +431,6 @@ export default function PantallaChofer() {
     );
   }
 
-  // ==========================================
-  // VISTA 2: PANTALLA PRINCIPAL (LOGUEADO)
-  // ==========================================
   return (
     <main className="min-h-screen bg-slate-900 text-white flex flex-col justify-between p-6 select-none">
       <header className="flex justify-between items-center bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-lg">
@@ -478,17 +460,32 @@ export default function PantallaChofer() {
 
       <section className="my-auto max-w-xl mx-auto w-full text-center space-y-6 mt-8">
         
-        {/* === BOTÓN NUEVO DE OSOMOVIL === */}
-        <button
-          onClick={toggleTransmisionGPS}
-          className={`w-full font-bold py-3 px-4 rounded-xl shadow-lg transition-colors mb-2 flex items-center justify-center gap-2 border-2 ${
-            transmitiendoGPS
-              ? 'bg-red-900/50 border-red-500 text-red-300 hover:bg-red-800/60'
-              : 'bg-green-900/50 border-green-500 text-green-300 hover:bg-green-800/60'
-          }`}
-        >
-          {transmitiendoGPS ? '🔴 Detener Transmisión GPS' : '📍 Iniciar Transmisión de Ruta (OsoMovil)'}
-        </button>
+        {/* === SELECTOR DE RUTA OSOMOVIL === */}
+        <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700">
+          {!transmitiendoGPS && (
+            <select
+              value={rutaOsoMovil}
+              onChange={(e) => setRutaOsoMovil(e.target.value)}
+              className="w-full bg-slate-900 border-2 border-amber-500/50 rounded-xl p-3 text-white focus:border-amber-500 outline-none mb-3 font-bold text-center appearance-none"
+            >
+              <option value="">-- SELECCIONA TU RUTA --</option>
+              <option value="LA LOMA">Ruta: LA LOMA</option>
+              <option value="PACIFICO">Ruta: PACIFICO</option>
+            </select>
+          )}
+
+          {/* === BOTÓN DE TRANSMISIÓN === */}
+          <button
+            onClick={toggleTransmisionGPS}
+            className={`w-full font-bold py-4 px-4 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 border-2 ${
+              transmitiendoGPS
+                ? 'bg-red-900/50 border-red-500 text-red-300 hover:bg-red-800/60'
+                : 'bg-green-900/50 border-green-500 text-green-300 hover:bg-green-800/60'
+            }`}
+          >
+            {transmitiendoGPS ? `🔴 Detener Transmisión (${rutaOsoMovil})` : '📍 Iniciar Transmisión (OsoMovil)'}
+          </button>
+        </div>
         {/* =============================== */}
 
         {!modoRuta && (
@@ -531,12 +528,9 @@ export default function PantallaChofer() {
           </div>
         )}
 
-        {/* PANTALLA NUEVA: ADVERTENCIA SALDO */}
         {modoRuta && estadoPantalla === 'ADVERTENCIA_SALDO' && (
           <div className="bg-amber-950/80 border-4 border-amber-500 p-8 rounded-3xl shadow-2xl space-y-4">
-            <div className="w-24 h-24 bg-amber-500 rounded-full flex items-center justify-center mx-auto text-slate-950 text-6xl font-bold shadow-lg">
-              !
-            </div>
+            <div className="w-24 h-24 bg-amber-500 rounded-full flex items-center justify-center mx-auto text-slate-950 text-6xl font-bold shadow-lg">!</div>
             <h2 className="text-3xl font-extrabold text-amber-400">SIN SALDO</h2>
             <p className="text-lg font-bold text-slate-200">{mensaje}</p>
             {alumnoActual && (
@@ -549,21 +543,8 @@ export default function PantallaChofer() {
               </div>
             )}
             <div className="flex flex-col gap-3 mt-6">
-              <button
-                onClick={autorizarEmergencia}
-                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-4 rounded-xl text-lg shadow-lg transition-colors flex items-center justify-center gap-2"
-              >
-                ⚠️ Autorizar Viaje de Emergencia
-              </button>
-              <button
-                onClick={() => {
-                  setEstadoPantalla('ESPERANDO');
-                  setAlumnoActual(null);
-                }}
-                className="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-3 rounded-xl transition-colors"
-              >
-                ❌ Denegar Abordaje
-              </button>
+              <button onClick={autorizarEmergencia} className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-4 rounded-xl text-lg shadow-lg transition-colors flex items-center justify-center gap-2">⚠️ Autorizar Viaje de Emergencia</button>
+              <button onClick={() => { setEstadoPantalla('ESPERANDO'); setAlumnoActual(null); }} className="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-3 rounded-xl transition-colors">❌ Denegar Abordaje</button>
             </div>
           </div>
         )}
@@ -571,21 +552,15 @@ export default function PantallaChofer() {
         {modoRuta && estadoPantalla === 'EXITO' && (
           <div className="bg-emerald-950/80 border-4 border-emerald-500 p-8 rounded-3xl shadow-2xl space-y-4">
             <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mx-auto text-slate-950 text-5xl font-bold shadow-lg">✓</div>
-            <h2 className="text-3xl font-extrabold text-emerald-400">
-              {mensaje.includes('Emergencia') ? 'VIAJE AUTORIZADO' : (modoRuta === 'ASCENSO' ? '¡ACCESO AUTORIZADO!' : '¡DESCENSO REGISTRADO!')}
-            </h2>
+            <h2 className="text-3xl font-extrabold text-emerald-400">{mensaje.includes('Emergencia') ? 'VIAJE AUTORIZADO' : (modoRuta === 'ASCENSO' ? '¡ACCESO AUTORIZADO!' : '¡DESCENSO REGISTRADO!')}</h2>
             {alumnoActual && (
               <div className="bg-slate-900/80 p-4 rounded-xl border border-emerald-500/40 space-y-1">
                 <p className="text-xl font-bold text-white uppercase">{alumnoActual.nombre_completo}</p>
                 <p className="text-sm text-slate-300">Matrícula: {alumnoActual.matricula}</p>
-                <div className={`mt-3 inline-block px-4 py-1.5 rounded-full font-bold text-sm ${alumnoActual.boletos_disponibles < 0 ? 'bg-red-500/20 border border-red-500 text-red-300' : 'bg-emerald-500/20 border border-emerald-500 text-emerald-300'}`}>
-                  🎟️ Saldo Restante: {alumnoActual.boletos_disponibles} Boletos
-                </div>
+                <div className={`mt-3 inline-block px-4 py-1.5 rounded-full font-bold text-sm ${alumnoActual.boletos_disponibles < 0 ? 'bg-red-500/20 border border-red-500 text-red-300' : 'bg-emerald-500/20 border border-emerald-500 text-emerald-300'}`}>🎟️ Saldo Restante: {alumnoActual.boletos_disponibles} Boletos</div>
               </div>
             )}
-            <button onClick={() => { setEstadoPantalla('ESPERANDO'); setAlumnoActual(null); }} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl text-lg shadow-lg mt-4 transition-colors">
-              Siguiente Alumno ➡️
-            </button>
+            <button onClick={() => { setEstadoPantalla('ESPERANDO'); setAlumnoActual(null); }} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl text-lg shadow-lg mt-4 transition-colors">Siguiente Alumno ➡️</button>
           </div>
         )}
 
@@ -599,9 +574,7 @@ export default function PantallaChofer() {
                 <p className="text-lg font-bold text-white uppercase">{alumnoActual.nombre_completo}</p>
               </div>
             )}
-            <button onClick={() => { setEstadoPantalla('ESPERANDO'); setAlumnoActual(null); }} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl text-lg shadow-lg mt-4 transition-colors">
-              Intentar de Nuevo 🔄
-            </button>
+            <button onClick={() => { setEstadoPantalla('ESPERANDO'); setAlumnoActual(null); }} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl text-lg shadow-lg mt-4 transition-colors">Intentar de Nuevo 🔄</button>
           </div>
         )}
       </section>
