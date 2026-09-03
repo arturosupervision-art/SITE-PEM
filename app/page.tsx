@@ -210,7 +210,6 @@ export default function ModuloCajaViajes() {
     const nuevoSaldo = saldoAnterior + cantidadAgregar
     const totalCobrado = cantidadAgregar * precioBoleto
     
-    // Cálculo para saber si se pagó una deuda (para el ticket)
     const deudaPagada = saldoAnterior < 0 ? Math.min(Math.abs(saldoAnterior), cantidadAgregar) : 0
 
     const { error: errAlumno } = await supabase.from('alumnos').update({ boletos_disponibles: nuevoSaldo }).eq('id', alumno.id)
@@ -228,7 +227,7 @@ export default function ModuloCajaViajes() {
         concepto: concepto, 
         total: totalCobrado, 
         nuevoSaldo: nuevoSaldo, 
-        deudaPagada: deudaPagada, // <-- Nuevo dato para el ticket
+        deudaPagada: deudaPagada,
         fecha: new Date().toLocaleString('es-MX')
       })
       setAlumnos(alumnos.map(a => a.id === alumno.id ? {...a, boletos_disponibles: nuevoSaldo} : a))
@@ -264,9 +263,18 @@ export default function ModuloCajaViajes() {
     }
   }
 
+  // GUARDA EL CÓDIGO EN AMBAS COLUMNAS PARA MANTENER COMPATIBILIDAD TOTAL
   const guardarNuevoQr = async () => {
     if (!nuevoQr.trim()) return;
-    const { error } = await supabase.from('alumnos').update({ codigo_qr_vinculado: nuevoQr.trim() }).eq('id', alumnoVincular.id);
+    const val = nuevoQr.trim();
+    const { error } = await supabase
+      .from('alumnos')
+      .update({ 
+        codigo_qr_vinculado: val,
+        codigo_qr: val 
+      })
+      .eq('id', alumnoVincular.id);
+
     if (!error) {
       alert('✅ QR Vinculado exitosamente');
       setAlumnoVincular(null); setNuevoQr(''); setUsarCamara(false);
@@ -276,11 +284,25 @@ export default function ModuloCajaViajes() {
     }
   }
 
-  const alumnosFiltrados = alumnos.filter(a => 
-    a.nombre_completo?.toLowerCase().includes(busqueda.toLowerCase()) || 
-    (a.matricula && a.matricula.toLowerCase().includes(busqueda.toLowerCase())) ||
-    (a.codigo_qr_vinculado && a.codigo_qr_vinculado === busqueda)
-  ).slice(0, 15)
+  // BÚSQUEDA MEJORADA QUE RECONOCE CUALQUIER TIPO DE CÓDIGO ESCANEADO
+  const alumnosFiltrados = alumnos.filter(a => {
+    const term = busqueda.trim().toLowerCase();
+    if (!term) return true;
+
+    const nombre = (a.nombre_completo || '').toLowerCase();
+    const matricula = (a.matricula || '').toLowerCase();
+    const qrVinculado = (a.codigo_qr_vinculado || '').toLowerCase();
+    const qrCodigo = (a.codigo_qr || '').toLowerCase();
+
+    return (
+      nombre.includes(term) || 
+      matricula.includes(term) ||
+      qrVinculado === term ||
+      qrCodigo === term ||
+      qrVinculado.includes(term) ||
+      qrCodigo.includes(term)
+    );
+  }).slice(0, 15)
 
   // ================= PANTALLA: LOGIN =================
   if (!usuarioAutenticado) {
@@ -400,11 +422,11 @@ export default function ModuloCajaViajes() {
               <input 
                 id="input-busqueda-qr"
                 type="text" 
-                placeholder="Escanea código QR, o teclea alumno/matrícula..." 
+                placeholder="Escanea credencial/código QR, o teclea alumno/matrícula..." 
                 value={busqueda} 
                 onChange={(e) => setBusqueda(e.target.value)} 
                 onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
-                className="w-full bg-[#020617] text-white rounded-xl py-3 px-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors" 
+                className="w-full bg-[#020617] text-white rounded-xl py-3 px-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors font-mono" 
                 autoFocus 
               />
               <button onClick={() => { setEscanearVenta(false); document.getElementById('input-busqueda-qr')?.focus(); }} className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 rounded-xl flex items-center justify-center shadow-md transition-colors whitespace-nowrap border border-slate-600" title="Activar entrada para Pistola Lector QR">📟 Lector</button>
@@ -427,27 +449,44 @@ export default function ModuloCajaViajes() {
           
           <div className="space-y-4">
             {alumnosFiltrados.length === 0 ? (
-              <p className="text-slate-500 py-4 text-center">No se encontraron alumnos.</p>
+              <p className="text-slate-500 py-4 text-center">No se encontraron alumnos con ese código o nombre.</p>
             ) : (
               alumnosFiltrados.map((alumno) => {
-                // Validación para detectar deudas
                 const isDeudor = (alumno.boletos_disponibles || 0) < 0;
+                // MUESTRA EL CÓDIGO REAL ASIGNADO AL ALUMNO
+                const qrCodeAlumno = alumno.codigo_qr_vinculado || alumno.codigo_qr;
 
                 return (
                   <div key={alumno.id} className={`bg-[#020617] p-5 rounded-xl border flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 transition-colors ${isDeudor ? 'border-red-900/50' : 'border-slate-800 hover:border-slate-600'}`}>
                     
                     <div className="flex-1">
                       <h3 className="font-bold text-xl uppercase text-slate-100 mb-1">{alumno.nombre_completo}</h3>
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <p className="text-sm text-slate-400">Matrícula: {alumno.matricula || 'N/A'}</p>
-                        {alumno.codigo_qr_vinculado ? (
-                          <span className="text-[10px] bg-indigo-900/40 text-indigo-300 px-2 py-0.5 rounded border border-indigo-700/50 font-bold uppercase tracking-wider">QR OK</span>
+                        
+                        {/* MUESTRA EL CÓDIGO QR REAL */}
+                        {qrCodeAlumno ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs bg-indigo-900/60 text-indigo-300 px-2.5 py-1 rounded-md border border-indigo-500/50 font-mono font-bold flex items-center gap-1">
+                              🪪 QR: {qrCodeAlumno}
+                            </span>
+                            <button 
+                              onClick={() => { setAlumnoVincular(alumno); setNuevoQr(qrCodeAlumno); }} 
+                              className="text-[11px] text-amber-400 hover:text-amber-300 underline font-semibold"
+                            >
+                              Editar QR
+                            </button>
+                          </div>
                         ) : (
-                          <button onClick={() => setAlumnoVincular(alumno)} className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-600 hover:bg-slate-700 font-bold uppercase tracking-wider">Vincular QR</button>
+                          <button 
+                            onClick={() => setAlumnoVincular(alumno)} 
+                            className="text-[11px] bg-slate-800 text-slate-300 px-2.5 py-1 rounded-md border border-slate-600 hover:bg-slate-700 font-bold uppercase tracking-wider"
+                          >
+                            ➕ Vincular QR
+                          </button>
                         )}
                       </div>
                       
-                      {/* ETIQUETA VISUAL DE SALDO / DEUDA */}
                       <div className={`w-fit px-3 py-1 rounded-lg text-sm font-bold border ${isDeudor ? 'bg-red-900/20 text-red-400 border-red-900 animate-pulse' : 'bg-emerald-900/20 text-emerald-400 border-emerald-900'}`}>
                         {isDeudor 
                           ? `⚠️ Deuda Pendiente: ${Math.abs(alumno.boletos_disponibles)} Viaje(s)` 
@@ -473,15 +512,11 @@ export default function ModuloCajaViajes() {
       </div>
       <div className={`text-center pb-4 text-slate-600 text-sm ${ticketActual ? 'hidden print:hidden' : 'block print:hidden'}`}>System by <span className="font-bold text-slate-500">Arturo Díaz</span></div>
 
-      {/* RESTO DE MODALES (VINCULAR QR, RETIRO, CIERRE, HISTORIAL)... */}
-      {/* SE MANTIENEN EXACTAMENTE IGUAL A TU CÓDIGO ORIGINAL */}
-      {/* Omito el código repetido de los modales para mantenerlo limpio, pero siguen estando aquí */}
-
       {/* MODAL VINCULAR QR */}
       {alumnoVincular && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-40 print:hidden">
           <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md">
-            <h2 className="text-xl font-bold mb-2 text-white">Vincular Código QR</h2>
+            <h2 className="text-xl font-bold mb-2 text-white">Vincular Código QR a Credencial</h2>
             <p className="text-sm text-slate-400 mb-6">Alumno: <span className="text-amber-500 font-bold">{alumnoVincular.nombre_completo}</span></p>
             {usarCamara ? (
               <div className="mb-6">
@@ -489,11 +524,11 @@ export default function ModuloCajaViajes() {
                   <Scanner onScan={(result) => { if(result && result.length > 0) setNuevoQr(result[0].rawValue) }} onError={(error) => console.log(error?.message)} />
                 </div>
                 {nuevoQr && <p className="text-center text-emerald-400 font-bold mb-2 break-all bg-emerald-900/20 p-2 rounded-lg border border-emerald-900">¡Código detectado!: {nuevoQr}</p>}
-                <button onClick={() => setUsarCamara(false)} className="w-full bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg text-sm transition-colors border border-slate-600">Cerrar Cámara / Usar Pistola</button>
+                <button onClick={() => setUsarCamara(false)} className="w-full bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg text-sm transition-colors border border-slate-600">Cerrar Cámara / Usar Pistola Escáner</button>
               </div>
             ) : (
               <div className="mb-6">
-                <input type="text" autoFocus value={nuevoQr} onChange={(e) => setNuevoQr(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && nuevoQr.trim() !== '') { e.preventDefault(); guardarNuevoQr(); } }} placeholder="Escanea con pistola Lector o teclea aquí..." className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl px-4 py-3 text-white outline-none mb-3 font-mono focus:border-indigo-400" />
+                <input type="text" autoFocus value={nuevoQr} onChange={(e) => setNuevoQr(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && nuevoQr.trim() !== '') { e.preventDefault(); guardarNuevoQr(); } }} placeholder="Escanea la credencial o escribe aquí el código..." className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl px-4 py-3 text-white outline-none mb-3 font-mono focus:border-indigo-400 text-center" />
                 <button onClick={() => setUsarCamara(true)} className="w-full bg-indigo-900/40 hover:bg-indigo-800/60 text-indigo-300 border border-indigo-500/50 py-3 rounded-lg text-sm flex justify-center items-center gap-2 font-bold transition-colors">📷 Activar Cámara del Dispositivo</button>
               </div>
             )}
@@ -641,7 +676,6 @@ function RenderTicket({ ticket, onClose }: { ticket: any, onClose: () => void })
                 </div>
              </div>
 
-             {/* NUEVA SECCIÓN DE PAGO DE DEUDA EN TICKET */}
              {ticket.deudaPagada > 0 && (
                <div className="mb-4 text-[10px] text-center border border-black p-2 bg-gray-100">
                   <p className="font-bold uppercase">⚠️ Deuda Cubierta</p>
@@ -661,7 +695,6 @@ function RenderTicket({ ticket, onClose }: { ticket: any, onClose: () => void })
            </>
          )}
 
-         {/* LOS RECIBOS DE RETIRO Y CIERRE SE MANTIENEN IGUAL... */}
          {ticket.tipo === 'RETIRO' && (
            <>
              <div className="text-center mb-4 border-b border-black pb-3 mt-4">
