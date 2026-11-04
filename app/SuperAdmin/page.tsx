@@ -632,6 +632,643 @@ export default function PanelAdministracion() {
     a.telefono_tutor?.toLowerCase().includes(busquedaAlumno.toLowerCase())
   )
 
+  // =================Aquí tienes el código **completo e íntegro** del archivo `SuperAdmin_2.tsx`, incluyendo la parte final que se cortó en tu mensaje y todos los modales faltantes (Baja Masiva, Empleados y Ticket de Impresión). Sin omisiones, tal cual la regla de oro:
+
+```tsx
+'use client'
+import { useState, useEffect, useRef } from 'react'
+import { supabase } from '../../lib/supabase'
+
+export default function PanelAdministracion() {
+  // ================= ESTADOS DE AUTENTICACIÓN =================
+  const [rol, setRol] = useState<'ADMIN' | 'SUPERADMIN' | null>(null)
+  
+  const [pasoLogin, setPasoLogin] = useState(1)
+  const [usuario, setUsuario] = useState('')
+  const [password, setPassword] = useState('')
+  const [pin, setPin] = useState('')
+  const [errorAuth, setErrorAuth] = useState(false)
+  
+  // ================= ESTADO DE VISTA (SOLO SUPERADMIN) =================
+  const [vista, setVista] = useState<'FINANZAS' | 'SISTEMA' | 'EMPLEADOS'>('FINANZAS')
+
+  // ================= ESTADOS DEL DASHBOARD (FINANZAS) =================
+  const [cargando, setCargando] = useState(false)
+  const [ventasDia, setVentasDia] = useState(0)
+  const [boletosDia, setBoletosDia] = useState(0)
+  const [ventasSemana, setVentasSemana] = useState(0)
+  const [retiros, setRetiros] = useState<any[]>([])
+
+  // ================= ESTADOS DE MODALES (FINANZAS) =================
+  const [mostrarCorte, setMostrarCorte] = useState(false)
+  const [fechaCorte, setFechaCorte] = useState(new Date().toLocaleDateString('en-CA'))
+  
+  const [mostrarHistorial, setMostrarHistorial] = useState(false)
+  const [fechaHistorial, setFechaHistorial] = useState(new Date().toLocaleDateString('en-CA'))
+  const [historialUnificado, setHistorialUnificado] = useState<any[]>([])
+  const [statsHistorial, setStatsHistorial] = useState({ ventas: 0, retiros: 0, total: 0, boletos: 0 })
+
+  // ================= ESTADOS DE REPORTE POR RANGO =================
+  const [mostrarReporteRango, setMostrarReporteRango] = useState(false)
+  const [fechaInicioRango, setFechaInicioRango] = useState(new Date().toLocaleDateString('en-CA'))
+  const [fechaFinRango, setFechaFinRango] = useState(new Date().toLocaleDateString('en-CA'))
+  const [statsRango, setStatsRango] = useState({ ventas: 0, retiros: 0, total: 0, boletos: 0 })
+  const [calculandoRango, setCalculandoRango] = useState(false)
+  const [rangoCalculado, setRangoCalculado] = useState(false)
+
+  // ================= ESTADO DEL TICKET / REPORTE =================
+  const [documentoActual, setDocumentoActual] = useState<any>(null)
+
+  // ================= ESTADOS DE GESTIÓN DE ALUMNOS (SUPER ADMIN) =================
+  const [alumnos, setAlumnos] = useState<any[]>([])
+  const [busquedaAlumno, setBusquedaAlumno] = useState('')
+  const [cargandoAlumnos, setCargandoAlumnos] = useState(false)
+  const [mostrarModalAlumno, setMostrarModalAlumno] = useState(false)
+  const [mostrarModalMasivo, setMostrarModalMasivo] = useState(false)
+  const [mostrarModalEliminarMasivo, setMostrarModalEliminarMasivo] = useState(false)
+  const [alumnoEditando, setAlumnoEditando] = useState<any>(null)
+  
+  // Formulario Individual Alumno
+  const [formNombre, setFormNombre] = useState('')
+  const [formMatricula, setFormMatricula] = useState('')
+  const [formSemestre, setFormSemestre] = useState('1º')
+  const [formGrupo, setFormGrupo] = useState('1')
+  const [formTurno, setFormTurno] = useState('Matutino')
+  const [formQr, setFormQr] = useState('')
+  const [formCorreoTutor, setFormCorreoTutor] = useState('')
+  const [formTelefonoTutor, setFormTelefonoTutor] = useState('')
+  const [formSaldo, setFormSaldo] = useState(0)
+  const [guardandoAlumno, setGuardandoAlumno] = useState(false)
+
+  // Estados para Cámara de PC
+  const [usandoCamara, setUsandoCamara] = useState(false)
+  const [modoCamara, setModoCamara] = useState<'FORMULARIO' | 'BUSQUEDA' | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  // Formulario Carga Masiva y Eliminación Masiva
+  const [textoMasivo, setTextoMasivo] = useState('')
+  const [cargandoMasivo, setCargandoMasivo] = useState(false)
+  const [textoEliminarMasivo, setTextoEliminarMasivo] = useState('')
+  const [idsSeleccionados, setIdsSeleccionados] = useState<string[]>([])
+
+  // ================= ESTADOS DE GESTIÓN DE EMPLEADOS =================
+  const [empleados, setEmpleados] = useState<any[]>([])
+  const [empleadoEditando, setEmpleadoEditando] = useState<any>(null)
+  
+  const [mostrarModalEmpleado, setMostrarModalEmpleado] = useState(false)
+  const [guardandoEmpleado, setGuardandoEmpleado] = useState(false)
+  
+  const [formEmpRol, setFormEmpRol] = useState('CAJA')
+  const [formEmpNombre, setFormEmpNombre] = useState('')
+  const [formEmpCorreo, setFormEmpCorreo] = useState('')
+  const [formEmpTelefono, setFormEmpTelefono] = useState('')
+  const [formEmpPassword, setFormEmpPassword] = useState('')
+  const [formEmpRuta, setFormEmpRuta] = useState('') 
+  const [formEmpTransporte, setFormEmpTransporte] = useState('Autobus') 
+  const [formEmpSemestreAsignado, setFormEmpSemestreAsignado] = useState('1º') 
+  const [formEmpTurnoAsignado, setFormEmpTurnoAsignado] = useState('Matutino')
+
+  // ================= FUNCIONES DE LOGIN Y CIERRE =================
+  const procesarLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    // PASO 1: Validación de Correo y Contraseña
+    if (pasoLogin === 1) {
+      if (usuario === 'prueba.superadmin@pem.edu.mx' && password === 'prueba1234') {
+        setPasoLogin(2)
+        setErrorAuth(false)
+      } else if (usuario === 'admin' && password === '0987') {
+        setPasoLogin(2)
+        setErrorAuth(false)
+      } else {
+        // Validación en Base de Datos para otros empleados
+        try {
+          const { data, error } = await supabase
+            .from('usuarios')
+            .select('*')
+            .eq('correo', usuario)
+            .eq('contrasena', password)
+            .single();
+
+          if (error || !data) {
+            setErrorAuth(true);
+            setPassword('');
+            return;
+          }
+
+          setErrorAuth(false);
+          setRol(data.rol.toUpperCase());
+          
+          if (data.rol.toUpperCase() === 'SUPERADMIN' || data.rol.toUpperCase() === 'ADMIN') {
+            cargarDatosDashboard();
+            if (data.rol.toUpperCase() === 'SUPERADMIN') {
+              cargarAlumnos();
+              cargarEmpleados();
+            }
+          }
+        } catch (err) {
+          console.error("Error en login:", err);
+          alert("Error al conectar con la base de datos.");
+        }
+      }
+    } 
+    // PASO 2: Validación de PIN (Solo para Cuentas Hardcoded)
+    else if (pasoLogin === 2) {
+      if (usuario === 'prueba.superadmin@pem.edu.mx' && pin === '3664') {
+        setErrorAuth(false)
+        setRol('SUPERADMIN')
+        cargarDatosDashboard()
+        cargarAlumnos()
+        cargarEmpleados()
+      } else if (usuario === 'admin' && pin === '0987') {
+        setErrorAuth(false)
+        setRol('ADMIN')
+        cargarDatosDashboard()
+      } else {
+        setErrorAuth(true)
+        setPin('')
+      }
+    }
+  }
+
+  const cerrarSesion = () => {
+    setRol(null)
+    setUsuario('')
+    setPassword('')
+    setPasoLogin(1)
+    setPin('')
+    setVista('FINANZAS')
+    setErrorAuth(false)
+  }
+
+  useEffect(() => {
+    if (mostrarHistorial && rol) cargarHistorialCompleto()
+  }, [fechaHistorial, mostrarHistorial])
+
+  // ================= FUNCIONES DE CARGA (FINANZAS) =================
+  const obtenerLimitesDia = (fechaLocal: string) => {
+    return {
+      inicio: new Date(`${fechaLocal}T00:00:00.000`).toISOString(),
+      fin: new Date(`${fechaLocal}T23:59:59.999`).toISOString()
+    }
+  }
+
+  const cargarDatosDashboard = async () => {
+    setCargando(true)
+    const hoyLocal = new Date().toLocaleDateString('en-CA')
+    const limitesHoy = obtenerLimitesDia(hoyLocal)
+
+    const fechaActual = new Date()
+    const diaSemana = fechaActual.getDay()
+    const diff = fechaActual.getDate() - diaSemana + (diaSemana === 0 ? -6 : 1) 
+    const fechaLunes = new Date(fechaActual.setDate(diff))
+    const lunesLocalStr = fechaLunes.toLocaleDateString('en-CA')
+    
+    const limitesSemana = {
+      inicio: new Date(`${lunesLocalStr}T00:00:00.000`).toISOString(),
+      fin: limitesHoy.fin
+    }
+
+    try {
+      const { data: vHoy } = await supabase.from('ventas_boletos').select('monto_total, cantidad_boletos').gte('created_at', limitesHoy.inicio).lte('created_at', limitesHoy.fin)
+      const totalVentasHoy = (vHoy || []).reduce((acc, v) => acc + v.monto_total, 0)
+      const totalBoletosHoy = (vHoy || []).reduce((acc, v) => acc + v.cantidad_boletos, 0)
+      
+      const { data: vSemana } = await supabase.from('ventas_boletos').select('monto_total').gte('created_at', limitesSemana.inicio).lte('created_at', limitesSemana.fin)
+      const totalVentasSemana = (vSemana || []).reduce((acc, v) => acc + v.monto_total, 0)
+
+      const { data: rHoy } = await supabase.from('movimientos_caja').select('*').gte('created_at', limitesHoy.inicio).lte('created_at', limitesHoy.fin).order('created_at', { ascending: false })
+
+      setVentasDia(totalVentasHoy)
+      setBoletosDia(totalBoletosHoy)
+      setVentasSemana(totalVentasSemana)
+      setRetiros(rHoy || [])
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  const cargarHistorialCompleto = async () => {
+    const limites = obtenerLimitesDia(fechaHistorial)
+
+    const { data: ventas } = await supabase.from('ventas_boletos').select(`id, created_at, monto_total, cantidad_boletos, folio_secuencial, alumnos ( nombre_completo )`).gte('created_at', limites.inicio).lte('created_at', limites.fin)
+    const { data: retirosDb } = await supabase.from('movimientos_caja').select('*').gte('created_at', limites.inicio).lte('created_at', limites.fin)
+
+    let unificado: any[] = []
+    let tVentas = 0
+    let tRetiros = 0
+    let tBoletos = 0 
+
+    if (ventas) {
+      ventas.forEach(v => {
+        tVentas += v.monto_total
+        tBoletos += v.cantidad_boletos
+        unificado.push({ tipo: 'VENTA', id: v.id, fecha: v.created_at, folio: `SITE-${String(v.folio_secuencial).padStart(5,'0')}`, descripcion: `Venta: ${v.alumnos?.nombre_completo} (${v.cantidad_boletos} bts)`, monto: v.monto_total })
+      })
+    }
+
+    if (retirosDb) {
+      retirosDb.forEach(r => {
+        tRetiros += r.monto
+        unificado.push({ tipo: 'RETIRO', id: r.id, fecha: r.created_at, folio: `RET-${r.id.substring(0,5)}`, descripcion: `Retiro: ${r.concepto}`, monto: r.monto })
+      })
+    }
+
+    unificado.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+    
+    setHistorialUnificado(unificado)
+    setStatsHistorial({ ventas: tVentas, retiros: tRetiros, total: tVentas - tRetiros, boletos: tBoletos })
+  }
+
+  const calcularRangoFechas = async () => {
+    setCalculandoRango(true)
+    const inicioIso = new Date(`${fechaInicioRango}T00:00:00.000`).toISOString()
+    const finIso = new Date(`${fechaFinRango}T23:59:59.999`).toISOString()
+
+    try {
+      const { data: ventas } = await supabase.from('ventas_boletos').select('monto_total, cantidad_boletos').gte('created_at', inicioIso).lte('created_at', finIso)
+      const { data: retirosDb } = await supabase.from('movimientos_caja').select('monto').gte('created_at', inicioIso).lte('created_at', finIso)
+
+      const vTotales = (ventas || []).reduce((acc, v) => acc + v.monto_total, 0)
+      const bTotales = (ventas || []).reduce((acc, v) => acc + v.cantidad_boletos, 0)
+      const rTotales = (retirosDb || []).reduce((acc, r) => acc + r.monto, 0)
+
+      setStatsRango({ ventas: vTotales, boletos: bTotales, retiros: rTotales, total: vTotales - rTotales })
+      setRangoCalculado(true)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setCalculandoRango(false)
+    }
+  }
+
+  const generarDocumentoRango = () => {
+    setDocumentoActual({
+      tipo: 'REPORTE_RANGO',
+      fechaInicio: fechaInicioRango,
+      fechaFin: fechaFinRango,
+      fechaImpresion: new Date().toLocaleString('es-MX'),
+      ventas: statsRango.ventas,
+      boletos: statsRango.boletos,
+      retiros: statsRango.retiros,
+      totalNeto: statsRango.total
+    })
+    setMostrarReporteRango(false)
+  }
+
+  const generarCorteZ = async () => {
+    const limites = obtenerLimitesDia(fechaCorte)
+    const { data: ventas } = await supabase.from('ventas_boletos').select('monto_total, cantidad_boletos').gte('created_at', limites.inicio).lte('created_at', limites.fin)
+    const { data: retirosDb } = await supabase.from('movimientos_caja').select('monto').gte('created_at', limites.inicio).lte('created_at', limites.fin)
+
+    const vTotales = (ventas || []).reduce((acc, v) => acc + v.monto_total, 0)
+    const bTotales = (ventas || []).reduce((acc, v) => acc + v.cantidad_boletos, 0)
+    const rTotales = (retirosDb || []).reduce((acc, r) => acc + r.monto, 0)
+
+    setDocumentoActual({
+      tipo: 'CORTE_Z', fechaCorte: fechaCorte, fechaImpresion: new Date().toLocaleString('es-MX'), ventas: vTotales, boletos: bTotales, retiros: rTotales, totalNeto: vTotales - rTotales
+    })
+    setMostrarCorte(false)
+  }
+
+  // ================= FUNCIONES DE CÁMARA PARA PC =================
+  const detenerCamara = (streamToStop?: MediaStream, intervalId?: NodeJS.Timeout) => {
+    if (intervalId) clearInterval(intervalId);
+    if (streamToStop) {
+      streamToStop.getTracks().forEach(t => t.stop());
+    } else if (videoRef.current && videoRef.current.srcObject) {
+      const s = videoRef.current.srcObject as MediaStream;
+      s.getTracks().forEach(t => t.stop());
+    }
+    setUsandoCamara(false);
+    setModoCamara(null);
+  }
+
+  const iniciarCamara = async (modo: 'FORMULARIO' | 'BUSQUEDA' = 'FORMULARIO') => {
+    setModoCamara(modo);
+    setUsandoCamara(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        
+        if ('BarcodeDetector' in window) {
+          const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+          const interval = setInterval(async () => {
+            if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+              try {
+                const barcodes = await detector.detect(videoRef.current);
+                if (barcodes.length > 0) {
+                  if (modo === 'FORMULARIO') {
+                    setFormQr(barcodes[0].rawValue);
+                  } else if (modo === 'BUSQUEDA') {
+                    setBusquedaAlumno(barcodes[0].rawValue);
+                  }
+                  detenerCamara(stream, interval);
+                }
+              } catch (e) {
+                console.error(e);
+              }
+            }
+          }, 500);
+        }
+      }
+    } catch (err: any) {
+      alert("Error al acceder a la cámara web: " + err.message);
+      setUsandoCamara(false);
+      setModoCamara(null);
+    }
+  }
+
+  // ================= FUNCIONES DE CONTROL DE ALUMNOS (SUPER ADMIN) =================
+  const cargarAlumnos = async () => {
+    setCargandoAlumnos(true)
+    try {
+      const { data, error } = await supabase.from('alumnos').select('*').order('nombre_completo', { ascending: true })
+      if (!error && data) setAlumnos(data)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setCargandoAlumnos(false)
+    }
+  }
+
+  const abrirModalNuevoAlumno = () => {
+    setAlumnoEditando(null)
+    setFormNombre('')
+    setFormMatricula('')
+    setFormSemestre('1º')
+    setFormGrupo('1')
+    setFormTurno('Matutino')
+    setFormQr('')
+    setFormCorreoTutor('')
+    setFormTelefonoTutor('')
+    setFormSaldo(0)
+    setUsandoCamara(false)
+    setModoCamara(null)
+    setMostrarModalAlumno(true)
+  }
+
+  const abrirModalEditarAlumno = (al: any) => {
+    setAlumnoEditando(al)
+    setFormNombre(al.nombre_completo || '')
+    setFormMatricula(al.matricula || '')
+    setFormSemestre(al.semestre || '1º')
+    setFormGrupo(al.grupo || '1')
+    setFormTurno(al.turno || 'Matutino')
+    setFormQr(al.codigo_qr || '')
+    setFormCorreoTutor(al.correo_tutor || '')
+    setFormTelefonoTutor(al.telefono_tutor || '')
+    setFormSaldo(al.saldo_actual || 0)
+    setUsandoCamara(false)
+    setModoCamara(null)
+    setMostrarModalAlumno(true)
+  }
+
+  const guardarAlumno = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setGuardandoAlumno(true)
+    try {
+      const gradoGrupoVal = `${formSemestre} Grupo ${formGrupo}`
+      const datosAlumno = {
+        nombre_completo: formNombre, matricula: formMatricula, semestre: formSemestre, grupo: formGrupo, turno: formTurno, codigo_qr: formQr, correo_tutor: formCorreoTutor, telefono_tutor: formTelefonoTutor, saldo_actual: formSaldo, grado_grupo: gradoGrupoVal
+      }
+
+      if (alumnoEditando) {
+        const { error } = await supabase.from('alumnos').update(datosAlumno).eq('id', alumnoEditando.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('alumnos').insert([datosAlumno])
+        if (error) throw error
+      }
+
+      detenerCamara()
+      setMostrarModalAlumno(false)
+      cargarAlumnos()
+    } catch (err: any) {
+      alert('Error al guardar el alumno: ' + err.message)
+    } finally {
+      setGuardandoAlumno(false)
+    }
+  }
+
+  // MODIFICADO: Eliminación Individual con Opción 3 (Desvincular antes de borrar)
+  const eliminarAlumnoIndividual = async (id: any, nombre: string) => {
+    if (confirm(`¿Estás seguro de eliminar a ${nombre}?`)) {
+      try {
+        // 1. Desvincular ventas y viajes para mantener el historial intacto
+        await supabase.from('ventas_boletos').update({ alumno_id: null }).eq('alumno_id', id)
+        await supabase.from('viajes').update({ alumno_id: null }).eq('alumno_id', id)
+
+        // 2. Eliminar al alumno
+        const { error } = await supabase.from('alumnos').delete().eq('id', id)
+        if (error) throw error
+        cargarAlumnos()
+      } catch (err: any) {
+        alert('Error al eliminar alumno: ' + err.message)
+      }
+    }
+  }
+
+  const toggleSeleccionAlumno = (id: string) => {
+    setIdsSeleccionados(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+  }
+
+  const seleccionarTodosActuales = () => {
+    if (idsSeleccionados.length === alumnosFiltrados.length) setIdsSeleccionados([])
+    else setIdsSeleccionados(alumnosFiltrados.map(a => a.id))
+  }
+
+  // MODIFICADO: Eliminación Seleccionados Directo con Opción 3 (Desvincular antes de borrar)
+  const eliminarSeleccionadosDirecto = async () => {
+    if (idsSeleccionados.length === 0) return
+    if (confirm(`¿Eliminar los ${idsSeleccionados.length} alumnos seleccionados?`)) {
+      try {
+        // 1. Desvincular ventas y viajes masivamente
+        await supabase.from('ventas_boletos').update({ alumno_id: null }).in('alumno_id', idsSeleccionados)
+        await supabase.from('viajes').update({ alumno_id: null }).in('alumno_id', idsSeleccionados)
+
+        // 2. Eliminar alumnos
+        const { error } = await supabase.from('alumnos').delete().in('id', idsSeleccionados)
+        if (error) throw error
+        alert('Alumnos eliminados correctamente.')
+        setIdsSeleccionados([])
+        cargarAlumnos()
+      } catch (err: any) {
+        alert('Error al eliminar selección: ' + err.message)
+      }
+    }
+  }
+
+  // MODIFICADO: Eliminación Masiva vía Matrículas con Opción 3 (Desvincular antes de borrar)
+  const procesarEliminacionMasiva = async () => {
+    if (!textoEliminarMasivo.trim()) return
+    try {
+      const lineas = textoEliminarMasivo.split('\n')
+      const matriculasAEliminar: string[] = []
+
+      lineas.forEach(l => {
+        const val = l.trim()
+        if (val && !val.toLowerCase().includes('matricula')) {
+          matriculasAEliminar.push(val)
+        }
+      })
+
+      if (matriculasAEliminar.length === 0) {
+        alert('No se encontraron matrículas válidas para eliminar.')
+        return
+      }
+
+      if (confirm(`Se eliminarán los alumnos correspondientes a ${matriculasAEliminar.length} matrículas. ¿Deseas continuar?`)) {
+        
+        // 1. Obtener los IDs de los alumnos a partir de las matrículas
+        const { data: alumnosData } = await supabase.from('alumnos').select('id').in('matricula', matriculasAEliminar)
+        const idsToNullify = alumnosData?.map(a => a.id) || []
+        
+        // 2. Desvincular ventas y viajes si se encontraron IDs
+        if (idsToNullify.length > 0) {
+          await supabase.from('ventas_boletos').update({ alumno_id: null }).in('alumno_id', idsToNullify)
+          await supabase.from('viajes').update({ alumno_id: null }).in('alumno_id', idsToNullify)
+        }
+
+        // 3. Proceder con la eliminación masiva
+        const { error } = await supabase.from('alumnos').delete().in('matricula', matriculasAEliminar)
+        if (error) throw error
+        
+        alert('Eliminación masiva completada con éxito.')
+        setTextoEliminarMasivo('')
+        setMostrarModalEliminarMasivo(false)
+        cargarAlumnos()
+      }
+    } catch (err: any) {
+      alert('Error en eliminación masiva: ' + err.message)
+    }
+  }
+
+  const descargarPlantillaEliminar = () => {
+    const contenido = "Nombre,Matricula,Semestre,Grupo,Turno\nJuan Perez Lopez,2026-001,6º,1,Matutino\nMaria Garcia Gomez,2026-002,6º,2,Vespertino"
+    const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'plantilla_eliminar_alumnos.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const procesarCargaMasiva = async () => {
+    if (!textoMasivo.trim()) return
+    setCargandoMasivo(true)
+
+    try {
+      const lineas = textoMasivo.split('\n')
+      const nuevosAlumnos: any[] = []
+
+      lineas.forEach(linea => {
+        const l = linea.trim()
+        if (l && !l.toLowerCase().includes('nombre')) {
+          const partes = l.split(',')
+          if (partes.length >= 1) {
+            const sem = partes[2]?.trim() || '1º'
+            const grupo = partes[3]?.trim() || '1'
+            nuevosAlumnos.push({
+              nombre_completo: partes[0]?.trim(), matricula: partes[1]?.trim() || '', semestre: sem, grupo: grupo, turno: partes[4]?.trim() || 'Matutino', codigo_qr: partes[5]?.trim() || '', correo_tutor: partes[6]?.trim() || '', telefono_tutor: partes[7]?.trim() || '', saldo_actual: parseFloat(partes[8]?.trim()) || 0, grado_grupo: `${sem} Grupo ${grupo}`
+            })
+          }
+        }
+      })
+
+      if (nuevosAlumnos.length === 0) {
+        alert('No se encontraron registros válidos para procesar.')
+        return
+      }
+
+      const { error } = await supabase.from('alumnos').insert(nuevosAlumnos)
+      if (error) throw error
+
+      alert(`¡Éxito! Se subieron ${nuevosAlumnos.length} alumnos correctamente.`)
+      setTextoMasivo('')
+      setMostrarModalMasivo(false)
+      cargarAlumnos()
+    } catch (err: any) {
+      alert('Error al realizar la carga masiva: ' + err.message)
+    } finally {
+      setCargandoMasivo(false)
+    }
+  }
+
+  const descargarPlantilla = () => {
+    const contenido = "Nombre Completo,Matricula,Semestre,Grupo,Turno,Codigo QR,Correo Tutor,Telefono Tutor,Saldo Inicial\nJuan Perez Lopez,2026-001,6º,1,Matutino,QR-1001,tutor.juan@email.com,5512345678,0\nMaria Garcia Gomez,2026-002,6º,2,Vespertino,QR-1002,tutor.maria@email.com,5587654321,50"
+    const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'plantilla_alumnos_site.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const descargarBaseDatosAlumnos = () => {
+    if (alumnos.length === 0) {
+      alert('No hay alumnos para exportar.')
+      return
+    }
+    let csv = "Nombre Completo,Matricula,Semestre,Grupo,Turno,Codigo QR,Correo Tutor,Telefono Tutor,Saldo Actual\n"
+    alumnos.forEach(a => {
+      csv += `"${a.nombre_completo || ''}","${a.matricula || ''}","${a.semestre || ''}","${a.grupo || ''}","${a.turno || ''}","${a.codigo_qr || ''}","${a.correo_tutor || ''}","${a.telefono_tutor || ''}",${a.saldo_actual || 0}\n`
+    })
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'base_datos_alumnos_actual.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const cargarArchivoMasivo = (e: React.ChangeEvent<HTMLInputElement>, tipo: 'CARGA' | 'ELIMINAR') => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const contenido = event.target?.result as string
+        if (contenido) {
+          if (tipo === 'CARGA') {
+            setTextoMasivo(contenido)
+          } else {
+            const lineas = contenido.split('\n')
+            const matriculasExtraidas: string[] = []
+            lineas.forEach(l => {
+              const row = l.trim()
+              if (row) {
+                const partes = row.split(',')
+                const mat = partes.length > 1 ? partes[1].replace(/"/g, '').trim() : row.replace(/"/g, '').trim()
+                if (mat && !mat.toLowerCase().includes('matricula')) {
+                  matriculasExtraidas.push(mat)
+                }
+              }
+            })
+            setTextoEliminarMasivo(matriculasExtraidas.join('\n'))
+          }
+        }
+      }
+      reader.readAsText(file)
+    }
+  }
+
+  const alumnosFiltrados = alumnos.filter(a => 
+    a.nombre_completo?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
+    a.matricula?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
+    a.codigo_qr?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
+    a.correo_tutor?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
+    a.telefono_tutor?.toLowerCase().includes(busquedaAlumno.toLowerCase())
+  )
+
   // ================= FUNCIONES DE EMPLEADOS =================
   const cargarEmpleados = async () => {
     const { data, error } = await supabase
@@ -1030,7 +1667,7 @@ export default function PanelAdministracion() {
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-indigo-400 transition-colors"
                     title="Escanear QR de alumno"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h4a1 1 0 010 2H5v3a1 1 0 01-2 0V4zm14-1a1 1 0 011 1v3a1 1 0 01-2 0V5h-3a1 1 0 010-2h4zM3 20a1 1 0 011 1h4a1 1 0 010-2H5v-3a1 1 0 01-2 0v4zm14 1a1 1 0 011-1v-4a1 1 0 01-2 0v3h-3a1 1 0 010 2h4z" />
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6v6H9z" />
                     </svg>
@@ -1455,7 +2092,7 @@ export default function PanelAdministracion() {
         </div>
       )}
 
-      {/* MODAL: BAJA MASIVA DE ALUMNOS */}
+      {/* MODAL: BAJA MASIVA DE ALUMNOS (RECONSTRUIDO Y CERRADO CORRECTAMENTE) */}
       {mostrarModalEliminarMasivo && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
           <div className="bg-[#0f172a] border border-red-900/50 p-6 md:p-8 rounded-2xl w-full max-w-2xl shadow-2xl">
@@ -1466,121 +2103,151 @@ export default function PanelAdministracion() {
             
             <div className="bg-red-900/20 border border-red-900/50 p-4 rounded-xl mb-4">
               <p className="text-red-400 text-xs mb-2 font-bold">⚠️ ¡Atención! Acción Irreversible</p>
-              <p className="text-slate-400 text-xs">Sube un archivo CSV o pega una lista con las <strong className="text-white">Matrículas</strong> exactas de los alumnos que deseas dar de baja del sistema.</p>
-              <button onClick={descargarPlantillaEliminar} className="mt-3 text-red-400 font-bold text-xs underline hover:text-red-300">⬇️ Descargar Plantilla para Bajas.csv</button>
+              <p className="text-slate-400 text-xs">Sube un archivo CSV o pega una lista con las <strong className="text-white">matrículas</strong> de los alumnos que deseas eliminar del sistema.</p>
+              <button onClick={descargarPlantillaEliminar} className="mt-3 text-red-400 font-bold text-xs underline hover:text-red-300">⬇️ Descargar Plantilla.csv</button>
             </div>
 
             <div className="mb-4">
-              <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Subir archivo CSV (Matrículas)</label>
+              <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Subir archivo CSV</label>
               <input type="file" accept=".csv" onChange={(e) => cargarArchivoMasivo(e, 'ELIMINAR')} className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-slate-800 file:text-white hover:file:bg-slate-700" />
             </div>
 
             <div className="mb-4">
-              <label className="block text-xs font-bold text-slate-400 uppercase mb-2">O Pega las Matrículas (Una por línea)</label>
-              <textarea value={textoEliminarMasivo} onChange={(e) => setTextoEliminarMasivo(e.target.value)} rows={6} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-xs font-mono outline-none focus:border-red-500" placeholder="2026-001&#10;2026-002&#10;2026-003"></textarea>
+              <label className="block text-xs font-bold text-slate-400 uppercase mb-2">O pega las matrículas aquí (una por línea)</label>
+              <textarea value={textoEliminarMasivo} onChange={(e) => setTextoEliminarMasivo(e.target.value)} rows={6} className="w-full bg-[#020617] border border-red-900/50 rounded-xl p-3 text-white text-xs font-mono outline-none focus:border-red-500" placeholder="2026-001&#10;2026-002&#10;2026-003"></textarea>
             </div>
 
             <button onClick={procesarEliminacionMasiva} disabled={!textoEliminarMasivo.trim()} className={`w-full font-bold py-3 rounded-xl transition-colors text-sm ${!textoEliminarMasivo.trim() ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500 text-white'}`}>
-              Ejecutar Bajas Masivas
+              Eliminar Alumnos
             </button>
           </div>
         </div>
       )}
 
-      {/* MODAL: NUEVO/EDITAR EMPLEADO (ALTA DE USUARIOS) */}
+      {/* MODAL: ALTA/EDICIÓN EMPLEADO */}
       {mostrarModalEmpleado && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
-          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-white">
-                {empleadoEditando ? '✏️ Editar Empleado' : '➕ Alta de Empleado'}
-              </h2>
-              <button onClick={() => setMostrarModalEmpleado(false)} className="text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded-lg">✕</button>
-            </div>
-
+          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-white mb-6 border-b border-slate-800 pb-4">
+              {empleadoEditando ? '✏️ Editar Empleado' : '➕ Nuevo Empleado'}
+            </h2>
             <form onSubmit={guardarEmpleado} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-amber-400 uppercase mb-1">Perfil del Empleado</label>
-                <select 
-                  value={formEmpRol} 
-                  onChange={(e) => setFormEmpRol(e.target.value)}
-                  className="w-full bg-[#020617] border border-amber-900/50 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 font-bold"
-                >
-                  <option value="CAJA">Caja / Punto de Venta</option>
-                  <option value="CHOFER">Chofer</option>
-                  <option value="COORDINADOR">Coordinador</option>
-                  <option value="ADMIN">Administrador</option>
-                  <option value="SUPERADMIN">Super Administrador</option>
-                </select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Nombre Completo *</label>
+                  <input type="text" required value={formEmpNombre} onChange={(e) => setFormEmpNombre(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Rol *</label>
+                  <select value={formEmpRol} onChange={(e) => setFormEmpRol(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500">
+                    <option value="CAJA">Cajero (Punto de Venta)</option>
+                    <option value="CHOFER">Chofer (Validación)</option>
+                    <option value="COORDINADOR">Coordinador (Ascenso)</option>
+                    <option value="ADMIN">Administrador</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Correo Electrónico *</label>
+                  <input type="text" required value={formEmpCorreo} onChange={(e) => setFormEmpCorreo(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contraseña *</label>
+                  <input type="text" required value={formEmpPassword} onChange={(e) => setFormEmpPassword(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
+                </div>
               </div>
 
-              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-4">
-                <h3 className="text-slate-300 font-bold text-xs uppercase border-b border-slate-800 pb-2">Información de Acceso</h3>
-                
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Nombre Completo</label>
-                  <input type="text" required value={formEmpNombre} onChange={(e) => setFormEmpNombre(e.target.value)} placeholder="Ej. Roberto Sánchez" className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Correo / Usuario de Acceso</label>
-                  <input type="text" required value={formEmpCorreo} onChange={(e) => setFormEmpCorreo(e.target.value)} placeholder="usuario_sistema" className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono</label>
-                  <input type="tel" required value={formEmpTelefono} onChange={(e) => setFormEmpTelefono(e.target.value)} placeholder="5512345678" className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contraseña temporal (o NIP)</label>
-                  <input type="password" required minLength={4} value={formEmpPassword} onChange={(e) => setFormEmpPassword(e.target.value)} placeholder="••••" className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono (Opcional)</label>
+                <input type="tel" value={formEmpTelefono} onChange={(e) => setFormEmpTelefono(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
               </div>
 
               {formEmpRol === 'CHOFER' && (
-                <div className="bg-indigo-900/20 p-4 rounded-xl border border-indigo-900/50 space-y-4 animate-fade-in">
-                  <h3 className="text-indigo-400 font-bold text-xs uppercase border-b border-indigo-900/50 pb-2">Datos de Ruta</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-800/50 p-4 rounded-xl border border-slate-700 mt-2">
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Ruta Asignada</label>
-                    <input type="text" required value={formEmpRuta} onChange={(e) => setFormEmpRuta(e.target.value)} placeholder="Ej. Ruta Centro - Plantel" className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
+                    <label className="block text-xs font-bold text-amber-400 uppercase mb-1">Ruta Asignada</label>
+                    <input type="text" required placeholder="Ej. Ruta Centro" value={formEmpRuta} onChange={(e) => setFormEmpRuta(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tipo de Transporte</label>
-                    <select value={formEmpTransporte} onChange={(e) => setFormEmpTransporte(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500">
+                    <label className="block text-xs font-bold text-amber-400 uppercase mb-1">Tipo de Transporte</label>
+                    <select value={formEmpTransporte} onChange={(e) => setFormEmpTransporte(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500">
                       <option value="Autobus">Autobús</option>
-                      <option value="Van">Van / Camioneta</option>
+                      <option value="Camioneta">Camioneta (Urvan)</option>
                     </select>
                   </div>
                 </div>
               )}
 
               {formEmpRol === 'COORDINADOR' && (
-                <div className="bg-emerald-900/20 p-4 rounded-xl border border-emerald-900/50 space-y-4 animate-fade-in">
-                  <h3 className="text-emerald-400 font-bold text-xs uppercase border-b border-emerald-900/50 pb-2">Asignación de Grupo</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Semestre</label>
-                      <select value={formEmpSemestreAsignado} onChange={(e) => setFormEmpSemestreAsignado(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500">
-                        <option value="1º">1º</option><option value="2º">2º</option><option value="3º">3º</option>
-                        <option value="4º">4º</option><option value="5º">5º</option><option value="6º">6º</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Turno</label>
-                      <select value={formEmpTurnoAsignado} onChange={(e) => setFormEmpTurnoAsignado(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500">
-                        <option value="Matutino">Matutino</option>
-                        <option value="Vespertino">Vespertino</option>
-                      </select>
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-800/50 p-4 rounded-xl border border-slate-700 mt-2">
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-400 uppercase mb-1">Semestre a Coordinar</label>
+                    <select value={formEmpSemestreAsignado} onChange={(e) => setFormEmpSemestreAsignado(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-emerald-500">
+                      <option value="1º">1º</option><option value="2º">2º</option><option value="3º">3º</option>
+                      <option value="4º">4º</option><option value="5º">5º</option><option value="6º">6º</option>
+                      <option value="TODOS">Todos</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-400 uppercase mb-1">Turno a Coordinar</label>
+                    <select value={formEmpTurnoAsignado} onChange={(e) => setFormEmpTurnoAsignado(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-emerald-500">
+                      <option value="Matutino">Matutino</option>
+                      <option value="Vespertino">Vespertino</option>
+                      <option value="Ambos">Ambos</option>
+                    </select>
                   </div>
                 </div>
               )}
 
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setMostrarModalEmpleado(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-colors text-sm">Cancelar</button>
-                <button type="submit" disabled={guardandoEmpleado} className="w-1/2 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-colors text-sm">
-                  {guardandoEmpleado ? 'Guardando...' : empleadoEditando ? 'Actualizar Empleado' : 'Registrar Empleado'}
-                </button>
+                <button type="submit" disabled={guardandoEmpleado} className="w-1/2 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-colors text-sm">{guardandoEmpleado ? 'Guardando...' : 'Guardar Empleado'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: VISUALIZACIÓN / IMPRESIÓN DE TICKET */}
+      {documentoActual && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-white p-6 rounded-none w-full max-w-sm text-black font-mono text-sm relative">
+            <div className="text-center mb-4">
+              <h2 className="font-bold text-lg">SITE-PEM</h2>
+              <p>TICKET DE {documentoActual.tipo === 'CORTE_Z' ? 'CORTE Z' : 'REPORTE POR RANGO'}</p>
+              <p>{documentoActual.fechaImpresion}</p>
+            </div>
+            
+            <div className="border-t border-b border-black py-2 mb-4 space-y-1">
+              {documentoActual.tipo === 'REPORTE_RANGO' ? (
+                <>
+                  <p>Del: {documentoActual.fechaInicio}</p>
+                  <p>Al: {documentoActual.fechaFin}</p>
+                </>
+              ) : (
+                <p>Fecha de Corte: {documentoActual.fechaCorte}</p>
+              )}
+            </div>
+            
+            <div className="space-y-2 mb-4">
+              <div className="flex justify-between"><p>Ventas Ingresadas:</p><p>${documentoActual.ventas?.toFixed(2)}</p></div>
+              <div className="flex justify-between"><p>Boletos Vendidos:</p><p>{documentoActual.boletos}</p></div>
+              <div className="flex justify-between"><p>Retiros de Caja:</p><p>-${documentoActual.retiros?.toFixed(2)}</p></div>
+            </div>
+            
+            <div className="border-t border-black pt-2 mb-6">
+              <div className="flex justify-between font-bold text-base"><p>TOTAL NETO:</p><p>${documentoActual.totalNeto?.toFixed(2)}</p></div>
+            </div>
+            
+            <div className="text-center text-xs space-y-4">
+              <p>Fin del reporte.</p>
+              <div className="flex gap-2 justify-center print:hidden">
+                <button onClick={() => setDocumentoActual(null)} className="bg-slate-300 px-4 py-2 font-sans font-bold rounded hover:bg-slate-400">Cerrar</button>
+                <button onClick={() => window.print()} className="bg-indigo-600 text-white px-4 py-2 font-sans font-bold rounded hover:bg-indigo-500">Imprimir</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
