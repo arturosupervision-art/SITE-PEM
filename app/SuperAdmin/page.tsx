@@ -57,13 +57,13 @@ export default function PanelAdministracion() {
   const [formSemestre, setFormSemestre] = useState('1º')
   const [formGrupo, setFormGrupo] = useState('1')
   const [formTurno, setFormTurno] = useState('Matutino')
-  const [formQr, setFormQr] = useState('')
+  const [formNfcUid, setFormNfcUid] = useState('')
   const [formCorreoTutor, setFormCorreoTutor] = useState('')
   const [formTelefonoTutor, setFormTelefonoTutor] = useState('')
   const [formSaldo, setFormSaldo] = useState(0)
   const [guardandoAlumno, setGuardandoAlumno] = useState(false)
 
-  // Estados para Cámara de PC
+  // Estados para Cámara / Lector
   const [usandoCamara, setUsandoCamara] = useState(false)
   const [modoCamara, setModoCamara] = useState<'FORMULARIO' | 'BUSQUEDA' | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -95,7 +95,6 @@ export default function PanelAdministracion() {
   const procesarLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // PASO 1: Validación de Correo y Contraseña
     if (pasoLogin === 1) {
       if (usuario === 'prueba.superadmin@pem.edu.mx' && password === 'prueba1234') {
         setPasoLogin(2)
@@ -104,7 +103,6 @@ export default function PanelAdministracion() {
         setPasoLogin(2)
         setErrorAuth(false)
       } else {
-        // Validación en Base de Datos para otros empleados
         try {
           const { data, error } = await supabase
             .from('usuarios')
@@ -135,7 +133,6 @@ export default function PanelAdministracion() {
         }
       }
     } 
-    // PASO 2: Validación de PIN (Solo para Cuentas Hardcoded)
     else if (pasoLogin === 2) {
       if (usuario === 'prueba.superadmin@pem.edu.mx' && pin === '3664') {
         setErrorAuth(false)
@@ -296,7 +293,7 @@ export default function PanelAdministracion() {
     setMostrarCorte(false)
   }
 
-  // ================= FUNCIONES DE CÁMARA PARA PC =================
+  // ================= FUNCIONES DE CÁMARA / LECTOR PARA PC =================
   const detenerCamara = (streamToStop?: MediaStream, intervalId?: NodeJS.Timeout) => {
     if (intervalId) clearInterval(intervalId);
     if (streamToStop) {
@@ -325,7 +322,7 @@ export default function PanelAdministracion() {
                 const barcodes = await detector.detect(videoRef.current);
                 if (barcodes.length > 0) {
                   if (modo === 'FORMULARIO') {
-                    setFormQr(barcodes[0].rawValue);
+                    setFormNfcUid(barcodes[0].rawValue);
                   } else if (modo === 'BUSQUEDA') {
                     setBusquedaAlumno(barcodes[0].rawValue);
                   }
@@ -365,7 +362,7 @@ export default function PanelAdministracion() {
     setFormSemestre('1º')
     setFormGrupo('1')
     setFormTurno('Matutino')
-    setFormQr('')
+    setFormNfcUid('')
     setFormCorreoTutor('')
     setFormTelefonoTutor('')
     setFormSaldo(0)
@@ -381,7 +378,7 @@ export default function PanelAdministracion() {
     setFormSemestre(al.semestre || '1º')
     setFormGrupo(al.grupo || '1')
     setFormTurno(al.turno || 'Matutino')
-    setFormQr(al.codigo_qr || '')
+    setFormNfcUid(al.nfc_uid || '')
     setFormCorreoTutor(al.correo_tutor || '')
     setFormTelefonoTutor(al.telefono_tutor || '')
     setFormSaldo(al.saldo_actual || 0)
@@ -396,7 +393,16 @@ export default function PanelAdministracion() {
     try {
       const gradoGrupoVal = `${formSemestre} Grupo ${formGrupo}`
       const datosAlumno = {
-        nombre_completo: formNombre, matricula: formMatricula, semestre: formSemestre, grupo: formGrupo, turno: formTurno, codigo_qr: formQr, correo_tutor: formCorreoTutor, telefono_tutor: formTelefonoTutor, saldo_actual: formSaldo, grado_grupo: gradoGrupoVal
+        nombre_completo: formNombre, 
+        matricula: formMatricula, 
+        semestre: formSemestre, 
+        grupo: formGrupo, 
+        turno: formTurno, 
+        nfc_uid: formNfcUid, 
+        correo_tutor: formCorreoTutor, 
+        telefono_tutor: formTelefonoTutor, 
+        saldo_actual: formSaldo, 
+        grado_grupo: gradoGrupoVal
       }
 
       if (alumnoEditando) {
@@ -431,25 +437,6 @@ export default function PanelAdministracion() {
       }
     }
   }
-
-  const probarNotificacionTelegram = async (alumno: any) => {
-    if (!alumno.telefono_tutor) {
-      alert(`⚠️ No se puede hacer la prueba. El alumno ${alumno.nombre_completo} no tiene un teléfono de tutor registrado.`);
-      return;
-    }
-
-    const confirmar = window.confirm(`¿Deseas enviar un mensaje de prueba al Telegram vinculado con el número ${alumno.telefono_tutor}?`);
-    
-    if (confirmar) {
-      try {
-        // AQUÍ VA LA LÓGICA DE TU BACKEND O API DE TELEGRAM
-        alert(`✅ Mensaje de prueba enviado exitosamente al tutor de ${alumno.nombre_completo}.`);
-      } catch (error: any) {
-        alert('❌ Error al intentar enviar el mensaje de prueba: ' + error.message);
-      }
-    }
-  }
-
 
   const toggleSeleccionAlumno = (id: string) => {
     setIdsSeleccionados(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
@@ -546,7 +533,16 @@ export default function PanelAdministracion() {
             const sem = partes[2]?.trim() || '1º'
             const grupo = partes[3]?.trim() || '1'
             nuevosAlumnos.push({
-              nombre_completo: partes[0]?.trim(), matricula: partes[1]?.trim() || '', semestre: sem, grupo: grupo, turno: partes[4]?.trim() || 'Matutino', codigo_qr: partes[5]?.trim() || '', correo_tutor: partes[6]?.trim() || '', telefono_tutor: partes[7]?.trim() || '', saldo_actual: parseFloat(partes[8]?.trim()) || 0, grado_grupo: `${sem} Grupo ${grupo}`
+              nombre_completo: partes[0]?.trim(), 
+              matricula: partes[1]?.trim() || '', 
+              semestre: sem, 
+              grupo: grupo, 
+              turno: partes[4]?.trim() || 'Matutino', 
+              nfc_uid: partes[5]?.trim() || '', 
+              correo_tutor: partes[6]?.trim() || '', 
+              telefono_tutor: partes[7]?.trim() || '', 
+              saldo_actual: parseFloat(partes[8]?.trim()) || 0, 
+              grado_grupo: `${sem} Grupo ${grupo}`
             })
           }
         }
@@ -572,7 +568,7 @@ export default function PanelAdministracion() {
   }
 
   const descargarPlantilla = () => {
-    const contenido = "Nombre Completo,Matricula,Semestre,Grupo,Turno,Codigo QR,Correo Tutor,Telefono Tutor,Saldo Inicial\nJuan Perez Lopez,2026-001,6º,1,Matutino,QR-1001,tutor.juan@email.com,5512345678,0\nMaria Garcia Gomez,2026-002,6º,2,Vespertino,QR-1002,tutor.maria@email.com,5587654321,50"
+    const contenido = "Nombre Completo,Matricula,Semestre,Grupo,Turno,NFC UID,Correo Tutor,Telefono Tutor,Saldo Inicial\nJuan Perez Lopez,2026-001,6º,1,Matutino,36D021CD,tutor.juan@email.com,5512345678,0\nMaria Garcia Gomez,2026-002,6º,2,Vespertino,6262EB10,tutor.maria@email.com,5587654321,50"
     const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -588,9 +584,9 @@ export default function PanelAdministracion() {
       alert('No hay alumnos para exportar.')
       return
     }
-    let csv = "Nombre Completo,Matricula,Semestre,Grupo,Turno,Codigo QR,Correo Tutor,Telefono Tutor,Saldo Actual\n"
+    let csv = "Nombre Completo,Matricula,Semestre,Grupo,Turno,NFC UID,Correo Tutor,Telefono Tutor,Saldo Actual\n"
     alumnos.forEach(a => {
-      csv += `"${a.nombre_completo || ''}","${a.matricula || ''}","${a.semestre || ''}","${a.grupo || ''}","${a.turno || ''}","${a.codigo_qr || ''}","${a.correo_tutor || ''}","${a.telefono_tutor || ''}",${a.saldo_actual || 0}\n`
+      csv += `"${a.nombre_completo || ''}","${a.matricula || ''}","${a.semestre || ''}","${a.grupo || ''}","${a.turno || ''}","${a.nfc_uid || ''}","${a.correo_tutor || ''}","${a.telefono_tutor || ''}",${a.saldo_actual || 0}\n`
     })
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -635,7 +631,7 @@ export default function PanelAdministracion() {
   const alumnosFiltrados = alumnos.filter(a => 
     a.nombre_completo?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
     a.matricula?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
-    a.codigo_qr?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
+    a.nfc_uid?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
     a.correo_tutor?.toLowerCase().includes(busquedaAlumno.toLowerCase()) ||
     a.telefono_tutor?.toLowerCase().includes(busquedaAlumno.toLowerCase())
   )
@@ -740,13 +736,11 @@ export default function PanelAdministracion() {
     }
   }
 
-
   // ================= RENDERIZADO DEL LOGIN SECUENCIAL =================
   if (!rol) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
         <div className="bg-[#0f172a] p-8 rounded-2xl shadow-2xl border border-slate-800 max-w-sm w-full relative overflow-hidden">
-          
           <div className="text-center mb-6 relative z-10">
             <h1 className="text-2xl font-black text-white mb-2">SITE-PEM</h1>
             <p className="text-slate-400 text-sm">Panel de Administración Central</p>
@@ -788,7 +782,6 @@ export default function PanelAdministracion() {
                     Credenciales incorrectas o usuario no encontrado.
                   </p>
                 )}
-                
                 <button 
                   type="submit" 
                   className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors mt-2"
@@ -848,7 +841,6 @@ export default function PanelAdministracion() {
   // ================= RENDERIZADO DEL PANEL PRINCIPAL =================
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 font-sans p-4 md:p-8">
-      
       {/* HEADER PRINCIPAL */}
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-800 pb-4 gap-4">
         <div>
@@ -978,7 +970,6 @@ export default function PanelAdministracion() {
       {vista === 'SISTEMA' && rol === 'SUPERADMIN' && (
         <div className="max-w-7xl mx-auto space-y-8 animate-fade-in">
           
-          {/* ACCESOS DIRECTOS */}
           <div className="bg-[#0f172a] rounded-2xl border border-indigo-900/40 p-6 shadow-xl">
             <h2 className="text-xl font-black text-white mb-4 flex items-center gap-2">
               🚀 Acceso Directo a Módulos
@@ -1008,7 +999,6 @@ export default function PanelAdministracion() {
             </div>
           </div>
 
-          {/* TABLA DE CONTROL DE ALUMNOS ÍNTEGRA */}
           <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
             <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/50">
               <div>
@@ -1023,11 +1013,10 @@ export default function PanelAdministracion() {
             <div className="p-6">
               <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
                 
-                {/* CONTENEDOR DE BÚSQUEDA */}
                 <div className="relative w-full md:w-1/2">
                   <input
                     type="text"
-                    placeholder="Buscar por nombre, matrícula, correo o QR..."
+                    placeholder="Buscar por nombre, matrícula, correo o NFC UID..."
                     value={busquedaAlumno}
                     onChange={(e) => setBusquedaAlumno(e.target.value)}
                     className="w-full bg-[#020617] border border-slate-700 rounded-xl py-3 pl-4 pr-12 text-white text-sm outline-none focus:border-indigo-500"
@@ -1036,12 +1025,9 @@ export default function PanelAdministracion() {
                     type="button"
                     onClick={() => iniciarCamara('BUSQUEDA')}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-indigo-400 transition-colors"
-                    title="Escanear QR de alumno"
+                    title="Escanear lector / NFC"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h4a1 1 0 010 2H5v3a1 1 0 01-2 0V4zm14-1a1 1 0 011 1v3a1 1 0 01-2 0V5h-3a1 1 0 010-2h4zM3 20a1 1 0 011 1h4a1 1 0 010-2H5v-3a1 1 0 01-2 0v4zm14 1a1 1 0 011-1v-4a1 1 0 01-2 0v3h-3a1 1 0 010 2h4z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6v6H9z" />
-                    </svg>
+                    💳
                   </button>
                 </div>
                 
@@ -1086,7 +1072,7 @@ export default function PanelAdministracion() {
                             </td>
                             <td className="p-3">
                               <p className="text-white font-bold text-sm">{al.nombre_completo}</p>
-                              {al.codigo_qr && <p className="text-xs text-indigo-400 mt-1">QR: {al.codigo_qr}</p>}
+                              {al.nfc_uid && <p className="text-xs text-indigo-400 mt-1 font-mono">NFC: {al.nfc_uid}</p>}
                             </td>
                             <td className="p-3 text-slate-300 text-sm">{al.matricula || '-'}</td>
                             <td className="p-3">
@@ -1096,6 +1082,7 @@ export default function PanelAdministracion() {
                             <td className="p-3">
                               <p className="text-slate-300 text-xs">{al.correo_tutor || 'Sin correo'}</p>
                               <p className="text-slate-300 text-xs">{al.telefono_tutor || 'Sin teléfono'}</p>
+                              {al.telegram_chat_id && <p className="text-[10px] text-emerald-400 font-mono mt-0.5">TG ID: {al.telegram_chat_id}</p>}
                             </td>
                             <td className="p-3">
                               <span className={`px-2 py-1 rounded-md text-xs font-bold ${al.saldo_actual > 0 ? 'bg-emerald-900/40 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
@@ -1104,7 +1091,6 @@ export default function PanelAdministracion() {
                             </td>
                             <td className="p-3">
                               <div className="flex justify-center gap-2">
-                                <button onClick={() => probarNotificacionTelegram(al)} className="bg-slate-800 hover:bg-blue-500 text-white p-2 rounded-lg transition-colors" title="Probar Telegram">✈️</button>
                                 <button onClick={() => abrirModalEditarAlumno(al)} className="bg-slate-800 hover:bg-indigo-600 text-white p-2 rounded-lg transition-colors" title="Editar">✏️</button>
                                 <button onClick={() => eliminarAlumnoIndividual(al.id, al.nombre_completo)} className="bg-slate-800 hover:bg-red-600 text-white p-2 rounded-lg transition-colors" title="Eliminar">🗑️</button>
                               </div>
@@ -1196,25 +1182,20 @@ export default function PanelAdministracion() {
         </div>
       )}
 
-
-      {/* ====================================================================================== */}
-      {/* ======================================= MODALES ====================================== */}
-      {/* ====================================================================================== */}
-
-      {/* MODAL CÁMARA PARA BÚSQUEDA */}
+      {/* MODALES */}
       {usandoCamara && modoCamara === 'BUSQUEDA' && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
           <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-4 text-center">Escanear QR de Alumno</h2>
+            <h2 className="text-xl font-bold text-white mb-4 text-center">Escanear Lector USB / NFC</h2>
             
             <div className="mb-6 bg-slate-800 p-4 rounded-xl border border-slate-700">
               <label className="block text-slate-300 text-xs font-bold mb-2 uppercase text-center">
-                Escáner Físico (Pistola)
+                Lectura Automática (USB)
               </label>
               <input
                 type="text"
                 autoFocus
-                placeholder="Haz clic aquí y dispara el lector..."
+                placeholder="Pasa la tarjeta NFC aquí..."
                 className="w-full bg-[#020617] text-white border border-slate-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-indigo-500 text-center"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -1227,16 +1208,9 @@ export default function PanelAdministracion() {
                 }}
               />
             </div>
-
-            <p className="text-slate-400 text-xs text-center mb-4 uppercase font-bold">O usa la cámara de tu PC</p>
             
-            <div className="relative rounded-xl overflow-hidden bg-black aspect-video border border-slate-700 flex justify-center items-center">
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover"></video>
-              <div className="absolute inset-0 border-2 border-indigo-500/50 m-8 rounded-lg pointer-events-none"></div>
-            </div>
-            
-            <button onClick={() => detenerCamara()} className="w-full mt-6 bg-slate-800 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors">
-              Cancelar Escaneo
+            <button onClick={() => detenerCamara()} className="w-full mt-2 bg-slate-800 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors">
+              Cancelar
             </button>
           </div>
         </div>
@@ -1393,17 +1367,10 @@ export default function PanelAdministracion() {
               </div>
 
               <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 mt-2">
-                <label className="block text-xs font-bold text-indigo-400 uppercase mb-2">Asignación de Código QR</label>
+                <label className="block text-xs font-bold text-indigo-400 uppercase mb-2">Asignación de Tarjeta NFC (UID)</label>
                 <div className="flex gap-2">
-                  <input type="text" value={formQr} onChange={(e) => setFormQr(e.target.value)} placeholder="Ej. QR-0001" className="flex-1 bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm font-mono outline-none focus:border-indigo-500" />
-                  <button type="button" onClick={() => iniciarCamara('FORMULARIO')} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 rounded-xl text-sm font-bold transition-colors whitespace-nowrap">📷 Escanear con PC</button>
+                  <input type="text" value={formNfcUid} onChange={(e) => setFormNfcUid(e.target.value)} placeholder="Ej. 36D021CD" className="flex-1 bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm font-mono outline-none focus:border-indigo-500" />
                 </div>
-                {usandoCamara && modoCamara === 'FORMULARIO' && (
-                  <div className="mt-4 relative rounded-xl overflow-hidden bg-black aspect-video border border-slate-700 flex justify-center items-center">
-                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover"></video>
-                    <button type="button" onClick={() => detenerCamara()} className="absolute top-2 right-2 bg-red-600 text-white px-3 py-1 rounded-lg text-xs font-bold z-10">Cancelar</button>
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1413,19 +1380,7 @@ export default function PanelAdministracion() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono Tutor (Opcional)</label>
-                  <div className="flex gap-2">
-                    <input type="text" value={formTelefonoTutor} onChange={(e) => setFormTelefonoTutor(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
-                    {alumnoEditando && formTelefonoTutor && (
-                      <button 
-                        type="button" 
-                        onClick={() => probarNotificacionTelegram({ nombre_completo: formNombre, telefono_tutor: formTelefonoTutor })} 
-                        className="bg-blue-600 hover:bg-blue-500 text-white px-3 rounded-xl text-sm font-bold transition-colors"
-                        title="Probar vinculación de Telegram"
-                      >
-                        ✈️
-                      </button>
-                    )}
-                  </div>
+                  <input type="text" value={formTelefonoTutor} onChange={(e) => setFormTelefonoTutor(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Saldo Inicial / Actual</label>
@@ -1466,7 +1421,7 @@ export default function PanelAdministracion() {
             <textarea
               value={textoMasivo}
               onChange={(e) => setTextoMasivo(e.target.value)}
-              placeholder="Nombre Completo,Matricula,Semestre,Grupo,Turno,Codigo QR,Correo Tutor,Telefono Tutor,Saldo Inicial"
+              placeholder="Nombre Completo,Matricula,Semestre,Grupo,Turno,NFC UID,Correo Tutor,Telefono Tutor,Saldo Inicial"
               className="w-full flex-1 min-h-[200px] bg-[#020617] border border-slate-700 rounded-xl p-4 text-slate-300 text-xs font-mono outline-none focus:border-indigo-500 mb-6 whitespace-pre"
             ></textarea>
 
@@ -1558,7 +1513,6 @@ export default function PanelAdministracion() {
                 <input type="text" value={formEmpTelefono} onChange={(e) => setFormEmpTelefono(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500" />
               </div>
 
-              {/* CAMPOS CONDICIONALES POR ROL */}
               {formEmpRol === 'CHOFER' && (
                 <div className="bg-amber-900/20 p-4 rounded-xl border border-amber-900/30 mt-4 space-y-4">
                   <h3 className="text-amber-400 font-bold text-sm">Configuración de Chofer</h3>
@@ -1612,7 +1566,7 @@ export default function PanelAdministracion() {
         </div>
       )}
 
-      {/* MODAL: TICKET DE IMPRESIÓN (CORTE Z Y REPORTE RANGO) */}
+      {/* MODAL: TICKET DE IMPRESIÓN */}
       {documentoActual && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
           <div className="bg-white text-black p-6 rounded-lg w-full max-w-sm shadow-2xl relative font-mono text-xs">
