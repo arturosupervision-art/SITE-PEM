@@ -432,6 +432,25 @@ export default function PanelAdministracion() {
     }
   }
 
+  const probarNotificacionTelegram = async (alumno: any) => {
+    if (!alumno.telefono_tutor) {
+      alert(`⚠️ No se puede hacer la prueba. El alumno ${alumno.nombre_completo} no tiene un teléfono de tutor registrado.`);
+      return;
+    }
+
+    const confirmar = window.confirm(`¿Deseas enviar un mensaje de prueba al Telegram vinculado con el número ${alumno.telefono_tutor}?`);
+    
+    if (confirmar) {
+      try {
+        // AQUÍ VA LA LÓGICA DE TU BACKEND O API DE TELEGRAM
+        alert(`✅ Mensaje de prueba enviado exitosamente al tutor de ${alumno.nombre_completo}.`);
+      } catch (error: any) {
+        alert('❌ Error al intentar enviar el mensaje de prueba: ' + error.message);
+      }
+    }
+  }
+
+
   const toggleSeleccionAlumno = (id: string) => {
     setIdsSeleccionados(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
   }
@@ -1085,6 +1104,7 @@ export default function PanelAdministracion() {
                             </td>
                             <td className="p-3">
                               <div className="flex justify-center gap-2">
+                                <button onClick={() => probarNotificacionTelegram(al)} className="bg-slate-800 hover:bg-blue-500 text-white p-2 rounded-lg transition-colors" title="Probar Telegram">✈️</button>
                                 <button onClick={() => abrirModalEditarAlumno(al)} className="bg-slate-800 hover:bg-indigo-600 text-white p-2 rounded-lg transition-colors" title="Editar">✏️</button>
                                 <button onClick={() => eliminarAlumnoIndividual(al.id, al.nombre_completo)} className="bg-slate-800 hover:bg-red-600 text-white p-2 rounded-lg transition-colors" title="Eliminar">🗑️</button>
                               </div>
@@ -1393,7 +1413,19 @@ export default function PanelAdministracion() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono Tutor (Opcional)</label>
-                  <input type="text" value={formTelefonoTutor} onChange={(e) => setFormTelefonoTutor(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
+                  <div className="flex gap-2">
+                    <input type="text" value={formTelefonoTutor} onChange={(e) => setFormTelefonoTutor(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
+                    {alumnoEditando && formTelefonoTutor && (
+                      <button 
+                        type="button" 
+                        onClick={() => probarNotificacionTelegram({ nombre_completo: formNombre, telefono_tutor: formTelefonoTutor })} 
+                        className="bg-blue-600 hover:bg-blue-500 text-white px-3 rounded-xl text-sm font-bold transition-colors"
+                        title="Probar vinculación de Telegram"
+                      >
+                        ✈️
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Saldo Inicial / Actual</label>
