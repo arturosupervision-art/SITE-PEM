@@ -1287,4 +1287,372 @@ export default function PanelAdministracion() {
               <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 text-center"><p className="text-slate-500 text-[10px] uppercase font-bold">Ventas Netas</p><p className="text-emerald-400 font-black text-lg">${statsHistorial.ventas.toFixed(2)}</p></div>
               <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 text-center"><p className="text-slate-500 text-[10px] uppercase font-bold">Boletos Emitidos</p><p className="text-white font-black text-lg">{statsHistorial.boletos}</p></div>
               <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 text-center"><p className="text-slate-500 text-[10px] uppercase font-bold">Retiros</p><p className="text-pink-400 font-black text-lg">-${statsHistorial.retiros.toFixed(2)}</p></div>
-              <div className="bg-indigo-900/30 p-3 rounded-xl border border-indigo-900/50 text-center"><p className="text-indigo-400 text-[10px] uppercase font-bold">Caja Teórica</p><p className="text-white font-black text-
+              <div className="bg-indigo-900/30 p-3 rounded-xl border border-indigo-900/50 text-center"><p className="text-indigo-400 text-[10px] uppercase font-bold">Caja Teórica</p><p className="text-white font-black text-lg">${statsHistorial.total.toFixed(2)}</p></div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto rounded-xl border border-slate-800 bg-[#020617]">
+              <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 bg-[#0f172a] shadow-md">
+                  <tr className="text-slate-400 text-xs uppercase tracking-wider">
+                    <th className="p-3 border-b border-slate-800">Hora</th>
+                    <th className="p-3 border-b border-slate-800">Tipo</th>
+                    <th className="p-3 border-b border-slate-800">Folio / Ref</th>
+                    <th className="p-3 border-b border-slate-800">Descripción</th>
+                    <th className="p-3 border-b border-slate-800 text-right">Monto</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50">
+                  {historialUnificado.length === 0 ? (
+                    <tr><td colSpan={5} className="p-8 text-center text-slate-500">No hay movimientos en esta fecha.</td></tr>
+                  ) : (
+                    historialUnificado.map((mov, i) => (
+                      <tr key={i} className="hover:bg-slate-800/30">
+                        <td className="p-3 text-sm text-slate-400">{new Date(mov.fecha).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}</td>
+                        <td className="p-3"><span className={`px-2 py-1 rounded-[4px] text-[10px] font-bold ${mov.tipo === 'VENTA' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-pink-900/30 text-pink-400'}`}>{mov.tipo}</span></td>
+                        <td className="p-3 text-sm font-mono text-slate-300">{mov.folio}</td>
+                        <td className="p-3 text-sm text-slate-300">{mov.descripcion}</td>
+                        <td className={`p-3 text-sm font-bold text-right ${mov.tipo === 'VENTA' ? 'text-emerald-400' : 'text-pink-400'}`}>{mov.tipo === 'VENTA' ? '+' : '-'}${mov.monto.toFixed(2)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: REPORTE POR RANGO */}
+      {mostrarReporteRango && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-lg shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">📅 Reporte de Ventas por Rango</h2>
+            
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Fecha Inicial</label>
+                <input type="date" value={fechaInicioRango} onChange={(e) => { setFechaInicioRango(e.target.value); setRangoCalculado(false) }} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Fecha Final</label>
+                <input type="date" value={fechaFinRango} onChange={(e) => { setFechaFinRango(e.target.value); setRangoCalculado(false) }} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-indigo-500" />
+              </div>
+            </div>
+
+            {rangoCalculado ? (
+              <div className="bg-[#020617] p-4 rounded-xl border border-slate-800 mb-6 space-y-2">
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Total Ingresos:</span><span className="text-emerald-400 font-bold">${statsRango.ventas.toFixed(2)}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Boletos Vendidos:</span><span className="text-white font-bold">{statsRango.boletos}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Total Retiros:</span><span className="text-pink-400 font-bold">-${statsRango.retiros.toFixed(2)}</span></div>
+                <div className="border-t border-slate-700 pt-2 flex justify-between text-base"><span className="text-white font-bold">Neto en Caja:</span><span className="text-indigo-400 font-black">${statsRango.total.toFixed(2)}</span></div>
+              </div>
+            ) : (
+              <button onClick={calcularRangoFechas} disabled={calculandoRango} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors mb-6">
+                {calculandoRango ? 'Calculando...' : 'Calcular Totales'}
+              </button>
+            )}
+
+            <div className="flex gap-3">
+              <button onClick={() => setMostrarReporteRango(false)} className="w-1/2 bg-transparent border border-slate-700 text-slate-300 font-bold py-3 rounded-xl hover:bg-slate-800 transition-colors">Cancelar</button>
+              <button onClick={generarDocumentoRango} disabled={!rangoCalculado} className={`w-1/2 font-bold py-3 rounded-xl transition-colors ${rangoCalculado ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}>🖨️ Generar Ticket</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ALTA/EDICIÓN ALUMNO INDIVIDUAL */}
+      {mostrarModalAlumno && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-white mb-6 border-b border-slate-800 pb-4">
+              {alumnoEditando ? '✏️ Editar Alumno' : '➕ Nuevo Alumno'}
+            </h2>
+
+            <form onSubmit={guardarAlumno} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Nombre Completo *</label>
+                  <input type="text" required value={formNombre} onChange={(e) => setFormNombre(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Matrícula (Opcional)</label>
+                  <input type="text" value={formMatricula} onChange={(e) => setFormMatricula(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Semestre</label>
+                  <select value={formSemestre} onChange={(e) => setFormSemestre(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500">
+                    <option value="1º">1º</option><option value="2º">2º</option><option value="3º">3º</option>
+                    <option value="4º">4º</option><option value="5º">5º</option><option value="6º">6º</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Grupo</label>
+                  <select value={formGrupo} onChange={(e) => setFormGrupo(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500">
+                    <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                    <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Turno</label>
+                  <select value={formTurno} onChange={(e) => setFormTurno(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500">
+                    <option value="Matutino">Matutino</option>
+                    <option value="Vespertino">Vespertino</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 mt-2">
+                <label className="block text-xs font-bold text-indigo-400 uppercase mb-2">Asignación de Tarjeta NFC (UID)</label>
+                <div className="flex gap-2">
+                  <input type="text" value={formNfcUid} onChange={(e) => setFormNfcUid(e.target.value)} placeholder="Ej. 36D021CD" className="flex-1 bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm font-mono outline-none focus:border-indigo-500" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Correo Tutor (Opcional)</label>
+                  <input type="email" value={formCorreoTutor} onChange={(e) => setFormCorreoTutor(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono Tutor (Opcional)</label>
+                  <input type="text" value={formTelefonoTutor} onChange={(e) => setFormTelefonoTutor(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Saldo Inicial / Actual</label>
+                  <input type="number" step="0.01" min="0" value={formSaldo} onChange={(e) => setFormSaldo(parseFloat(e.target.value) || 0)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-indigo-500" />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-slate-800 mt-6">
+                <button type="button" onClick={() => { setMostrarModalAlumno(false); detenerCamara(); }} className="w-1/2 bg-transparent border border-slate-700 hover:bg-slate-800 text-slate-300 font-bold py-3 rounded-xl transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={guardandoAlumno} className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors">
+                  {guardandoAlumno ? 'Guardando...' : 'Guardar Alumno'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CARGA MASIVA */}
+      {mostrarModalMasivo && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-3xl shadow-2xl max-h-[90vh] flex flex-col">
+            <h2 className="text-xl font-bold text-white mb-2">📄 Carga Masiva de Alumnos (CSV)</h2>
+            <p className="text-slate-400 text-sm mb-6">Pega los datos separados por comas o carga un archivo CSV.</p>
+
+            <div className="flex gap-3 mb-4">
+              <button onClick={descargarPlantilla} className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors border border-slate-600">
+                ⬇️ Descargar Plantilla .CSV
+              </button>
+              <label className="bg-indigo-900/40 hover:bg-indigo-800/60 text-indigo-400 text-xs font-bold px-4 py-2 rounded-lg transition-colors border border-indigo-800/50 cursor-pointer">
+                📂 Cargar Archivo .CSV
+                <input type="file" accept=".csv" onChange={(e) => cargarArchivoMasivo(e, 'CARGA')} className="hidden" />
+              </label>
+            </div>
+
+            <textarea
+              value={textoMasivo}
+              onChange={(e) => setTextoMasivo(e.target.value)}
+              placeholder="Nombre Completo,Matricula,Semestre,Grupo,Turno,NFC UID,Correo Tutor,Telefono Tutor,Saldo Inicial"
+              className="w-full flex-1 min-h-[200px] bg-[#020617] border border-slate-700 rounded-xl p-4 text-slate-300 text-xs font-mono outline-none focus:border-indigo-500 mb-6 whitespace-pre"
+            ></textarea>
+
+            <div className="flex gap-3 shrink-0">
+              <button onClick={() => { setMostrarModalMasivo(false); setTextoMasivo(''); }} className="w-1/2 bg-transparent border border-slate-700 hover:bg-slate-800 text-slate-300 font-bold py-3 rounded-xl transition-colors">
+                Cancelar
+              </button>
+              <button onClick={procesarCargaMasiva} disabled={cargandoMasivo || !textoMasivo.trim()} className={`w-1/2 font-bold py-3 rounded-xl transition-colors ${cargandoMasivo || !textoMasivo.trim() ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}>
+                {cargandoMasivo ? 'Procesando...' : 'Iniciar Carga Masiva'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ELIMINACIÓN MASIVA */}
+      {mostrarModalEliminarMasivo && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-red-900/50 p-6 md:p-8 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">🗑️ Bajas Masivas por Matrícula</h2>
+            <p className="text-slate-400 text-sm mb-6">Pega la lista de matrículas (una por línea) o sube el CSV.</p>
+
+            <div className="flex gap-3 mb-4">
+              <button onClick={descargarPlantillaEliminar} className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors border border-slate-600">
+                ⬇️ Descargar Plantilla .CSV
+              </button>
+              <label className="bg-red-900/40 hover:bg-red-800/60 text-red-400 text-xs font-bold px-4 py-2 rounded-lg transition-colors border border-red-800/50 cursor-pointer">
+                📂 Cargar Archivo .CSV
+                <input type="file" accept=".csv" onChange={(e) => cargarArchivoMasivo(e, 'ELIMINAR')} className="hidden" />
+              </label>
+            </div>
+
+            <textarea
+              value={textoEliminarMasivo}
+              onChange={(e) => setTextoEliminarMasivo(e.target.value)}
+              placeholder="2026-001&#10;2026-002&#10;2026-003"
+              className="w-full flex-1 min-h-[200px] bg-[#020617] border border-red-900/30 rounded-xl p-4 text-slate-300 text-sm font-mono outline-none focus:border-red-500 mb-6"
+            ></textarea>
+
+            <div className="flex gap-3 shrink-0">
+              <button onClick={() => { setMostrarModalEliminarMasivo(false); setTextoEliminarMasivo(''); }} className="w-1/2 bg-transparent border border-slate-700 hover:bg-slate-800 text-slate-300 font-bold py-3 rounded-xl transition-colors">
+                Cancelar
+              </button>
+              <button onClick={procesarEliminacionMasiva} disabled={!textoEliminarMasivo.trim()} className={`w-1/2 font-bold py-3 rounded-xl transition-colors ${!textoEliminarMasivo.trim() ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500 text-white'}`}>
+                Ejecutar Bajas Masivas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: NUEVO/EDITAR EMPLEADO */}
+      {mostrarModalEmpleado && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-amber-900/40 p-6 md:p-8 rounded-2xl w-full max-w-xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-white mb-6 border-b border-slate-800 pb-4">
+              {empleadoEditando ? '✏️ Editar Empleado' : '➕ Nuevo Empleado'}
+            </h2>
+
+            <form onSubmit={guardarEmpleado} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Rol de Acceso *</label>
+                <select value={formEmpRol} onChange={(e) => setFormEmpRol(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500">
+                  <option value="CAJA">Cajero (Venta de Boletos)</option>
+                  <option value="CHOFER">Chofer (Lector en Unidad)</option>
+                  <option value="COORDINADOR">Coordinador (Lista de Asistencia)</option>
+                  <option value="ADMIN">Administrador (Finanzas)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Nombre Completo *</label>
+                <input type="text" required value={formEmpNombre} onChange={(e) => setFormEmpNombre(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Correo (Usuario) *</label>
+                  <input type="email" required value={formEmpCorreo} onChange={(e) => setFormEmpCorreo(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contraseña *</label>
+                  <input type="text" required value={formEmpPassword} onChange={(e) => setFormEmpPassword(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Teléfono (Opcional)</label>
+                <input type="text" value={formEmpTelefono} onChange={(e) => setFormEmpTelefono(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500" />
+              </div>
+
+              {formEmpRol === 'CHOFER' && (
+                <div className="bg-amber-900/20 p-4 rounded-xl border border-amber-900/30 mt-4 space-y-4">
+                  <h3 className="text-amber-400 font-bold text-sm">Configuración de Chofer</h3>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Ruta Asignada</label>
+                    <input type="text" value={formEmpRuta} onChange={(e) => setFormEmpRuta(e.target.value)} placeholder="Ej: Ruta 1 Centro" className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tipo de Transporte</label>
+                    <select value={formEmpTransporte} onChange={(e) => setFormEmpTransporte(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500">
+                      <option value="Autobus">Autobús</option>
+                      <option value="Combi">Combi</option>
+                      <option value="Sprinter">Sprinter</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {formEmpRol === 'COORDINADOR' && (
+                <div className="bg-amber-900/20 p-4 rounded-xl border border-amber-900/30 mt-4 space-y-4">
+                  <h3 className="text-amber-400 font-bold text-sm">Configuración de Coordinador</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Semestre Asignado</label>
+                      <select value={formEmpSemestreAsignado} onChange={(e) => setFormEmpSemestreAsignado(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500">
+                        <option value="1º">1º</option><option value="2º">2º</option><option value="3º">3º</option>
+                        <option value="4º">4º</option><option value="5º">5º</option><option value="6º">6º</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Turno Asignado</label>
+                      <select value={formEmpTurnoAsignado} onChange={(e) => setFormEmpTurnoAsignado(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500">
+                        <option value="Matutino">Matutino</option>
+                        <option value="Vespertino">Vespertino</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4 border-t border-slate-800 mt-6">
+                <button type="button" onClick={() => setMostrarModalEmpleado(false)} className="w-1/2 bg-transparent border border-slate-700 hover:bg-slate-800 text-slate-300 font-bold py-3 rounded-xl transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={guardandoEmpleado} className="w-1/2 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-colors">
+                  {guardandoEmpleado ? 'Guardando...' : 'Guardar Empleado'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TICKET DE IMPRESIÓN */}
+      {documentoActual && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-white text-black p-6 rounded-lg w-full max-w-sm shadow-2xl relative font-mono text-xs">
+            <div className="text-center mb-4">
+              <h2 className="text-lg font-black uppercase">SITE PEM</h2>
+              <p className="font-bold">SISTEMA INTEGRAL DE TRANSPORTE</p>
+              <p>--------------------------------</p>
+              <h3 className="font-bold uppercase text-sm mt-2">
+                {documentoActual.tipo === 'CORTE_Z' ? 'CORTE Z DIARIO' : 'REPORTE POR RANGO'}
+              </h3>
+              <p className="mt-1">
+                {documentoActual.tipo === 'CORTE_Z' 
+                  ? `Fecha Corte: ${documentoActual.fechaCorte}` 
+                  : `Del ${documentoActual.fechaInicio} al ${documentoActual.fechaFin}`}
+              </p>
+              <p>Impreso: {documentoActual.fechaImpresion}</p>
+              <p>--------------------------------</p>
+            </div>
+
+            <div className="space-y-2 mb-4">
+              <div className="flex justify-between"><span>Ventas Totales:</span><span className="font-bold">${documentoActual.ventas.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span>Boletos Vendidos:</span><span className="font-bold">{documentoActual.boletos}</span></div>
+              <div className="flex justify-between"><span>Retiros Totales:</span><span className="font-bold">-${documentoActual.retiros.toFixed(2)}</span></div>
+            </div>
+
+            <div className="text-center">
+              <p>--------------------------------</p>
+              <div className="flex justify-between text-sm font-black mt-2">
+                <span>NETO EN CAJA:</span>
+                <span>${documentoActual.totalNeto.toFixed(2)}</span>
+              </div>
+              <p className="mt-4">--------------------------------</p>
+              <p className="text-[10px] mt-2 font-bold">FIRMA DE CONFORMIDAD</p>
+              <div className="border-b border-black mt-8 w-3/4 mx-auto"></div>
+            </div>
+
+            <div className="flex gap-2 mt-6 justify-center print:hidden">
+              <button onClick={() => setDocumentoActual(null)} className="bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 px-4 rounded transition-colors font-sans">
+                Cerrar
+              </button>
+              <button onClick={() => window.print()} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded transition-colors font-sans">
+                Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}
