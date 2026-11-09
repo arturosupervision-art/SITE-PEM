@@ -345,13 +345,7 @@ export default function PanelAdministracion() {
   // ================= FUNCIONES DE CONTROL DE ALUMNOS (SUPER ADMIN) =================
   const probarNotificacionTelegram = async (chatId: string, nombreAlumno: string) => {
     // Si estás en producción, puedes usar process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN
-    const TELEGRAM_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || "TU_TOKEN_DE_TELEGRAM_AQUI";
-    
-    if (TELEGRAM_TOKEN === "TU_TOKEN_DE_TELEGRAM_AQUI") {
-       alert("⚠️ Por favor configura tu Token de Telegram en el código o en .env.local para enviar la prueba.");
-       return;
-    }
-
+   const TELEGRAM_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || "9131903626:AAEN8sLyIFz5yNr9LMFUzF-giQj4xZcLlOM";
     try {
       const texto = `🔔 *Prueba de Sistema SITE-PEM*\n\nHola, este es un mensaje de prueba desde el panel de SuperAdmin.\n\nEl chat está correctamente vinculado al alumno(a): *${nombreAlumno}* ✅`;
       
