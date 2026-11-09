@@ -343,6 +343,38 @@ export default function PanelAdministracion() {
   }
 
   // ================= FUNCIONES DE CONTROL DE ALUMNOS (SUPER ADMIN) =================
+  const probarNotificacionTelegram = async (chatId: string, nombreAlumno: string) => {
+    // Si estás en producción, puedes usar process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN
+    const TELEGRAM_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || "TU_TOKEN_DE_TELEGRAM_AQUI";
+    
+    if (TELEGRAM_TOKEN === "TU_TOKEN_DE_TELEGRAM_AQUI") {
+       alert("⚠️ Por favor configura tu Token de Telegram en el código o en .env.local para enviar la prueba.");
+       return;
+    }
+
+    try {
+      const texto = `🔔 *Prueba de Sistema SITE-PEM*\n\nHola, este es un mensaje de prueba desde el panel de SuperAdmin.\n\nEl chat está correctamente vinculado al alumno(a): *${nombreAlumno}* ✅`;
+      
+      const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: texto,
+          parse_mode: 'Markdown'
+        })
+      });
+      
+      if (res.ok) {
+        alert(`✅ ¡Mensaje de prueba enviado con éxito al celular del tutor de ${nombreAlumno}!`);
+      } else {
+        alert('❌ Error al enviar el mensaje. Verifica que el Token sea correcto y el bot no esté bloqueado por el usuario.');
+      }
+    } catch(err) {
+      alert('Error de conexión con la API de Telegram.');
+    }
+  }
+
   const cargarAlumnos = async () => {
     setCargandoAlumnos(true)
     try {
@@ -1056,7 +1088,7 @@ export default function PanelAdministracion() {
                         <th className="p-3 border-b border-slate-800">Nombre del Alumno</th>
                         <th className="p-3 border-b border-slate-800">Matrícula</th>
                         <th className="p-3 border-b border-slate-800">Grado/Grupo</th>
-                        <th className="p-3 border-b border-slate-800">Tutor</th>
+                        <th className="p-3 border-b border-slate-800">Contacto / Telegram</th>
                         <th className="p-3 border-b border-slate-800">Saldo</th>
                         <th className="p-3 border-b border-slate-800 text-center">Acciones</th>
                       </tr>
@@ -1081,8 +1113,20 @@ export default function PanelAdministracion() {
                             </td>
                             <td className="p-3">
                               <p className="text-slate-300 text-xs">{al.correo_tutor || 'Sin correo'}</p>
-                              <p className="text-slate-300 text-xs">{al.telefono_tutor || 'Sin teléfono'}</p>
-                              {al.telegram_chat_id && <p className="text-[10px] text-emerald-400 font-mono mt-0.5">TG ID: {al.telegram_chat_id}</p>}
+                              <p className="text-slate-300 text-xs mb-1">{al.telefono_tutor || 'Sin teléfono'}</p>
+                              {al.telegram_chat_id ? (
+                                <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg inline-block w-full max-w-[140px]">
+                                  <p className="text-[10px] text-emerald-400 font-mono mb-1 truncate" title={al.telegram_chat_id}>TG: {al.telegram_chat_id}</p>
+                                  <button 
+                                    onClick={() => probarNotificacionTelegram(al.telegram_chat_id, al.nombre_completo)} 
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors w-full flex justify-center items-center gap-1"
+                                  >
+                                    🔔 Probar
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-[9px] text-slate-500 border border-slate-700 bg-slate-800/50 px-2 py-1 rounded-md mt-1 inline-block">Sin vincular</span>
+                              )}
                             </td>
                             <td className="p-3">
                               <span className={`px-2 py-1 rounded-md text-xs font-bold ${al.saldo_actual > 0 ? 'bg-emerald-900/40 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
