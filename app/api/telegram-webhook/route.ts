@@ -56,11 +56,10 @@ export async function POST(request: Request) {
       // Extraemos la matrícula que escribió el tutor y la limpiamos
       const matriculaLimpia = partes[1].replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
 
-      // Buscamos al alumno en Supabase 
-      // NOTA: Asegúrate de que tu tabla se llame "alumnos" (o cámbialo si en SITE-PEM se llama "students" o similar)
+      // Buscamos al alumno en Supabase usando las columnas correctas
       const { data: alumnos, error } = await supabase
         .from("alumnos")
-        .select("id, matricula, nombre, apellido_paterno")
+        .select("id, matricula, nombre_completo")
         .eq("matricula", matriculaLimpia)
         .limit(1);
 
@@ -71,7 +70,7 @@ export async function POST(request: Request) {
 
       const alumno = alumnos[0];
 
-      // Actualizamos la columna del Chat ID del tutor (ajusta el nombre de la columna si es diferente)
+      // Actualizamos la columna del Chat ID del tutor
       const { error: updateError } = await supabase
         .from("alumnos")
         .update({ telegram_chat_id: chatId.toString() })
@@ -82,7 +81,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true });
       }
 
-      const exito = `✅ *¡VINCULACIÓN EXITOSA!*\n\nEste número de Telegram ha sido enlazado al estudiante:\n🎓 *${alumno.nombre} ${alumno.apellido_paterno}*\n\nA partir de este momento recibirás notificaciones del sistema SITE-PEM.`;
+      const exito = `✅ *¡VINCULACIÓN EXITOSA!*\n\nEste número de Telegram ha sido enlazado al estudiante:\n🎓 *${alumno.nombre_completo}*\n\nA partir de este momento recibirás notificaciones del sistema SITE-PEM.`;
       await enviarRespuestaTelegram(chatId, exito);
       
       return NextResponse.json({ success: true });
