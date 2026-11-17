@@ -359,7 +359,7 @@ export default function PanelAdministracion() {
       });
       
       if (res.ok) {
-        alert(`✅ ¡Mensaje de prueba enviado con éxito al celular del tutor de ${nombreAlumno}!`);
+        alert(`✅ ¡Mensaje de prueba enviado con éxito al ID ${chatId}!`);
       } else {
         const errorData = await res.json();
         console.error("Error de Telegram:", errorData);
@@ -367,6 +367,24 @@ export default function PanelAdministracion() {
       }
     } catch(err) {
       alert('Error de conexión con la API de Telegram.');
+    }
+  }
+
+  // NUEVA FUNCION: Desvincular Telegram para liberar el espacio
+  const desvincularTelegram = async (idAlumno: string, columna: 'telegram_chat_id' | 'telegram_chat_id_2', nombreAlumno: string) => {
+    if(confirm(`¿Estás seguro de desvincular este número de Telegram de ${nombreAlumno}?\n\nAl hacerlo, el papá podrá volver a registrar la matrícula desde su aplicación.`)) {
+      try {
+        const { error } = await supabase
+          .from('alumnos')
+          .update({ [columna]: null })
+          .eq('id', idAlumno);
+
+        if (error) throw error;
+        alert('✅ Número desvinculado con éxito.');
+        cargarAlumnos();
+      } catch (err: any) {
+        alert('Error al desvincular: ' + err.message);
+      }
     }
   }
 
@@ -1083,7 +1101,7 @@ export default function PanelAdministracion() {
                         <th className="p-3 border-b border-slate-800">Nombre del Alumno</th>
                         <th className="p-3 border-b border-slate-800">Matrícula</th>
                         <th className="p-3 border-b border-slate-800">Grado/Grupo</th>
-                        <th className="p-3 border-b border-slate-800">Contacto / Telegram</th>
+                        <th className="p-3 border-b border-slate-800 min-w-[200px]">Contacto / Telegram</th>
                         <th className="p-3 border-b border-slate-800">Saldo</th>
                         <th className="p-3 border-b border-slate-800 text-center">Acciones</th>
                       </tr>
@@ -1108,20 +1126,40 @@ export default function PanelAdministracion() {
                             </td>
                             <td className="p-3">
                               <p className="text-slate-300 text-xs">{al.correo_tutor || 'Sin correo'}</p>
-                              <p className="text-slate-300 text-xs mb-1">{al.telefono_tutor || 'Sin teléfono'}</p>
-                              {al.telegram_chat_id ? (
-                                <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg inline-block w-full max-w-[140px]">
-                                  <p className="text-[10px] text-emerald-400 font-mono mb-1 truncate" title={al.telegram_chat_id}>TG: {al.telegram_chat_id}</p>
-                                  <button 
-                                    onClick={() => probarNotificacionTelegram(al.telegram_chat_id, al.nombre_completo)} 
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors w-full flex justify-center items-center gap-1"
-                                  >
-                                    🔔 Probar
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="text-[9px] text-slate-500 border border-slate-700 bg-slate-800/50 px-2 py-1 rounded-md mt-1 inline-block">Sin vincular</span>
-                              )}
+                              <p className="text-slate-300 text-xs mb-2">{al.telefono_tutor || 'Sin teléfono'}</p>
+                              
+                              {/* TELEGRAM 1 */}
+                              <div className="mb-2">
+                                <p className="text-[10px] text-slate-500 font-bold mb-1">Telegram 1:</p>
+                                {al.telegram_chat_id ? (
+                                  <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg w-full max-w-[160px]">
+                                    <p className="text-[10px] text-emerald-400 font-mono mb-1 truncate" title={al.telegram_chat_id}>ID: {al.telegram_chat_id}</p>
+                                    <div className="flex gap-1">
+                                      <button onClick={() => probarNotificacionTelegram(al.telegram_chat_id, al.nombre_completo)} className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex-1 flex justify-center items-center">🔔 Probar</button>
+                                      <button onClick={() => desvincularTelegram(al.id, 'telegram_chat_id', al.nombre_completo)} className="bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex justify-center items-center" title="Desvincular para volver a registrar">❌</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-[9px] text-slate-500 border border-slate-700 bg-slate-800/50 px-2 py-1 rounded-md inline-block">Sin vincular</span>
+                                )}
+                              </div>
+
+                              {/* TELEGRAM 2 */}
+                              <div>
+                                <p className="text-[10px] text-slate-500 font-bold mb-1">Telegram 2:</p>
+                                {al.telegram_chat_id_2 ? (
+                                  <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg w-full max-w-[160px]">
+                                    <p className="text-[10px] text-emerald-400 font-mono mb-1 truncate" title={al.telegram_chat_id_2}>ID: {al.telegram_chat_id_2}</p>
+                                    <div className="flex gap-1">
+                                      <button onClick={() => probarNotificacionTelegram(al.telegram_chat_id_2, al.nombre_completo)} className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex-1 flex justify-center items-center">🔔 Probar</button>
+                                      <button onClick={() => desvincularTelegram(al.id, 'telegram_chat_id_2', al.nombre_completo)} className="bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex justify-center items-center" title="Desvincular para volver a registrar">❌</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-[9px] text-slate-500 border border-slate-700 bg-slate-800/50 px-2 py-1 rounded-md inline-block">Sin vincular</span>
+                                )}
+                              </div>
+
                             </td>
                             <td className="p-3">
                               <span className={`px-2 py-1 rounded-md text-xs font-bold ${al.saldo_actual > 0 ? 'bg-emerald-900/40 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
