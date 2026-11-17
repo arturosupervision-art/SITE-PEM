@@ -344,7 +344,7 @@ export default function PanelAdministracion() {
 
   // ================= FUNCIONES DE CONTROL DE ALUMNOS (SUPER ADMIN) =================
   const probarNotificacionTelegram = async (chatId: string, nombreAlumno: string) => {
-   const TELEGRAM_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || "9131903626:AAEN8sLyIFz5yNr9LMFUzF-giQj4xZcLlOM";
+   const TELEGRAM_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || "9131903626:AAHjpseZINY4Ds3AByYzOooaWWR97Kge9IY";
     try {
       const texto = `🔔 <b>Prueba de Sistema SITE-PEM</b>\n\nHola, este es un mensaje de prueba desde el panel de SuperAdmin.\n\nEl chat está correctamente vinculado al alumno(a): <b>${nombreAlumno}</b> ✅`;
       
