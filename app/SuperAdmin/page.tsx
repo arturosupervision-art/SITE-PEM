@@ -51,10 +51,6 @@ export default function PanelAdministracion() {
   const [mostrarModalEliminarMasivo, setMostrarModalEliminarMasivo] = useState(false)
   const [alumnoEditando, setAlumnoEditando] = useState<any>(null)
   
-  // Nuevo Estado: Generación de Código Telegram 2
-  const [modalCodigoVisible, setModalCodigoVisible] = useState(false)
-  const [codigoGenerado, setCodigoGenerado] = useState<{codigo: string, alumno: string} | null>(null)
-
   // Formulario Individual Alumno
   const [formNombre, setFormNombre] = useState('')
   const [formMatricula, setFormMatricula] = useState('')
@@ -374,18 +370,13 @@ export default function PanelAdministracion() {
     }
   }
 
-  const desvincularTelegram = async (idAlumno: string, columna: 'telegram_chat_id' | 'telegram_chat_id_2', nombreAlumno: string) => {
-    if(confirm(`¿Estás seguro de desvincular este número de Telegram de ${nombreAlumno}?\n\nAl hacerlo, el papá podrá volver a registrar la matrícula o código desde su aplicación.`)) {
+  // NUEVA FUNCION: Desvincular Telegram para liberar el espacio
+  const desvincularTelegram = async (idAlumno: string, columna: 'telegram_chat_id' | 'chat_id_telegram_2', nombreAlumno: string) => {
+    if(confirm(`¿Estás seguro de desvincular este número de Telegram de ${nombreAlumno}?\n\nAl hacerlo, el papá podrá volver a registrar la matrícula desde su aplicación.`)) {
       try {
-        const updates: any = { [columna]: null }
-        // Si desvinculamos el 2do, también limpiamos el código para que genere uno nuevo limpio
-        if (columna === 'telegram_chat_id_2') {
-            updates.codigo_vinculacion_2 = null
-        }
-
         const { error } = await supabase
           .from('alumnos')
-          .update(updates)
+          .update({ [columna]: null })
           .eq('id', idAlumno);
 
         if (error) throw error;
@@ -394,37 +385,6 @@ export default function PanelAdministracion() {
       } catch (err: any) {
         alert('Error al desvincular: ' + err.message);
       }
-    }
-  }
-
-  const generarCodigoVinculacion = async (idAlumno: string, nombreAlumno: string) => {
-    // Generar un código alfanumérico corto y legible (6 caracteres)
-    const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Omitimos O, 0, 1, I para evitar confusiones
-    let codigo = '';
-    for (let i = 0; i < 6; i++) {
-      codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
-    }
-
-    try {
-      const { error } = await supabase
-        .from('alumnos')
-        .update({ codigo_vinculacion_2: codigo })
-        .eq('id', idAlumno);
-      
-      if (error) throw error;
-      
-      setCodigoGenerado({ codigo, alumno: nombreAlumno });
-      setModalCodigoVisible(true);
-      cargarAlumnos(); // Refrescar para ver el estado "Pendiente"
-    } catch (err: any) {
-      alert('Error al generar código: ' + err.message);
-    }
-  }
-
-  const copiarCodigo = () => {
-    if (codigoGenerado) {
-      navigator.clipboard.writeText(codigoGenerado.codigo);
-      alert('✅ Código copiado al portapapeles');
     }
   }
 
@@ -1180,34 +1140,23 @@ export default function PanelAdministracion() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <span className="text-[9px] text-slate-500 border border-slate-700 bg-slate-800/50 px-2 py-1 rounded-md inline-block">Sin vincular (Matrícula libre)</span>
+                                  <span className="text-[9px] text-slate-500 border border-slate-700 bg-slate-800/50 px-2 py-1 rounded-md inline-block">Sin vincular</span>
                                 )}
                               </div>
 
-                              {/* TELEGRAM 2 CON GENERACIÓN DE CÓDIGO */}
+                              {/* TELEGRAM 2 */}
                               <div>
                                 <p className="text-[10px] text-slate-500 font-bold mb-1">Telegram 2:</p>
-                                {al.telegram_chat_id_2 ? (
+                                {al.chat_id_telegram_2 ? (
                                   <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg w-full max-w-[160px]">
-                                    <p className="text-[10px] text-emerald-400 font-mono mb-1 truncate" title={al.telegram_chat_id_2}>ID: {al.telegram_chat_id_2}</p>
+                                    <p className="text-[10px] text-emerald-400 font-mono mb-1 truncate" title={al.chat_id_telegram_2}>ID: {al.chat_id_telegram_2}</p>
                                     <div className="flex gap-1">
-                                      <button onClick={() => probarNotificacionTelegram(al.telegram_chat_id_2, al.nombre_completo)} className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex-1 flex justify-center items-center">🔔 Probar</button>
-                                      <button onClick={() => desvincularTelegram(al.id, 'telegram_chat_id_2', al.nombre_completo)} className="bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex justify-center items-center" title="Desvincular y eliminar código">❌</button>
+                                      <button onClick={() => probarNotificacionTelegram(al.chat_id_telegram_2, al.nombre_completo)} className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex-1 flex justify-center items-center">🔔 Probar</button>
+                                      <button onClick={() => desvincularTelegram(al.id, 'chat_id_telegram_2', al.nombre_completo)} className="bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex justify-center items-center" title="Desvincular para volver a registrar">❌</button>
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="flex items-center gap-2">
-                                    <span className={`text-[9px] border px-2 py-1 rounded-md ${al.codigo_vinculacion_2 ? 'bg-indigo-900/40 text-indigo-400 border-indigo-700' : 'bg-slate-800/50 text-slate-500 border-slate-700'}`}>
-                                      {al.codigo_vinculacion_2 ? 'Pendiente' : 'Sin vincular'}
-                                    </span>
-                                    <button 
-                                      onClick={() => generarCodigoVinculacion(al.id, al.nombre_completo)}
-                                      className="bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors"
-                                      title="Generar código para el 2do tutor"
-                                    >
-                                      {al.codigo_vinculacion_2 ? 'Re-generar' : 'Generar'}
-                                    </button>
-                                  </div>
+                                  <span className="text-[9px] text-slate-500 border border-slate-700 bg-slate-800/50 px-2 py-1 rounded-md inline-block">Sin vincular</span>
                                 )}
                               </div>
 
@@ -1311,35 +1260,6 @@ export default function PanelAdministracion() {
       )}
 
       {/* MODALES */}
-      
-      {/* MODAL CÓDIGO GENERADO */}
-      {modalCodigoVisible && codigoGenerado && (
-        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-[60] p-4">
-          <div className="bg-[#0f172a] border border-indigo-600 p-8 rounded-2xl w-full max-w-sm shadow-[0_0_50px_-12px_rgba(79,70,229,0.5)] text-center animate-fade-in">
-            <h2 className="text-2xl font-black text-white mb-2">Código 2do Tutor</h2>
-            <p className="text-slate-400 text-sm mb-6">Generado exitosamente para:<br/><span className="text-white font-bold">{codigoGenerado.alumno}</span></p>
-            
-            <div className="bg-[#020617] border border-slate-700 rounded-xl p-6 mb-6">
-              <p className="text-4xl font-black text-indigo-400 tracking-[0.2em] select-all">{codigoGenerado.codigo}</p>
-            </div>
-            
-            <div className="text-slate-400 text-xs mb-6 px-2">
-              <p className="mb-2">Envía esta instrucción al tutor:</p>
-              <div className="bg-slate-800 p-3 rounded-lg text-left text-white font-mono break-words border border-slate-700">
-                /vincular {codigoGenerado.codigo}
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button onClick={() => setModalCodigoVisible(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors text-sm border border-slate-700">Cerrar</button>
-              <button onClick={copiarCodigo} className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors text-sm flex justify-center items-center gap-2">
-                📋 Copiar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {usandoCamara && modoCamara === 'BUSQUEDA' && (
         <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
           <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md shadow-2xl">
@@ -1425,4 +1345,134 @@ export default function PanelAdministracion() {
               </div>
 
               <div>
-                <label className="block text-slate-
+                <label className="block text-slate-400 text-xs font-bold mb-1">Saldo Actual ($)</label>
+                <input type="number" step="0.01" required value={formSaldo} onChange={(e) => setFormSaldo(Number(e.target.value))} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Correo Tutor</label>
+                <input type="email" value={formCorreoTutor} onChange={(e) => setFormCorreoTutor(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Teléfono Tutor</label>
+                <input type="text" value={formTelefonoTutor} onChange={(e) => setFormTelefonoTutor(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
+              </div>
+
+              <div className="md:col-span-2 flex gap-3 mt-4">
+                <button type="button" onClick={() => setMostrarModalAlumno(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors">Cancelar</button>
+                <button type="submit" disabled={guardandoAlumno} className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors">
+                  {guardandoAlumno ? 'Guardando...' : 'Guardar Alumno'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CORTE Z */}
+      {mostrarCorte && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-800 p-8 rounded-2xl w-full max-w-sm shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-4 text-center">Imprimir Corte Z</h2>
+            <div className="mb-6">
+              <label className="block text-slate-400 text-xs uppercase font-bold mb-2 text-center">Selecciona la Fecha</label>
+              <input type="date" value={fechaCorte} onChange={(e) => setFechaCorte(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-center outline-none focus:border-emerald-500" />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setMostrarCorte(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors">Cancelar</button>
+              <button onClick={generarCorteZ} className="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors">Generar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: HISTORIAL / REPORTES */}
+      {mostrarHistorial && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-4xl shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 border-b border-slate-800 pb-4">
+              <h2 className="text-xl font-bold text-white">Historial de Operaciones</h2>
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <input type="date" value={fechaHistorial} onChange={(e) => setFechaHistorial(e.target.value)} className="bg-[#020617] border border-slate-700 rounded-lg p-2 text-white text-sm outline-none focus:border-indigo-500 w-full md:w-auto" />
+                <button onClick={() => setMostrarHistorial(false)} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors">Cerrar</button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 shrink-0">
+              <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 text-center"><p className="text-slate-500 text-[10px] uppercase font-bold">Ventas Netas</p><p className="text-emerald-400 font-black text-lg">${statsHistorial.ventas.toFixed(2)}</p></div>
+              <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 text-center"><p className="text-slate-500 text-[10px] uppercase font-bold">Boletos Emitidos</p><p className="text-white font-black text-lg">{statsHistorial.boletos}</p></div>
+              <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 text-center"><p className="text-slate-500 text-[10px] uppercase font-bold">Retiros</p><p className="text-pink-400 font-black text-lg">-${statsHistorial.retiros.toFixed(2)}</p></div>
+              <div className="bg-indigo-900/30 p-3 rounded-xl border border-indigo-900/50 text-center"><p className="text-indigo-400 text-[10px] uppercase font-bold">Caja Teórica</p><p className="text-white font-black text-lg">${statsHistorial.total.toFixed(2)}</p></div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto rounded-xl border border-slate-800 bg-[#020617]">
+              <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 bg-[#0f172a] shadow-md">
+                  <tr className="text-slate-400 text-xs uppercase tracking-wider">
+                    <th className="p-3 border-b border-slate-800">Hora</th>
+                    <th className="p-3 border-b border-slate-800">Tipo</th>
+                    <th className="p-3 border-b border-slate-800">Folio / Ref</th>
+                    <th className="p-3 border-b border-slate-800">Descripción</th>
+                    <th className="p-3 border-b border-slate-800 text-right">Monto</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50">
+                  {historialUnificado.length === 0 ? (
+                    <tr><td colSpan={5} className="p-8 text-center text-slate-500">No hay movimientos en esta fecha.</td></tr>
+                  ) : (
+                    historialUnificado.map((mov, i) => (
+                      <tr key={i} className="hover:bg-slate-800/30">
+                        <td className="p-3 text-sm text-slate-400">{new Date(mov.fecha).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}</td>
+                        <td className="p-3"><span className={`px-2 py-1 rounded-[4px] text-[10px] font-bold ${mov.tipo === 'VENTA' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-pink-900/30 text-pink-400'}`}>{mov.tipo}</span></td>
+                        <td className="p-3 text-sm font-mono text-slate-300">{mov.folio}</td>
+                        <td className="p-3 text-sm text-slate-300">{mov.descripcion}</td>
+                        <td className={`p-3 text-sm font-bold text-right ${mov.tipo === 'VENTA' ? 'text-emerald-400' : 'text-pink-400'}`}>{mov.tipo === 'VENTA' ? '+' : '-'}${mov.monto.toFixed(2)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: REPORTE POR RANGO */}
+      {mostrarReporteRango && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-lg shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">📅 Reporte de Ventas por Rango</h2>
+            
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Fecha Inicial</label>
+                <input type="date" value={fechaInicioRango} onChange={(e) => { setFechaInicioRango(e.target.value); setRangoCalculado(false) }} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Fecha Final</label>
+                <input type="date" value={fechaFinRango} onChange={(e) => { setFechaFinRango(e.target.value); setRangoCalculado(false) }} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-indigo-500" />
+              </div>
+            </div>
+
+            {rangoCalculado ? (
+              <div className="bg-[#020617] p-4 rounded-xl border border-slate-800 mb-6 space-y-2">
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Total Ingresos:</span><span className="text-emerald-400 font-bold">${statsRango.ventas.toFixed(2)}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Boletos Vendidos:</span><span className="text-white font-bold">{statsRango.boletos}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Total Retiros:</span><span className="text-pink-400 font-bold">-${statsRango.retiros.toFixed(2)}</span></div>
+                <div className="border-t border-slate-700 pt-2 flex justify-between text-base mt-2"><span className="text-slate-300 font-bold">Caja Teórica:</span><span className="text-white font-black">${statsRango.total.toFixed(2)}</span></div>
+              </div>
+            ) : null}
+
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setMostrarReporteRango(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors text-sm">Cerrar</button>
+              <button onClick={rangoCalculado ? generarDocumentoRango : calcularRangoFechas} className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors text-sm">
+                {rangoCalculado ? '🖨️ Generar Reporte' : '📊 Calcular'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
