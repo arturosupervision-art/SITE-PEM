@@ -50,6 +50,7 @@ export default function PanelAdministracion() {
   const [mostrarModalMasivo, setMostrarModalMasivo] = useState(false)
   const [mostrarModalEliminarMasivo, setMostrarModalEliminarMasivo] = useState(false)
   const [alumnoEditando, setAlumnoEditando] = useState<any>(null)
+  const [generandoCodigoId, setGenerandoCodigoId] = useState<string | null>(null)
   
   // Formulario Individual Alumno
   const [formNombre, setFormNombre] = useState('')
@@ -342,7 +343,46 @@ export default function PanelAdministracion() {
     }
   }
 
-  // ================= FUNCIONES DE CONTROL DE ALUMNOS (SUPER ADMIN) =================
+  // ================= FUNCIONES DE TELEGRAM 1 Y TELEGRAM 2 =================
+  const generarCodigoTelegram2 = async (idAlumno: string, nombreAlumno: string) => {
+    setGenerandoCodigoId(idAlumno)
+    try {
+      const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+      let aleatorio = ''
+      for (let i = 0; i < 4; i++) {
+        aleatorio += caracteres.charAt(Math.floor(Math.random() * caracteres.length))
+      }
+      const nuevoCodigo = `PEM-${aleatorio}`
+
+      const { error } = await supabase
+        .from('alumnos')
+        .update({ codigo_vinculacion_2: nuevoCodigo })
+        .eq('id', idAlumno)
+
+      if (error) throw error
+
+      const comando = `/vincular ${nuevoCodigo}`
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(comando).catch(() => {})
+      }
+
+      alert(`✅ Código generado para ${nombreAlumno}:\n\n${nuevoCodigo}\n\nEl comando "${comando}" se copió al portapapeles. Envíalo al padre de familia para que lo mande al bot de Telegram.`)
+      cargarAlumnos()
+    } catch (err: any) {
+      alert('Error al generar código: ' + err.message)
+    } finally {
+      setGenerandoCodigoId(null)
+    }
+  }
+
+  const copiarComandoCodigo = async (codigo: string) => {
+    const comando = `/vincular ${codigo}`
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(comando)
+      alert(`📋 Copiado: ${comando}`)
+    }
+  }
+
   const probarNotificacionTelegram = async (chatId: string, nombreAlumno: string) => {
     const TELEGRAM_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || "9131903626:AAHjpseZINY4Ds3AByYzOooaWWR97Kge9IY"
     try {
@@ -371,11 +411,16 @@ export default function PanelAdministracion() {
   }
 
   const desvincularTelegram = async (idAlumno: string, columna: 'telegram_chat_id' | 'chat_id_telegram_2', nombreAlumno: string) => {
-    if(confirm(`¿Estás seguro de desvincular este número de Telegram de ${nombreAlumno}?\n\nAl hacerlo, el papá podrá volver a registrar la matrícula desde su aplicación.`)) {
+    if(confirm(`¿Estás seguro de desvincular este número de Telegram de ${nombreAlumno}?\n\nAl hacerlo, el papá podrá volver a registrarse desde su aplicación.`)) {
       try {
+        const payload: any = { [columna]: null }
+        if (columna === 'chat_id_telegram_2') {
+          payload.codigo_vinculacion_2 = null
+        }
+
         const { error } = await supabase
           .from('alumnos')
-          .update({ [columna]: null })
+          .update(payload)
           .eq('id', idAlumno)
 
         if (error) throw error
@@ -387,6 +432,7 @@ export default function PanelAdministracion() {
     }
   }
 
+  // ================= FUNCIONES DE CONTROL DE ALUMNOS =================
   const cargarAlumnos = async () => {
     setCargandoAlumnos(true)
     try {
@@ -1100,7 +1146,7 @@ export default function PanelAdministracion() {
                         <th className="p-3 border-b border-slate-800">Nombre del Alumno</th>
                         <th className="p-3 border-b border-slate-800">Matrícula</th>
                         <th className="p-3 border-b border-slate-800">Grado/Grupo</th>
-                        <th className="p-3 border-b border-slate-800 min-w-[200px]">Contacto / Telegram</th>
+                        <th className="p-3 border-b border-slate-800 min-w-[210px]">Contacto / Telegram</th>
                         <th className="p-3 border-b border-slate-800">Saldo</th>
                         <th className="p-3 border-b border-slate-800 text-center">Acciones</th>
                       </tr>
@@ -1131,7 +1177,7 @@ export default function PanelAdministracion() {
                               <div className="mb-2">
                                 <p className="text-[10px] text-slate-500 font-bold mb-1">Telegram 1:</p>
                                 {al.telegram_chat_id ? (
-                                  <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg w-full max-w-[160px]">
+                                  <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg w-full max-w-[175px]">
                                     <p className="text-[10px] text-emerald-400 font-mono mb-1 truncate" title={al.telegram_chat_id}>ID: {al.telegram_chat_id}</p>
                                     <div className="flex gap-1">
                                       <button onClick={() => probarNotificacionTelegram(al.telegram_chat_id, al.nombre_completo)} className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex-1 flex justify-center items-center">🔔 Probar</button>
@@ -1143,19 +1189,33 @@ export default function PanelAdministracion() {
                                 )}
                               </div>
 
-                              {/* TELEGRAM 2 */}
+                              {/* TELEGRAM 2 CON GENERACIÓN DE CÓDIGO */}
                               <div>
                                 <p className="text-[10px] text-slate-500 font-bold mb-1">Telegram 2:</p>
                                 {al.chat_id_telegram_2 ? (
-                                  <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg w-full max-w-[160px]">
+                                  <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg w-full max-w-[175px]">
                                     <p className="text-[10px] text-emerald-400 font-mono mb-1 truncate" title={al.chat_id_telegram_2}>ID: {al.chat_id_telegram_2}</p>
                                     <div className="flex gap-1">
                                       <button onClick={() => probarNotificacionTelegram(al.chat_id_telegram_2, al.nombre_completo)} className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex-1 flex justify-center items-center">🔔 Probar</button>
                                       <button onClick={() => desvincularTelegram(al.id, 'chat_id_telegram_2', al.nombre_completo)} className="bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex justify-center items-center" title="Desvincular para volver a registrar">❌</button>
                                     </div>
                                   </div>
+                                ) : al.codigo_vinculacion_2 ? (
+                                  <div className="bg-indigo-900/20 border border-indigo-800/60 p-1.5 rounded-lg w-full max-w-[175px]">
+                                    <p className="text-[10px] text-indigo-300 font-mono font-bold mb-1 truncate">Código: {al.codigo_vinculacion_2}</p>
+                                    <div className="flex gap-1">
+                                      <button onClick={() => copiarComandoCodigo(al.codigo_vinculacion_2)} className="bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex-1 flex justify-center items-center">📋 Copiar</button>
+                                      <button onClick={() => generarCodigoTelegram2(al.id, al.nombre_completo)} disabled={generandoCodigoId === al.id} className="bg-slate-700 hover:bg-slate-600 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex justify-center items-center" title="Regenerar código">🔄</button>
+                                    </div>
+                                  </div>
                                 ) : (
-                                  <span className="text-[9px] text-slate-500 border border-slate-700 bg-slate-800/50 px-2 py-1 rounded-md inline-block">Sin vincular</span>
+                                  <button
+                                    onClick={() => generarCodigoTelegram2(al.id, al.nombre_completo)}
+                                    disabled={generandoCodigoId === al.id}
+                                    className="bg-indigo-600/80 hover:bg-indigo-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1"
+                                  >
+                                    {generandoCodigoId === al.id ? 'Creando...' : '🔑 Crear código'}
+                                  </button>
                                 )}
                               </div>
 
