@@ -370,7 +370,6 @@ export default function PanelAdministracion() {
     }
   }
 
-  // NUEVA FUNCION: Desvincular Telegram para liberar el espacio
   const desvincularTelegram = async (idAlumno: string, columna: 'telegram_chat_id' | 'chat_id_telegram_2', nombreAlumno: string) => {
     if(confirm(`¿Estás seguro de desvincular este número de Telegram de ${nombreAlumno}?\n\nAl hacerlo, el papá podrá volver a registrar la matrícula desde su aplicación.`)) {
       try {
@@ -1108,4 +1107,533 @@ export default function PanelAdministracion() {
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
                       {alumnosFiltrados.length === 0 ? (
-                        <tr><td colSpan
+                        <tr><td colSpan={7} className="p-8 text-center text-slate-500">No se encontraron resultados.</td></tr>
+                      ) : (
+                        alumnosFiltrados.map((al) => (
+                          <tr key={al.id} className="hover:bg-slate-800/30 transition-colors">
+                            <td className="p-3 text-center">
+                              <input type="checkbox" checked={idsSeleccionados.includes(al.id)} onChange={() => toggleSeleccionAlumno(al.id)} className="w-4 h-4 accent-indigo-500" />
+                            </td>
+                            <td className="p-3">
+                              <p className="text-white font-bold text-sm">{al.nombre_completo}</p>
+                              {al.nfc_uid && <p className="text-xs text-indigo-400 mt-1 font-mono">NFC: {al.nfc_uid}</p>}
+                            </td>
+                            <td className="p-3 text-slate-300 text-sm">{al.matricula || '-'}</td>
+                            <td className="p-3">
+                              <p className="text-slate-300 text-sm">{al.grado_grupo || `${al.semestre} Gpo ${al.grupo}`}</p>
+                              <p className="text-xs text-slate-500">{al.turno}</p>
+                            </td>
+                            <td className="p-3">
+                              <p className="text-slate-300 text-xs">{al.correo_tutor || 'Sin correo'}</p>
+                              <p className="text-slate-300 text-xs mb-2">{al.telefono_tutor || 'Sin teléfono'}</p>
+                              
+                              {/* TELEGRAM 1 */}
+                              <div className="mb-2">
+                                <p className="text-[10px] text-slate-500 font-bold mb-1">Telegram 1:</p>
+                                {al.telegram_chat_id ? (
+                                  <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg w-full max-w-[160px]">
+                                    <p className="text-[10px] text-emerald-400 font-mono mb-1 truncate" title={al.telegram_chat_id}>ID: {al.telegram_chat_id}</p>
+                                    <div className="flex gap-1">
+                                      <button onClick={() => probarNotificacionTelegram(al.telegram_chat_id, al.nombre_completo)} className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex-1 flex justify-center items-center">🔔 Probar</button>
+                                      <button onClick={() => desvincularTelegram(al.id, 'telegram_chat_id', al.nombre_completo)} className="bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex justify-center items-center" title="Desvincular para volver a registrar">❌</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-[9px] text-slate-500 border border-slate-700 bg-slate-800/50 px-2 py-1 rounded-md inline-block">Sin vincular</span>
+                                )}
+                              </div>
+
+                              {/* TELEGRAM 2 */}
+                              <div>
+                                <p className="text-[10px] text-slate-500 font-bold mb-1">Telegram 2:</p>
+                                {al.chat_id_telegram_2 ? (
+                                  <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg w-full max-w-[160px]">
+                                    <p className="text-[10px] text-emerald-400 font-mono mb-1 truncate" title={al.chat_id_telegram_2}>ID: {al.chat_id_telegram_2}</p>
+                                    <div className="flex gap-1">
+                                      <button onClick={() => probarNotificacionTelegram(al.chat_id_telegram_2, al.nombre_completo)} className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex-1 flex justify-center items-center">🔔 Probar</button>
+                                      <button onClick={() => desvincularTelegram(al.id, 'chat_id_telegram_2', al.nombre_completo)} className="bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex justify-center items-center" title="Desvincular para volver a registrar">❌</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-[9px] text-slate-500 border border-slate-700 bg-slate-800/50 px-2 py-1 rounded-md inline-block">Sin vincular</span>
+                                )}
+                              </div>
+
+                            </td>
+                            <td className="p-3">
+                              <span className={`px-2 py-1 rounded-md text-xs font-bold ${al.saldo_actual > 0 ? 'bg-emerald-900/40 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
+                                ${al.saldo_actual?.toFixed(2) || '0.00'}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <div className="flex justify-center gap-2">
+                                <button onClick={() => abrirModalEditarAlumno(al)} className="bg-slate-800 hover:bg-indigo-600 text-white p-2 rounded-lg transition-colors" title="Editar">✏️</button>
+                                <button onClick={() => eliminarAlumnoIndividual(al.id, al.nombre_completo)} className="bg-slate-800 hover:bg-red-600 text-white p-2 rounded-lg transition-colors" title="Eliminar">🗑️</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= CONTENIDO: VISTA EMPLEADOS ================= */}
+      {vista === 'EMPLEADOS' && rol === 'SUPERADMIN' && (
+        <div className="max-w-7xl mx-auto animate-fade-in">
+          <div className="bg-[#0f172a] rounded-2xl border border-amber-900/40 p-6 shadow-xl">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-800 pb-4 mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  🧑‍💼 Gestión de Personal
+                </h2>
+                <p className="text-slate-400 text-xs mt-1">
+                  Registra personal de Caja, Choferes, Coordinadores y Administradores para darles acceso a sus módulos correspondientes.
+                </p>
+              </div>
+              <button 
+                onClick={abrirModalNuevoEmpleado}
+                className="bg-amber-600 hover:bg-amber-500 text-white font-bold px-4 py-2 rounded-xl text-sm transition-colors flex items-center gap-2"
+              >
+                ➕ Nuevo Empleado
+              </button>
+            </div>
+            
+            <div className="bg-[#0f172a] rounded-lg shadow-lg border border-slate-800">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-slate-300">
+                  <thead className="bg-[#020617] text-slate-400 text-xs uppercase">
+                    <tr>
+                      <th className="p-4 rounded-tl-lg border-b border-slate-800">Nombre</th>
+                      <th className="p-4 border-b border-slate-800">Correo</th>
+                      <th className="p-4 border-b border-slate-800">Rol</th>
+                      <th className="p-4 border-b border-slate-800">Contraseña</th>
+                      <th className="p-4 rounded-tr-lg border-b border-slate-800">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {empleados.map((emp) => (
+                      <tr key={emp.id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="p-4 text-white font-medium text-sm">{emp.nombre}</td>
+                        <td className="p-4 text-sm">{emp.correo}</td>
+                        <td className="p-4 text-sm">
+                          <span className="px-2 py-1 rounded bg-slate-800 text-amber-400 text-[10px] font-bold">
+                            {emp.rol.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="p-4 text-sm font-mono">{emp.contrasena}</td>
+                        <td className="p-4">
+                          <button 
+                            onClick={() => editarEmpleado(emp)} 
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-md mr-2 text-xs transition-colors"
+                          >
+                            Editar
+                          </button>
+                          <button 
+                            onClick={() => eliminarEmpleado(emp.id)} 
+                            className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded-md text-xs transition-colors"
+                          >
+                            Eliminar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {empleados.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-6 text-center text-slate-500">
+                          No hay empleados registrados en la base de datos.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODALES */}
+      {usandoCamara && modoCamara === 'BUSQUEDA' && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-4 text-center">Escanear Lector USB / NFC</h2>
+            
+            <div className="mb-6 bg-slate-800 p-4 rounded-xl border border-slate-700">
+              <label className="block text-slate-300 text-xs font-bold mb-2 uppercase text-center">
+                Lectura Automática (USB)
+              </label>
+              <input
+                type="text"
+                autoFocus
+                placeholder="Pasa la tarjeta NFC aquí..."
+                className="w-full bg-[#020617] text-white border border-slate-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-indigo-500 text-center"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    const codigoEscaneado = (e.target as HTMLInputElement).value
+                    setBusquedaAlumno(codigoEscaneado)
+                    ;(e.target as HTMLInputElement).value = ''
+                    detenerCamara() 
+                  }
+                }}
+              />
+            </div>
+            
+            <button onClick={() => detenerCamara()} className="w-full mt-2 bg-slate-800 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: AGREGAR / EDITAR ALUMNO */}
+      {mostrarModalAlumno && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4 overflow-y-auto">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-2xl shadow-2xl my-8">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              {alumnoEditando ? '✏️ Editar Alumno' : '➕ Nuevo Alumno'}
+            </h2>
+            <form onSubmit={guardarAlumno} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-slate-400 text-xs font-bold mb-1">Nombre Completo</label>
+                <input type="text" required value={formNombre} onChange={(e) => setFormNombre(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
+              </div>
+              
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Matrícula</label>
+                <input type="text" value={formMatricula} onChange={(e) => setFormMatricula(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">NFC UID (Tarjeta)</label>
+                <div className="flex gap-2">
+                  <input type="text" value={formNfcUid} onChange={(e) => setFormNfcUid(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
+                  <button type="button" onClick={() => iniciarCamara('FORMULARIO')} className="bg-slate-800 hover:bg-slate-700 text-white px-3 rounded-lg border border-slate-700 transition-colors" title="Escanear">📷</button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Semestre</label>
+                <select value={formSemestre} onChange={(e) => setFormSemestre(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500">
+                  <option value="1º">1º</option>
+                  <option value="2º">2º</option>
+                  <option value="3º">3º</option>
+                  <option value="4º">4º</option>
+                  <option value="5º">5º</option>
+                  <option value="6º">6º</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Grupo</label>
+                <input type="text" value={formGrupo} onChange={(e) => setFormGrupo(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Turno</label>
+                <select value={formTurno} onChange={(e) => setFormTurno(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500">
+                  <option value="Matutino">Matutino</option>
+                  <option value="Vespertino">Vespertino</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Saldo Actual ($)</label>
+                <input type="number" step="0.01" required value={formSaldo} onChange={(e) => setFormSaldo(Number(e.target.value))} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Correo Tutor</label>
+                <input type="email" value={formCorreoTutor} onChange={(e) => setFormCorreoTutor(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Teléfono Tutor</label>
+                <input type="text" value={formTelefonoTutor} onChange={(e) => setFormTelefonoTutor(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
+              </div>
+
+              <div className="md:col-span-2 flex gap-3 mt-4">
+                <button type="button" onClick={() => setMostrarModalAlumno(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors">Cancelar</button>
+                <button type="submit" disabled={guardandoAlumno} className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors">
+                  {guardandoAlumno ? 'Guardando...' : 'Guardar Alumno'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CARGA MASIVA */}
+      {mostrarModalMasivo && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-2xl shadow-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-white">📄 Carga Masiva de Alumnos</h2>
+              <button onClick={descargarPlantilla} className="text-xs bg-slate-800 hover:bg-slate-700 text-indigo-400 px-3 py-1.5 rounded-lg font-bold border border-slate-700">⬇️ Descargar Plantilla CSV</button>
+            </div>
+            <p className="text-slate-400 text-xs mb-3">Sube un archivo CSV o pega los datos separados por coma: Nombre, Matrícula, Semestre, Grupo, Turno, NFC UID, Correo, Teléfono, Saldo.</p>
+            <input type="file" accept=".csv,.txt" onChange={(e) => cargarArchivoMasivo(e, 'CARGA')} className="mb-3 text-xs text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500" />
+            <textarea rows={6} value={textoMasivo} onChange={(e) => setTextoMasivo(e.target.value)} placeholder="Juan Perez Lopez,2026-001,6º,1,Matutino,36D021CD,tutor@email.com,5512345678,0" className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-xs font-mono outline-none focus:border-indigo-500 mb-4" />
+            <div className="flex gap-3">
+              <button onClick={() => setMostrarModalMasivo(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors">Cancelar</button>
+              <button onClick={procesarCargaMasiva} disabled={cargandoMasivo} className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors">
+                {cargandoMasivo ? 'Procesando...' : 'Subir Alumnos'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: BAJAS MASIVAS */}
+      {mostrarModalEliminarMasivo && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-red-900/50 p-6 rounded-2xl w-full max-w-xl shadow-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-red-400">🗑️ Bajas Masivas por Matrícula</h2>
+              <button onClick={descargarPlantillaEliminar} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg font-bold border border-slate-700">⬇️ Plantilla CSV</button>
+            </div>
+            <p className="text-slate-400 text-xs mb-3">Sube un CSV o escribe una matrícula por línea para eliminarlos permanentemente.</p>
+            <input type="file" accept=".csv,.txt" onChange={(e) => cargarArchivoMasivo(e, 'ELIMINAR')} className="mb-3 text-xs text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-red-600 file:text-white hover:file:bg-red-500" />
+            <textarea rows={6} value={textoEliminarMasivo} onChange={(e) => setTextoEliminarMasivo(e.target.value)} placeholder="2026-001&#10;2026-002" className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-xs font-mono outline-none focus:border-red-500 mb-4" />
+            <div className="flex gap-3">
+              <button onClick={() => setMostrarModalEliminarMasivo(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors">Cancelar</button>
+              <button onClick={procesarEliminacionMasiva} className="w-1/2 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-colors">Eliminar Matrículas</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: AGREGAR / EDITAR EMPLEADO */}
+      {mostrarModalEmpleado && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4 overflow-y-auto">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-lg shadow-2xl my-8">
+            <h2 className="text-xl font-bold text-white mb-4">
+              {empleadoEditando ? '✏️ Editar Empleado' : '➕ Nuevo Empleado'}
+            </h2>
+            <form onSubmit={guardarEmpleado} className="space-y-4">
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Rol del Sistema</label>
+                <select value={formEmpRol} onChange={(e) => setFormEmpRol(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-amber-500">
+                  <option value="CAJA">CAJA</option>
+                  <option value="CHOFER">CHOFER</option>
+                  <option value="COORDINADOR">COORDINADOR</option>
+                  <option value="ADMIN">ADMIN</option>
+                  <option value="SUPERADMIN">SUPERADMIN</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Nombre Completo</label>
+                <input type="text" required value={formEmpNombre} onChange={(e) => setFormEmpNombre(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-amber-500" />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Usuario / Correo de Acceso</label>
+                <input type="text" required value={formEmpCorreo} onChange={(e) => setFormEmpCorreo(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-amber-500" />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Teléfono</label>
+                <input type="text" value={formEmpTelefono} onChange={(e) => setFormEmpTelefono(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-amber-500" />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Contraseña</label>
+                <input type="text" required value={formEmpPassword} onChange={(e) => setFormEmpPassword(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-amber-500" />
+              </div>
+
+              {formEmpRol === 'CHOFER' && (
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800">
+                  <div>
+                    <label className="block text-slate-400 text-xs font-bold mb-1">Ruta Asignada</label>
+                    <input type="text" value={formEmpRuta} onChange={(e) => setFormEmpRuta(e.target.value)} placeholder="Ej. Ruta 1 Centro" className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-amber-500" />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 text-xs font-bold mb-1">Transporte</label>
+                    <select value={formEmpTransporte} onChange={(e) => setFormEmpTransporte(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-amber-500">
+                      <option value="Autobus">Autobús</option>
+                      <option value="Van">Van / Camioneta</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {formEmpRol === 'COORDINADOR' && (
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800">
+                  <div>
+                    <label className="block text-slate-400 text-xs font-bold mb-1">Semestre Asignado</label>
+                    <select value={formEmpSemestreAsignado} onChange={(e) => setFormEmpSemestreAsignado(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-amber-500">
+                      <option value="1º">1º</option>
+                      <option value="2º">2º</option>
+                      <option value="3º">3º</option>
+                      <option value="4º">4º</option>
+                      <option value="5º">5º</option>
+                      <option value="6º">6º</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 text-xs font-bold mb-1">Turno Asignado</label>
+                    <select value={formEmpTurnoAsignado} onChange={(e) => setFormEmpTurnoAsignado(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-amber-500">
+                      <option value="Matutino">Matutino</option>
+                      <option value="Vespertino">Vespertino</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 mt-6">
+                <button type="button" onClick={() => setMostrarModalEmpleado(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors">Cancelar</button>
+                <button type="submit" disabled={guardandoEmpleado} className="w-1/2 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-colors">
+                  {guardandoEmpleado ? 'Guardando...' : 'Guardar Empleado'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CORTE Z */}
+      {mostrarCorte && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-800 p-8 rounded-2xl w-full max-w-sm shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-4 text-center">Imprimir Corte Z</h2>
+            <div className="mb-6">
+              <label className="block text-slate-400 text-xs uppercase font-bold mb-2 text-center">Selecciona la Fecha</label>
+              <input type="date" value={fechaCorte} onChange={(e) => setFechaCorte(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-center outline-none focus:border-emerald-500" />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setMostrarCorte(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors">Cancelar</button>
+              <button onClick={generarCorteZ} className="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors">Generar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: HISTORIAL / REPORTES */}
+      {mostrarHistorial && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-4xl shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 border-b border-slate-800 pb-4">
+              <h2 className="text-xl font-bold text-white">Historial de Operaciones</h2>
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <input type="date" value={fechaHistorial} onChange={(e) => setFechaHistorial(e.target.value)} className="bg-[#020617] border border-slate-700 rounded-lg p-2 text-white text-sm outline-none focus:border-indigo-500 w-full md:w-auto" />
+                <button onClick={() => setMostrarHistorial(false)} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors">Cerrar</button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 shrink-0">
+              <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 text-center"><p className="text-slate-500 text-[10px] uppercase font-bold">Ventas Netas</p><p className="text-emerald-400 font-black text-lg">${statsHistorial.ventas.toFixed(2)}</p></div>
+              <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 text-center"><p className="text-slate-500 text-[10px] uppercase font-bold">Boletos Emitidos</p><p className="text-white font-black text-lg">{statsHistorial.boletos}</p></div>
+              <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 text-center"><p className="text-slate-500 text-[10px] uppercase font-bold">Retiros</p><p className="text-pink-400 font-black text-lg">-${statsHistorial.retiros.toFixed(2)}</p></div>
+              <div className="bg-indigo-900/30 p-3 rounded-xl border border-indigo-900/50 text-center"><p className="text-indigo-400 text-[10px] uppercase font-bold">Caja Teórica</p><p className="text-white font-black text-lg">${statsHistorial.total.toFixed(2)}</p></div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto rounded-xl border border-slate-800 bg-[#020617]">
+              <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 bg-[#0f172a] shadow-md">
+                  <tr className="text-slate-400 text-xs uppercase tracking-wider">
+                    <th className="p-3 border-b border-slate-800">Hora</th>
+                    <th className="p-3 border-b border-slate-800">Tipo</th>
+                    <th className="p-3 border-b border-slate-800">Folio / Ref</th>
+                    <th className="p-3 border-b border-slate-800">Descripción</th>
+                    <th className="p-3 border-b border-slate-800 text-right">Monto</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50">
+                  {historialUnificado.length === 0 ? (
+                    <tr><td colSpan={5} className="p-8 text-center text-slate-500">No hay movimientos en esta fecha.</td></tr>
+                  ) : (
+                    historialUnificado.map((mov, i) => (
+                      <tr key={i} className="hover:bg-slate-800/30">
+                        <td className="p-3 text-sm text-slate-400">{new Date(mov.fecha).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}</td>
+                        <td className="p-3"><span className={`px-2 py-1 rounded-[4px] text-[10px] font-bold ${mov.tipo === 'VENTA' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-pink-900/30 text-pink-400'}`}>{mov.tipo}</span></td>
+                        <td className="p-3 text-sm font-mono text-slate-300">{mov.folio}</td>
+                        <td className="p-3 text-sm text-slate-300">{mov.descripcion}</td>
+                        <td className={`p-3 text-sm font-bold text-right ${mov.tipo === 'VENTA' ? 'text-emerald-400' : 'text-pink-400'}`}>{mov.tipo === 'VENTA' ? '+' : '-'}${mov.monto.toFixed(2)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: REPORTE POR RANGO */}
+      {mostrarReporteRango && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-lg shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">📅 Reporte de Ventas por Rango</h2>
+            
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Fecha Inicial</label>
+                <input type="date" value={fechaInicioRango} onChange={(e) => { setFechaInicioRango(e.target.value); setRangoCalculado(false) }} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-slate-400 text-xs font-bold mb-1">Fecha Final</label>
+                <input type="date" value={fechaFinRango} onChange={(e) => { setFechaFinRango(e.target.value); setRangoCalculado(false) }} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-indigo-500" />
+              </div>
+            </div>
+
+            {rangoCalculado ? (
+              <div className="bg-[#020617] p-4 rounded-xl border border-slate-800 mb-6 space-y-2">
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Total Ingresos:</span><span className="text-emerald-400 font-bold">${statsRango.ventas.toFixed(2)}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Boletos Vendidos:</span><span className="text-white font-bold">{statsRango.boletos}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Total Retiros:</span><span className="text-pink-400 font-bold">-${statsRango.retiros.toFixed(2)}</span></div>
+                <div className="border-t border-slate-700 pt-2 flex justify-between text-base mt-2"><span className="text-slate-300 font-bold">Caja Teórica:</span><span className="text-white font-black">${statsRango.total.toFixed(2)}</span></div>
+              </div>
+            ) : null}
+
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setMostrarReporteRango(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors text-sm">Cerrar</button>
+              <button onClick={rangoCalculado ? generarDocumentoRango : calcularRangoFechas} className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors text-sm">
+                {rangoCalculado ? '🖨️ Generar Reporte' : '📊 Calcular'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DOCUMENTO / TICKET IMPRIMIBLE (CORTE Z O REPORTE RANGO) */}
+      {documentoActual && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
+          <div className="bg-white text-slate-900 p-6 rounded-2xl w-full max-w-sm shadow-2xl font-mono text-xs">
+            <div className="text-center border-b border-dashed border-slate-400 pb-3 mb-3">
+              <h2 className="font-black text-base">SITE-PEM</h2>
+              <p className="font-bold">{documentoActual.tipo === 'CORTE_Z' ? 'CORTE Z DE CAJA' : 'REPORTE DE INGRESOS'}</p>
+              <p className="text-[10px] text-slate-500 mt-1">Impreso: {documentoActual.fechaImpresion}</p>
+            </div>
+
+            <div className="space-y-1.5 border-b border-dashed border-slate-400 pb-3 mb-3">
+              {documentoActual.tipo === 'CORTE_Z' ? (
+                <div className="flex justify-between"><span>Fecha Corte:</span><span className="font-bold">{documentoActual.fechaCorte}</span></div>
+              ) : (
+                <>
+                  <div className="flex justify-between"><span>Desde:</span><span className="font-bold">{documentoActual.fechaInicio}</span></div>
+                  <div className="flex justify-between"><span>Hasta:</span><span className="font-bold">{documentoActual.fechaFin}</span></div>
+                </>
+              )}
+              <div className="flex justify-between"><span>Boletos Vendidos:</span><span className="font-bold">{documentoActual.boletos}</span></div>
+              <div className="flex justify-between"><span>Ingresos Brutos:</span><span className="font-bold">${documentoActual.ventas.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span>Retiros Caja:</span><span className="font-bold">-${documentoActual.retiros.toFixed(2)}</span></div>
+            </div>
+
+            <div className="flex justify-between text-sm font-black mb-6">
+              <span>TOTAL NETO:</span>
+              <span>${documentoActual.totalNeto.toFixed(2)}</span>
+            </div>
+
+            <div className="flex gap-2 print:hidden">
+              <button onClick={() => setDocumentoActual(null)} className="w-1/2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2.5 rounded-xl transition-colors">Cerrar</button>
+              <button onClick={() => window.print()} className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl transition-colors">🖨️ Imprimir</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
