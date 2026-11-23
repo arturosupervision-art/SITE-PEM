@@ -39,24 +39,62 @@ export async function POST(request: Request) {
 
     // 1. Si el tutor inicia el bot por primera vez (/start)
     if (texto === "/start") {
-      const bienvenida = `👋 *¡Bienvenido al Bot Oficial de SITE-PEM!*\n\nPara recibir las notificaciones de transporte y acceso escolar de tu hijo(a), por favor vincula tu cuenta enviando el siguiente comando con su matrícula escolar:\n\n👉 \`/vincular MATRICULA\`\n\nEjemplo: \`/vincular 67890\``;
+      const bienvenida = `👋 *¡Bienvenido al Bot Oficial de SITE-PEM!*\n\nPara recibir las notificaciones de transporte y acceso escolar de tu hijo(a), por favor vincula tu cuenta enviando el siguiente comando con su matrícula escolar (o el código proporcionado por administración):\n\n👉 \`/vincular MATRICULA\`\n\nEjemplo: \`/vincular 67890\``;
       await enviarRespuestaTelegram(chatId, bienvenida);
       return NextResponse.json({ success: true });
     }
 
-    // 2. Si el tutor intenta vincular una matrícula (/vincular)
+    // 2. Si el tutor intenta vincular una matrícula o código secundario (/vincular)
     if (texto.toLowerCase().startsWith("/vincular")) {
-      const partes = texto.split(" ");
+      const partes = texto.split(/\s+/);
       
       if (partes.length < 2) {
-        await enviarRespuestaTelegram(chatId, "⚠️ *Error:* Debes incluir la matrícula. Ejemplo:\n`/vincular 67890`");
+        await enviarRespuestaTelegram(chatId, "⚠️ *Error:* Debes incluir la matrícula o código de vinculación. Ejemplo:\n`/vincular 67890`");
         return NextResponse.json({ success: true });
       }
 
-      // Extraemos la matrícula que escribió el tutor y la limpiamos
-      const matriculaLimpia = partes[1].replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+      const valorIngresado = partes[1].trim().toUpperCase();
 
-      // Buscamos al alumno en Supabase usando las columnas correctas
+      // CASO A: Código secundario generado en SuperAdmin (formato PEM-XXXX)
+      if (valorIngresado.startsWith("PEM-")) {
+        const { data: alumnosCodigo, error: errorCodigo } = await supabase
+          .from("alumnos")
+          .select("id, matricula, nombre_completo")
+          .eq("codigo_vinculacion_2", valorIngresado)
+          .limit(1);
+
+        if (errorCodigo || !alumnosCodigo || alumnosCodigo.length === 0) {
+          await enviarRespuestaTelegram(
+            chatId,
+            `❌ *Código inválido o ya utilizado.*\nNo encontramos un código activo con: *${valorIngresado}*. Solicita uno nuevo en administración.`
+          );
+          return NextResponse.json({ success: true });
+        }
+
+        const alumno = alumnosCodigo[0];
+
+        // Guardamos en chat_id_telegram_2 y limpiamos el código usado (un solo uso)
+        const { error: updateError2 } = await supabase
+          .from("alumnos")
+          .update({
+            chat_id_telegram_2: chatId.toString(),
+            codigo_vinculacion_2: null,
+          })
+          .eq("id", alumno.id);
+
+        if (updateError2) {
+          await enviarRespuestaTelegram(chatId, "❌ *Error interno:* No se pudo vincular la cuenta secundaria. Contacta a Soporte SITE-PEM.");
+          return NextResponse.json({ success: true });
+        }
+
+        const exito2 = `✅ *¡VINCULACIÓN SECUNDARIA EXITOSA!*\n\nEste número de Telegram (Contacto 2) ha sido enlazado al estudiante:\n🎓 *${alumno.nombre_completo}*\n\nA partir de este momento recibirás notificaciones del sistema SITE-PEM.`;
+        await enviarRespuestaTelegram(chatId, exito2);
+        return NextResponse.json({ success: true });
+      }
+
+      // CASO B: Vinculación principal por Matrícula (Telegram 1)
+      const matriculaLimpia = valorIngresado.replace(/[^a-zA-Z0-9]/g, "");
+
       const { data: alumnos, error } = await supabase
         .from("alumnos")
         .select("id, matricula, nombre_completo")
@@ -70,7 +108,6 @@ export async function POST(request: Request) {
 
       const alumno = alumnos[0];
 
-      // Actualizamos la columna del Chat ID del tutor
       const { error: updateError } = await supabase
         .from("alumnos")
         .update({ telegram_chat_id: chatId.toString() })
@@ -93,7 +130,6 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error("Error en el Webhook de Telegram SITE-PEM:", error);
-    // Siempre respondemos 200 OK a Telegram para evitar bucles
     return NextResponse.json({ success: true });
   }
 }
