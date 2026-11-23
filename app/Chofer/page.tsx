@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Scanner } from '@yudiel/react-qr-scanner'; 
 
 export default function PantallaChofer() {
   // ==========================================
@@ -68,12 +67,11 @@ export default function PantallaChofer() {
   // ESTADOS Y LÓGICA PARA OSOMOVIL (TRANSMISIÓN GPS)
   // ==========================================
   const [transmitiendoGPS, setTransmitiendoGPS] = useState(false);
-  const [rutaOsoMovil, setRutaOsoMovil] = useState(''); // Estado para el selector
+  const [rutaOsoMovil, setRutaOsoMovil] = useState('');
   const watchIdRef = useRef<number | null>(null);
 
   const toggleTransmisionGPS = () => {
     if (!transmitiendoGPS) {
-      // Validar que haya seleccionado una ruta
       if (!rutaOsoMovil) {
         alert("⚠️ Por favor, selecciona tu ruta (LA LOMA o PACIFICO) antes de iniciar la transmisión.");
         return;
@@ -82,13 +80,12 @@ export default function PantallaChofer() {
       if (navigator.geolocation) {
         setTransmitiendoGPS(true);
         const opcionesGPS = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
-        
+
         watchIdRef.current = navigator.geolocation.watchPosition(
           async (posicion) => {
             const lat = posicion.coords.latitude;
             const lng = posicion.coords.longitude;
-            
-            // Usamos la ruta seleccionada en el menú
+
             const { error } = await supabase
               .from('osomovil_gps')
               .upsert([{
@@ -97,7 +94,7 @@ export default function PantallaChofer() {
                 longitud: lng,
                 ultima_actualizacion: new Date().toISOString()
               }]);
-              
+
             if (error) console.error("Error enviando ubicación OsoMovil:", error);
           },
           (err) => console.warn('Error de GPS (' + err.code + '): ' + err.message),
@@ -105,7 +102,7 @@ export default function PantallaChofer() {
         );
         alert(`Transmisión iniciada para la ruta: ${rutaOsoMovil}`);
       } else {
-        alert("El navegador de este celular no soporta GPS.");
+        alert("El navegador de este dispositivo no soporta GPS.");
       }
     } else {
       if (watchIdRef.current !== null) {
@@ -126,7 +123,7 @@ export default function PantallaChofer() {
   }, []);
 
   // ==========================================
-  // ESTADOS Y LÓGICA DEL ESCÁNER
+  // ESTADOS Y LÓGICA DEL LECTOR NFC
   // ==========================================
   const [busquedaManual, setBusquedaManual] = useState('');
   const [estadoPantalla, setEstadoPantalla] = useState<
@@ -134,11 +131,10 @@ export default function PantallaChofer() {
   >('ESPERANDO');
   const [mensaje, setMensaje] = useState('');
   const [alumnoActual, setAlumnoActual] = useState<any>(null);
-  const [mostrarCamara, setMostrarCamara] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [modoRuta, setModoRuta] = useState<'ASCENSO' | 'DESCENSO' | null>(null);
-  const [ubicacion, setUbicacion] = useState<{ lat: number; lng: number; } | null>(null);
+  const [ubicacion, setUbicacion] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     if (usuarioLogueado && modoRuta && inputRef.current && estadoPantalla === 'ESPERANDO') {
@@ -208,33 +204,26 @@ export default function PantallaChofer() {
     setModoRuta(tipo);
   };
 
-  const procesarCodigo = async (codigoEntrada: any) => {
-    let codigo = '';
-    if (typeof codigoEntrada === 'string') {
-      codigo = codigoEntrada;
-    } else if (Array.isArray(codigoEntrada) && codigoEntrada.length > 0) {
-      codigo = codigoEntrada[0]?.rawValue || codigoEntrada[0]?.text || '';
-    } else if (typeof codigoEntrada === 'object' && codigoEntrada !== null) {
-      codigo = codigoEntrada.rawValue || codigoEntrada.text || '';
-    }
-
-    const codigoLimpio = codigo.trim();
+  const procesarCodigo = async (codigoEntrada: string) => {
+    const codigoLimpio = codigoEntrada.trim();
     if (!codigoLimpio) return;
     setBusquedaManual('');
 
     try {
       const gpsActual = await obtenerUbicacionActual();
-      let { data: alumno, error: errorAlumno } = await supabase
+
+      // Busca por nfc_uid (insensible a mayúsculas), matrícula o código anterior como respaldo
+      const { data: alumno, error: errorAlumno } = await supabase
         .from('alumnos')
         .select('*')
-        .or(`codigo_qr_vinculado.eq.${codigoLimpio},matricula.eq.${codigoLimpio}`)
+        .or(`nfc_uid.ilike.${codigoLimpio},matricula.ilike.${codigoLimpio},codigo_qr_vinculado.ilike.${codigoLimpio}`)
         .maybeSingle();
 
       if (errorAlumno || !alumno) {
         reproducirSonido('ERROR');
         setEstadoPantalla('ERROR');
         setAlumnoActual(null);
-        setMensaje('❌ Alumno no encontrado o código inválido');
+        setMensaje(`❌ Tarjeta o matrícula no encontrada (${codigoLimpio})`);
         return;
       }
 
@@ -296,15 +285,18 @@ export default function PantallaChofer() {
       }
 
       if (alumno.correo_tutor) {
-        const horaFormateada = new Date().toLocaleTimeString('es-MX', { 
-          timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: true 
+        const horaFormateada = new Date().toLocaleTimeString('es-MX', {
+          timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: true
         });
         fetch('/api/enviar-correo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            correoTutor: alumno.correo_tutor, nombreAlumno: alumno.nombre_completo,
-            tipoMovimiento: modoRuta, hora: horaFormateada, ubicacion: enlaceMaps
+            correoTutor: alumno.correo_tutor,
+            nombreAlumno: alumno.nombre_completo,
+            tipoMovimiento: modoRuta,
+            hora: horaFormateada,
+            ubicacion: enlaceMaps
           })
         }).catch(err => console.error("Error correo:", err));
       }
@@ -325,8 +317,8 @@ export default function PantallaChofer() {
     if (!alumnoActual) return;
     try {
       const gpsActual = await obtenerUbicacionActual();
-      const nuevoSaldo = alumnoActual.boletos_disponibles - 1; 
-      
+      const nuevoSaldo = alumnoActual.boletos_disponibles - 1;
+
       const { error: updateError } = await supabase
         .from('alumnos')
         .update({ boletos_disponibles: nuevoSaldo })
@@ -348,7 +340,7 @@ export default function PantallaChofer() {
           matricula: alumnoActual.matricula,
           alumno_nombre: alumnoActual.nombre_completo,
           telefono_tutor: alumnoActual.telefono_tutor,
-          tipo_movimiento: 'Ascenso', 
+          tipo_movimiento: 'Ascenso',
           tipo_evento: modoRuta,
           latitud: gpsActual ? gpsActual.lat : null,
           longitud: gpsActual ? gpsActual.lng : null,
@@ -356,7 +348,7 @@ export default function PantallaChofer() {
           unidad_transporte: 'Autobús 1',
           registrado_por: choferInfo?.id || null,
           fecha_hora: fechaHoraMexico,
-          es_emergencia: true 
+          es_emergencia: true
         }]);
 
       if (errorRegistro) {
@@ -367,13 +359,18 @@ export default function PantallaChofer() {
       }
 
       if (alumnoActual.correo_tutor) {
-        const horaFormateada = new Date().toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: true });
+        const horaFormateada = new Date().toLocaleTimeString('es-MX', {
+          timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: true
+        });
         fetch('/api/enviar-correo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            correoTutor: alumnoActual.correo_tutor, nombreAlumno: alumnoActual.nombre_completo,
-            tipoMovimiento: modoRuta, hora: horaFormateada, ubicacion: enlaceMaps
+            correoTutor: alumnoActual.correo_tutor,
+            nombreAlumno: alumnoActual.nombre_completo,
+            tipoMovimiento: modoRuta,
+            hora: horaFormateada,
+            ubicacion: enlaceMaps
           })
         }).catch(err => console.error("Error correo:", err));
       }
@@ -439,7 +436,7 @@ export default function PantallaChofer() {
             <img src="/logo negro.png" alt="Logo" className="h-full w-auto object-contain" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-amber-500">Módulo Chofer - Escáner</h1>
+            <h1 className="text-xl font-bold text-amber-500">Módulo Chofer - Lector NFC</h1>
             <p className="text-xs text-slate-400">Conductor: <span className="text-slate-200 font-semibold">{choferInfo?.nombre || 'Chofer Activo'}</span></p>
           </div>
         </div>
@@ -459,7 +456,7 @@ export default function PantallaChofer() {
       </header>
 
       <section className="my-auto max-w-xl mx-auto w-full text-center space-y-6 mt-8">
-        
+
         {/* === SELECTOR DE RUTA OSOMOVIL === */}
         <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700">
           {!transmitiendoGPS && (
@@ -474,7 +471,6 @@ export default function PantallaChofer() {
             </select>
           )}
 
-          {/* === BOTÓN DE TRANSMISIÓN === */}
           <button
             onClick={toggleTransmisionGPS}
             className={`w-full font-bold py-4 px-4 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 border-2 ${
@@ -486,7 +482,6 @@ export default function PantallaChofer() {
             {transmitiendoGPS ? `🔴 Detener Transmisión (${rutaOsoMovil})` : '📍 Iniciar Transmisión (OsoMovil)'}
           </button>
         </div>
-        {/* =============================== */}
 
         {!modoRuta && (
           <div className="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-6">
@@ -507,22 +502,24 @@ export default function PantallaChofer() {
 
         {modoRuta && estadoPantalla === 'ESPERANDO' && (
           <div className="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl space-y-6 relative">
-            <button onClick={() => { setModoRuta(null); setMostrarCamara(false); }} className="absolute top-4 right-4 text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded border border-slate-500 transition-colors">Cambiar Ruta</button>
-            <div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center mx-auto border-4 border-amber-500/30 animate-pulse mt-4"><span className="text-4xl">📱</span></div>
+            <button onClick={() => setModoRuta(null)} className="absolute top-4 right-4 text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded border border-slate-500 transition-colors">Cambiar Ruta</button>
+            <div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center mx-auto border-4 border-amber-500/30 animate-pulse mt-4">
+              <span className="text-4xl">💳</span>
+            </div>
             <div>
-              <h2 className="text-2xl font-bold text-white mb-2">Listo para escanear</h2>
-              <p className="text-slate-400 text-sm mb-4">Usa la cámara del celular o ingresa la matrícula manualmente.</p>
-              <button onClick={() => setMostrarCamara(!mostrarCamara)} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-xl transition-colors mb-4 shadow-md">
-                {mostrarCamara ? 'Ocultar Cámara 📷' : 'Abrir Cámara 📷'}
-              </button>
-              {mostrarCamara && (
-                <div className="w-full max-w-sm mx-auto rounded-xl overflow-hidden shadow-lg border-2 border-indigo-500 mb-4 bg-black">
-                  <Scanner onScan={(result) => { if (result && result.length > 0) { const textoDetectado = result[0]?.rawValue || result[0]?.text; if (textoDetectado) { procesarCodigo(textoDetectado); setMostrarCamara(false); } } }} onError={(error) => console.log(error?.message)} />
-                </div>
-              )}
+              <h2 className="text-2xl font-bold text-white mb-2">Listo para escanear NFC</h2>
+              <p className="text-slate-400 text-sm mb-4">Acerca la tarjeta al lector USB o ingresa la matrícula manualmente.</p>
             </div>
             <form onSubmit={handleSubmit} className="flex gap-2">
-              <input ref={inputRef} type="text" value={busquedaManual} onChange={(e) => setBusquedaManual(e.target.value)} placeholder="Escanea o escribe código..." className="flex-grow bg-slate-900 border border-slate-600 rounded-xl p-4 text-lg text-white focus:border-amber-500 outline-none font-mono" autoFocus />
+              <input
+                ref={inputRef}
+                type="text"
+                value={busquedaManual}
+                onChange={(e) => setBusquedaManual(e.target.value)}
+                placeholder="Acerca tarjeta NFC o escribe matrícula..."
+                className="flex-grow bg-slate-900 border border-slate-600 rounded-xl p-4 text-lg text-white focus:border-amber-500 outline-none font-mono"
+                autoFocus
+              />
               <button type="submit" className="bg-amber-600 hover:bg-amber-700 font-bold px-6 rounded-xl text-white transition-colors">Validar</button>
             </form>
           </div>
