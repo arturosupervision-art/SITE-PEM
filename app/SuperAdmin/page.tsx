@@ -109,27 +109,27 @@ export default function PanelAdministracion() {
             .select('*')
             .eq('correo', usuario)
             .eq('contrasena', password)
-            .single();
+            .single()
 
           if (error || !data) {
-            setErrorAuth(true);
-            setPassword('');
-            return;
+            setErrorAuth(true)
+            setPassword('')
+            return
           }
 
-          setErrorAuth(false);
-          setRol(data.rol.toUpperCase());
+          setErrorAuth(false)
+          setRol(data.rol.toUpperCase())
           
           if (data.rol.toUpperCase() === 'SUPERADMIN' || data.rol.toUpperCase() === 'ADMIN') {
-            cargarDatosDashboard();
+            cargarDatosDashboard()
             if (data.rol.toUpperCase() === 'SUPERADMIN') {
-              cargarAlumnos();
-              cargarEmpleados();
+              cargarAlumnos()
+              cargarEmpleados()
             }
           }
         } catch (err) {
-          console.error("Error en login:", err);
-          alert("Error al conectar con la base de datos.");
+          console.error("Error en login:", err)
+          alert("Error al conectar con la base de datos.")
         }
       }
     } 
@@ -225,7 +225,7 @@ export default function PanelAdministracion() {
       ventas.forEach(v => {
         tVentas += v.monto_total
         tBoletos += v.cantidad_boletos
-        unificado.push({ tipo: 'VENTA', id: v.id, fecha: v.created_at, folio: `SITE-${String(v.folio_secuencial).padStart(5,'0')}`, descripcion: `Venta: ${v.alumnos?.nombre_completo} (${v.cantidad_boletos} bts)`, monto: v.monto_total })
+        unificado.push({ tipo: 'VENTA', id: v.id, fecha: v.created_at, folio: `SITE-${String(v.folio_secuencial).padStart(5,'0')}`, descripcion: `Venta: ${(v.alumnos as any)?.nombre_completo} (${v.cantidad_boletos} bts)`, monto: v.monto_total })
       })
     }
 
@@ -295,58 +295,58 @@ export default function PanelAdministracion() {
 
   // ================= FUNCIONES DE CÁMARA / LECTOR PARA PC =================
   const detenerCamara = (streamToStop?: MediaStream, intervalId?: NodeJS.Timeout) => {
-    if (intervalId) clearInterval(intervalId);
+    if (intervalId) clearInterval(intervalId)
     if (streamToStop) {
-      streamToStop.getTracks().forEach(t => t.stop());
+      streamToStop.getTracks().forEach(t => t.stop())
     } else if (videoRef.current && videoRef.current.srcObject) {
-      const s = videoRef.current.srcObject as MediaStream;
-      s.getTracks().forEach(t => t.stop());
+      const s = videoRef.current.srcObject as MediaStream
+      s.getTracks().forEach(t => t.stop())
     }
-    setUsandoCamara(false);
-    setModoCamara(null);
+    setUsandoCamara(false)
+    setModoCamara(null)
   }
 
   const iniciarCamara = async (modo: 'FORMULARIO' | 'BUSQUEDA' = 'FORMULARIO') => {
-    setModoCamara(modo);
-    setUsandoCamara(true);
+    setModoCamara(modo)
+    setUsandoCamara(true)
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+        videoRef.current.srcObject = stream
         
         if ('BarcodeDetector' in window) {
-          const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+          const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
           const interval = setInterval(async () => {
             if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
               try {
-                const barcodes = await detector.detect(videoRef.current);
+                const barcodes = await detector.detect(videoRef.current)
                 if (barcodes.length > 0) {
                   if (modo === 'FORMULARIO') {
-                    setFormNfcUid(barcodes[0].rawValue);
+                    setFormNfcUid(barcodes[0].rawValue)
                   } else if (modo === 'BUSQUEDA') {
-                    setBusquedaAlumno(barcodes[0].rawValue);
+                    setBusquedaAlumno(barcodes[0].rawValue)
                   }
-                  detenerCamara(stream, interval);
+                  detenerCamara(stream, interval)
                 }
               } catch (e) {
-                console.error(e);
+                console.error(e)
               }
             }
-          }, 500);
+          }, 500)
         }
       }
     } catch (err: any) {
-      alert("Error al acceder a la cámara web: " + err.message);
-      setUsandoCamara(false);
-      setModoCamara(null);
+      alert("Error al acceder a la cámara web: " + err.message)
+      setUsandoCamara(false)
+      setModoCamara(null)
     }
   }
 
   // ================= FUNCIONES DE CONTROL DE ALUMNOS (SUPER ADMIN) =================
   const probarNotificacionTelegram = async (chatId: string, nombreAlumno: string) => {
-   const TELEGRAM_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || "9131903626:AAHjpseZINY4Ds3AByYzOooaWWR97Kge9IY";
+    const TELEGRAM_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || "9131903626:AAHjpseZINY4Ds3AByYzOooaWWR97Kge9IY"
     try {
-      const texto = `🔔 <b>Prueba de Sistema SITE-PEM</b>\n\nHola, este es un mensaje de prueba desde el panel de SuperAdmin.\n\nEl chat está correctamente vinculado al alumno(a): <b>${nombreAlumno}</b> ✅`;
+      const texto = `🔔 <b>Prueba de Sistema SITE-PEM</b>\n\nHola, este es un mensaje de prueba desde el panel de SuperAdmin.\n\nEl chat está correctamente vinculado al alumno(a): <b>${nombreAlumno}</b> ✅`
       
       const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
         method: 'POST',
@@ -356,17 +356,17 @@ export default function PanelAdministracion() {
           text: texto,
           parse_mode: 'HTML'
         })
-      });
+      })
       
       if (res.ok) {
-        alert(`✅ ¡Mensaje de prueba enviado con éxito al ID ${chatId}!`);
+        alert(`✅ ¡Mensaje de prueba enviado con éxito al ID ${chatId}!`)
       } else {
-        const errorData = await res.json();
-        console.error("Error de Telegram:", errorData);
-        alert(`❌ Error al enviar: ${errorData.description || 'El usuario bloqueó el bot o el ID es inválido.'}`);
+        const errorData = await res.json()
+        console.error("Error de Telegram:", errorData)
+        alert(`❌ Error al enviar: ${errorData.description || 'El usuario bloqueó el bot o el ID es inválido.'}`)
       }
     } catch(err) {
-      alert('Error de conexión con la API de Telegram.');
+      alert('Error de conexión con la API de Telegram.')
     }
   }
 
@@ -377,13 +377,13 @@ export default function PanelAdministracion() {
         const { error } = await supabase
           .from('alumnos')
           .update({ [columna]: null })
-          .eq('id', idAlumno);
+          .eq('id', idAlumno)
 
-        if (error) throw error;
-        alert('✅ Número desvinculado con éxito.');
-        cargarAlumnos();
+        if (error) throw error
+        alert('✅ Número desvinculado con éxito.')
+        cargarAlumnos()
       } catch (err: any) {
-        alert('Error al desvincular: ' + err.message);
+        alert('Error al desvincular: ' + err.message)
       }
     }
   }
@@ -686,14 +686,14 @@ export default function PanelAdministracion() {
     const { data, error } = await supabase
       .from('usuarios')
       .select('*')
-      .order('id', { ascending: false });
+      .order('id', { ascending: false })
 
     if (error) {
-      console.error("Error cargando empleados:", error);
+      console.error("Error cargando empleados:", error)
     } else {
-      setEmpleados(data || []);
+      setEmpleados(data || [])
     }
-  };
+  }
 
   const abrirModalNuevoEmpleado = () => {
     setEmpleadoEditando(null)
@@ -724,13 +724,13 @@ export default function PanelAdministracion() {
       const { error } = await supabase
         .from('usuarios')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
         
       if (error) {
-        alert("Error al eliminar el empleado.");
-        return;
+        alert("Error al eliminar el empleado.")
+        return
       }
-      cargarEmpleados();
+      cargarEmpleados()
     }
   }
 
@@ -759,21 +759,21 @@ export default function PanelAdministracion() {
         const { error } = await supabase
           .from('usuarios')
           .update(datosEmpleado)
-          .eq('id', empleadoEditando.id);
+          .eq('id', empleadoEditando.id)
           
-        if (error) throw error;
-        alert("Empleado actualizado con éxito.");
+        if (error) throw error
+        alert("Empleado actualizado con éxito.")
       } else {
         const { error } = await supabase
           .from('usuarios')
-          .insert([datosEmpleado]);
+          .insert([datosEmpleado])
           
-        if (error) throw error;
-        alert(`Empleado ${formEmpNombre} (${formEmpRol}) dado de alta con éxito.`);
+        if (error) throw error
+        alert(`Empleado ${formEmpNombre} (${formEmpRol}) dado de alta con éxito.`)
       }
       
       setMostrarModalEmpleado(false)
-      cargarEmpleados();
+      cargarEmpleados()
     } catch (err: any) {
       alert('Error al guardar empleado: ' + err.message)
     } finally {
@@ -1108,371 +1108,4 @@ export default function PanelAdministracion() {
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
                       {alumnosFiltrados.length === 0 ? (
-                        <tr><td colSpan={7} className="p-8 text-center text-slate-500">No se encontraron resultados.</td></tr>
-                      ) : (
-                        alumnosFiltrados.map((al) => (
-                          <tr key={al.id} className="hover:bg-slate-800/30 transition-colors">
-                            <td className="p-3 text-center">
-                              <input type="checkbox" checked={idsSeleccionados.includes(al.id)} onChange={() => toggleSeleccionAlumno(al.id)} className="w-4 h-4 accent-indigo-500" />
-                            </td>
-                            <td className="p-3">
-                              <p className="text-white font-bold text-sm">{al.nombre_completo}</p>
-                              {al.nfc_uid && <p className="text-xs text-indigo-400 mt-1 font-mono">NFC: {al.nfc_uid}</p>}
-                            </td>
-                            <td className="p-3 text-slate-300 text-sm">{al.matricula || '-'}</td>
-                            <td className="p-3">
-                              <p className="text-slate-300 text-sm">{al.grado_grupo || `${al.semestre} Gpo ${al.grupo}`}</p>
-                              <p className="text-xs text-slate-500">{al.turno}</p>
-                            </td>
-                            <td className="p-3">
-                              <p className="text-slate-300 text-xs">{al.correo_tutor || 'Sin correo'}</p>
-                              <p className="text-slate-300 text-xs mb-2">{al.telefono_tutor || 'Sin teléfono'}</p>
-                              
-                              {/* TELEGRAM 1 */}
-                              <div className="mb-2">
-                                <p className="text-[10px] text-slate-500 font-bold mb-1">Telegram 1:</p>
-                                {al.telegram_chat_id ? (
-                                  <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg w-full max-w-[160px]">
-                                    <p className="text-[10px] text-emerald-400 font-mono mb-1 truncate" title={al.telegram_chat_id}>ID: {al.telegram_chat_id}</p>
-                                    <div className="flex gap-1">
-                                      <button onClick={() => probarNotificacionTelegram(al.telegram_chat_id, al.nombre_completo)} className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex-1 flex justify-center items-center">🔔 Probar</button>
-                                      <button onClick={() => desvincularTelegram(al.id, 'telegram_chat_id', al.nombre_completo)} className="bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex justify-center items-center" title="Desvincular para volver a registrar">❌</button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <span className="text-[9px] text-slate-500 border border-slate-700 bg-slate-800/50 px-2 py-1 rounded-md inline-block">Sin vincular</span>
-                                )}
-                              </div>
-
-                              {/* TELEGRAM 2 */}
-                              <div>
-                                <p className="text-[10px] text-slate-500 font-bold mb-1">Telegram 2:</p>
-                                {al.chat_id_telegram_2 ? (
-                                  <div className="bg-emerald-900/20 border border-emerald-900/50 p-1.5 rounded-lg w-full max-w-[160px]">
-                                    <p className="text-[10px] text-emerald-400 font-mono mb-1 truncate" title={al.chat_id_telegram_2}>ID: {al.chat_id_telegram_2}</p>
-                                    <div className="flex gap-1">
-                                      <button onClick={() => probarNotificacionTelegram(al.chat_id_telegram_2, al.nombre_completo)} className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex-1 flex justify-center items-center">🔔 Probar</button>
-                                      <button onClick={() => desvincularTelegram(al.id, 'chat_id_telegram_2', al.nombre_completo)} className="bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold px-2 py-1 rounded transition-colors flex justify-center items-center" title="Desvincular para volver a registrar">❌</button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <span className="text-[9px] text-slate-500 border border-slate-700 bg-slate-800/50 px-2 py-1 rounded-md inline-block">Sin vincular</span>
-                                )}
-                              </div>
-
-                            </td>
-                            <td className="p-3">
-                              <span className={`px-2 py-1 rounded-md text-xs font-bold ${al.saldo_actual > 0 ? 'bg-emerald-900/40 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
-                                ${al.saldo_actual?.toFixed(2) || '0.00'}
-                              </span>
-                            </td>
-                            <td className="p-3">
-                              <div className="flex justify-center gap-2">
-                                <button onClick={() => abrirModalEditarAlumno(al)} className="bg-slate-800 hover:bg-indigo-600 text-white p-2 rounded-lg transition-colors" title="Editar">✏️</button>
-                                <button onClick={() => eliminarAlumnoIndividual(al.id, al.nombre_completo)} className="bg-slate-800 hover:bg-red-600 text-white p-2 rounded-lg transition-colors" title="Eliminar">🗑️</button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================= CONTENIDO: VISTA EMPLEADOS ================= */}
-      {vista === 'EMPLEADOS' && rol === 'SUPERADMIN' && (
-        <div className="max-w-7xl mx-auto animate-fade-in">
-          <div className="bg-[#0f172a] rounded-2xl border border-amber-900/40 p-6 shadow-xl">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-800 pb-4 mb-4">
-              <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  🧑‍💼 Gestión de Personal
-                </h2>
-                <p className="text-slate-400 text-xs mt-1">
-                  Registra personal de Caja, Choferes, Coordinadores y Administradores para darles acceso a sus módulos correspondientes.
-                </p>
-              </div>
-              <button 
-                onClick={abrirModalNuevoEmpleado}
-                className="bg-amber-600 hover:bg-amber-500 text-white font-bold px-4 py-2 rounded-xl text-sm transition-colors flex items-center gap-2"
-              >
-                ➕ Nuevo Empleado
-              </button>
-            </div>
-            
-            <div className="bg-[#0f172a] rounded-lg shadow-lg border border-slate-800">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-slate-300">
-                  <thead className="bg-[#020617] text-slate-400 text-xs uppercase">
-                    <tr>
-                      <th className="p-4 rounded-tl-lg border-b border-slate-800">Nombre</th>
-                      <th className="p-4 border-b border-slate-800">Correo</th>
-                      <th className="p-4 border-b border-slate-800">Rol</th>
-                      <th className="p-4 border-b border-slate-800">Contraseña</th>
-                      <th className="p-4 rounded-tr-lg border-b border-slate-800">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/50">
-                    {empleados.map((emp) => (
-                      <tr key={emp.id} className="hover:bg-slate-800/30 transition-colors">
-                        <td className="p-4 text-white font-medium text-sm">{emp.nombre}</td>
-                        <td className="p-4 text-sm">{emp.correo}</td>
-                        <td className="p-4 text-sm">
-                          <span className="px-2 py-1 rounded bg-slate-800 text-amber-400 text-[10px] font-bold">
-                            {emp.rol.replace('_', ' ')}
-                          </span>
-                        </td>
-                        <td className="p-4 text-sm font-mono">{emp.contrasena}</td>
-                        <td className="p-4">
-                          <button 
-                            onClick={() => editarEmpleado(emp)} 
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-md mr-2 text-xs transition-colors"
-                          >
-                            Editar
-                          </button>
-                          <button 
-                            onClick={() => eliminarEmpleado(emp.id)} 
-                            className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded-md text-xs transition-colors"
-                          >
-                            Eliminar
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {empleados.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="p-6 text-center text-slate-500">
-                          No hay empleados registrados en la base de datos.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODALES */}
-      {usandoCamara && modoCamara === 'BUSQUEDA' && (
-        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
-          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-4 text-center">Escanear Lector USB / NFC</h2>
-            
-            <div className="mb-6 bg-slate-800 p-4 rounded-xl border border-slate-700">
-              <label className="block text-slate-300 text-xs font-bold mb-2 uppercase text-center">
-                Lectura Automática (USB)
-              </label>
-              <input
-                type="text"
-                autoFocus
-                placeholder="Pasa la tarjeta NFC aquí..."
-                className="w-full bg-[#020617] text-white border border-slate-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-indigo-500 text-center"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const codigoEscaneado = (e.target as HTMLInputElement).value;
-                    setBusquedaAlumno(codigoEscaneado);
-                    (e.target as HTMLInputElement).value = '';
-                    detenerCamara(); 
-                  }
-                }}
-              />
-            </div>
-            
-            <button onClick={() => detenerCamara()} className="w-full mt-2 bg-slate-800 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors">
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: AGREGAR / EDITAR ALUMNO */}
-      {mostrarModalAlumno && (
-        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4 overflow-y-auto">
-          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-2xl shadow-2xl my-8">
-            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              {alumnoEditando ? '✏️ Editar Alumno' : '➕ Nuevo Alumno'}
-            </h2>
-            <form onSubmit={guardarAlumno} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-slate-400 text-xs font-bold mb-1">Nombre Completo</label>
-                <input type="text" required value={formNombre} onChange={(e) => setFormNombre(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
-              </div>
-              
-              <div>
-                <label className="block text-slate-400 text-xs font-bold mb-1">Matrícula</label>
-                <input type="text" value={formMatricula} onChange={(e) => setFormMatricula(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 text-xs font-bold mb-1">NFC UID (Tarjeta)</label>
-                <div className="flex gap-2">
-                  <input type="text" value={formNfcUid} onChange={(e) => setFormNfcUid(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
-                  <button type="button" onClick={() => iniciarCamara('FORMULARIO')} className="bg-slate-800 hover:bg-slate-700 text-white px-3 rounded-lg border border-slate-700 transition-colors" title="Escanear">📷</button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 text-xs font-bold mb-1">Semestre</label>
-                <select value={formSemestre} onChange={(e) => setFormSemestre(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500">
-                  <option value="1º">1º</option>
-                  <option value="2º">2º</option>
-                  <option value="3º">3º</option>
-                  <option value="4º">4º</option>
-                  <option value="5º">5º</option>
-                  <option value="6º">6º</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 text-xs font-bold mb-1">Grupo</label>
-                <input type="text" value={formGrupo} onChange={(e) => setFormGrupo(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 text-xs font-bold mb-1">Turno</label>
-                <select value={formTurno} onChange={(e) => setFormTurno(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500">
-                  <option value="Matutino">Matutino</option>
-                  <option value="Vespertino">Vespertino</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 text-xs font-bold mb-1">Saldo Actual ($)</label>
-                <input type="number" step="0.01" required value={formSaldo} onChange={(e) => setFormSaldo(Number(e.target.value))} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 text-xs font-bold mb-1">Correo Tutor</label>
-                <input type="email" value={formCorreoTutor} onChange={(e) => setFormCorreoTutor(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 text-xs font-bold mb-1">Teléfono Tutor</label>
-                <input type="text" value={formTelefonoTutor} onChange={(e) => setFormTelefonoTutor(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-lg p-2.5 text-white text-sm outline-none focus:border-indigo-500" />
-              </div>
-
-              <div className="md:col-span-2 flex gap-3 mt-4">
-                <button type="button" onClick={() => setMostrarModalAlumno(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors">Cancelar</button>
-                <button type="submit" disabled={guardandoAlumno} className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors">
-                  {guardandoAlumno ? 'Guardando...' : 'Guardar Alumno'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: CORTE Z */}
-      {mostrarCorte && (
-        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
-          <div className="bg-[#0f172a] border border-slate-800 p-8 rounded-2xl w-full max-w-sm shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-4 text-center">Imprimir Corte Z</h2>
-            <div className="mb-6">
-              <label className="block text-slate-400 text-xs uppercase font-bold mb-2 text-center">Selecciona la Fecha</label>
-              <input type="date" value={fechaCorte} onChange={(e) => setFechaCorte(e.target.value)} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white text-center outline-none focus:border-emerald-500" />
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setMostrarCorte(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors">Cancelar</button>
-              <button onClick={generarCorteZ} className="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors">Generar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: HISTORIAL / REPORTES */}
-      {mostrarHistorial && (
-        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
-          <div className="bg-[#0f172a] border border-slate-700 p-6 md:p-8 rounded-2xl w-full max-w-4xl shadow-2xl max-h-[90vh] flex flex-col">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 border-b border-slate-800 pb-4">
-              <h2 className="text-xl font-bold text-white">Historial de Operaciones</h2>
-              <div className="flex items-center gap-3 w-full md:w-auto">
-                <input type="date" value={fechaHistorial} onChange={(e) => setFechaHistorial(e.target.value)} className="bg-[#020617] border border-slate-700 rounded-lg p-2 text-white text-sm outline-none focus:border-indigo-500 w-full md:w-auto" />
-                <button onClick={() => setMostrarHistorial(false)} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors">Cerrar</button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 shrink-0">
-              <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 text-center"><p className="text-slate-500 text-[10px] uppercase font-bold">Ventas Netas</p><p className="text-emerald-400 font-black text-lg">${statsHistorial.ventas.toFixed(2)}</p></div>
-              <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 text-center"><p className="text-slate-500 text-[10px] uppercase font-bold">Boletos Emitidos</p><p className="text-white font-black text-lg">{statsHistorial.boletos}</p></div>
-              <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 text-center"><p className="text-slate-500 text-[10px] uppercase font-bold">Retiros</p><p className="text-pink-400 font-black text-lg">-${statsHistorial.retiros.toFixed(2)}</p></div>
-              <div className="bg-indigo-900/30 p-3 rounded-xl border border-indigo-900/50 text-center"><p className="text-indigo-400 text-[10px] uppercase font-bold">Caja Teórica</p><p className="text-white font-black text-lg">${statsHistorial.total.toFixed(2)}</p></div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto rounded-xl border border-slate-800 bg-[#020617]">
-              <table className="w-full text-left border-collapse">
-                <thead className="sticky top-0 bg-[#0f172a] shadow-md">
-                  <tr className="text-slate-400 text-xs uppercase tracking-wider">
-                    <th className="p-3 border-b border-slate-800">Hora</th>
-                    <th className="p-3 border-b border-slate-800">Tipo</th>
-                    <th className="p-3 border-b border-slate-800">Folio / Ref</th>
-                    <th className="p-3 border-b border-slate-800">Descripción</th>
-                    <th className="p-3 border-b border-slate-800 text-right">Monto</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/50">
-                  {historialUnificado.length === 0 ? (
-                    <tr><td colSpan={5} className="p-8 text-center text-slate-500">No hay movimientos en esta fecha.</td></tr>
-                  ) : (
-                    historialUnificado.map((mov, i) => (
-                      <tr key={i} className="hover:bg-slate-800/30">
-                        <td className="p-3 text-sm text-slate-400">{new Date(mov.fecha).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}</td>
-                        <td className="p-3"><span className={`px-2 py-1 rounded-[4px] text-[10px] font-bold ${mov.tipo === 'VENTA' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-pink-900/30 text-pink-400'}`}>{mov.tipo}</span></td>
-                        <td className="p-3 text-sm font-mono text-slate-300">{mov.folio}</td>
-                        <td className="p-3 text-sm text-slate-300">{mov.descripcion}</td>
-                        <td className={`p-3 text-sm font-bold text-right ${mov.tipo === 'VENTA' ? 'text-emerald-400' : 'text-pink-400'}`}>{mov.tipo === 'VENTA' ? '+' : '-'}${mov.monto.toFixed(2)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: REPORTE POR RANGO */}
-      {mostrarReporteRango && (
-        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-50 p-4">
-          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-lg shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">📅 Reporte de Ventas por Rango</h2>
-            
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div>
-                <label className="block text-slate-400 text-xs font-bold mb-1">Fecha Inicial</label>
-                <input type="date" value={fechaInicioRango} onChange={(e) => { setFechaInicioRango(e.target.value); setRangoCalculado(false) }} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-indigo-500" />
-              </div>
-              <div>
-                <label className="block text-slate-400 text-xs font-bold mb-1">Fecha Final</label>
-                <input type="date" value={fechaFinRango} onChange={(e) => { setFechaFinRango(e.target.value); setRangoCalculado(false) }} className="w-full bg-[#020617] border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-indigo-500" />
-              </div>
-            </div>
-
-            {rangoCalculado ? (
-              <div className="bg-[#020617] p-4 rounded-xl border border-slate-800 mb-6 space-y-2">
-                <div className="flex justify-between text-sm"><span className="text-slate-400">Total Ingresos:</span><span className="text-emerald-400 font-bold">${statsRango.ventas.toFixed(2)}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-slate-400">Boletos Vendidos:</span><span className="text-white font-bold">{statsRango.boletos}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-slate-400">Total Retiros:</span><span className="text-pink-400 font-bold">-${statsRango.retiros.toFixed(2)}</span></div>
-                <div className="border-t border-slate-700 pt-2 flex justify-between text-base mt-2"><span className="text-slate-300 font-bold">Caja Teórica:</span><span className="text-white font-black">${statsRango.total.toFixed(2)}</span></div>
-              </div>
-            ) : null}
-
-            <div className="flex gap-3 mt-4">
-              <button onClick={() => setMostrarReporteRango(false)} className="w-1/2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-colors text-sm">Cerrar</button>
-              <button onClick={rangoCalculado ? generarDocumentoRango : calcularRangoFechas} className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors text-sm">
-                {rangoCalculado ? '🖨️ Generar Reporte' : '📊 Calcular'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+                        <tr><td colSpan
