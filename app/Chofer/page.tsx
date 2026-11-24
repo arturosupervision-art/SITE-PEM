@@ -148,6 +148,21 @@ export default function PantallaChofer() {
     }
   }, [estadoPantalla, modoRuta, usuarioLogueado]);
 
+  // Mantiene la ubicación GPS actualizada en segundo plano mientras la ruta está activa
+  useEffect(() => {
+    if (!modoRuta || !navigator.geolocation) return;
+
+    const watchEscaneoId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setUbicacion({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      (err) => console.warn('GPS en segundo plano:', err.message),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchEscaneoId);
+  }, [modoRuta]);
+
   const reproducirSonido = (tipo: 'EXITO' | 'ERROR' | 'ADVERTENCIA') => {
     try {
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
@@ -187,27 +202,15 @@ export default function PantallaChofer() {
     }
   };
 
-  const obtenerUbicacionActual = (): Promise<{ lat: number; lng: number } | null> => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        resolve(ubicacion);
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const nuevaUbicacion = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          setUbicacion(nuevaUbicacion);
-          resolve(nuevaUbicacion);
-        },
-        () => resolve(ubicacion),
-        { timeout: 5000, enableHighAccuracy: true }
-      );
-    });
-  };
-
-  const iniciarRuta = async (tipo: 'ASCENSO' | 'DESCENSO') => {
-    await obtenerUbicacionActual();
+  const iniciarRuta = (tipo: 'ASCENSO' | 'DESCENSO') => {
     setModoRuta(tipo);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUbicacion({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {},
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
   };
 
   const enviarNotificacionTelegram = async (
@@ -272,7 +275,7 @@ export default function PantallaChofer() {
     setBusquedaManual('');
 
     try {
-      const gpsActual = await obtenerUbicacionActual();
+      const gpsActual = ubicacion;
       let { data: alumno, error: errorAlumno } = await supabase
         .from('alumnos')
         .select('*')
@@ -378,7 +381,7 @@ export default function PantallaChofer() {
   const autorizarEmergencia = async () => {
     if (!alumnoActual) return;
     try {
-      const gpsActual = await obtenerUbicacionActual();
+      const gpsActual = ubicacion;
       const nuevoSaldo = alumnoActual.boletos_disponibles - 1; 
       
       const { error: updateError } = await supabase
