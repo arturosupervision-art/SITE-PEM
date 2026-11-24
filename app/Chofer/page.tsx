@@ -276,14 +276,17 @@ export default function PantallaChofer() {
       let { data: alumno, error: errorAlumno } = await supabase
         .from('alumnos')
         .select('*')
-        .or(`codigo_qr_vinculado.eq.${codigoLimpio},matricula.eq.${codigoLimpio}`)
+        .or(`nfc_uid.ilike."${codigoLimpio}",codigo_qr_vinculado.eq."${codigoLimpio}",matricula.eq."${codigoLimpio}"`)
         .maybeSingle();
 
       if (errorAlumno || !alumno) {
         reproducirSonido('ERROR');
         setEstadoPantalla('ERROR');
         setAlumnoActual(null);
-        setMensaje('❌ Alumno no encontrado o código inválido');
+        setMensaje(
+          `❌ Alumno no encontrado | Leído: [${codigoLimpio}]` +
+          (errorAlumno ? ` | Error: ${errorAlumno.message}` : '')
+        );
         return;
       }
 
