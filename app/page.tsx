@@ -648,4 +648,218 @@ export default function ModuloCajaViajes() {
             <form onSubmit={procesarCierre} className="space-y-6">
               <div className="text-center">
                 <label className="text-sm font-bold text-slate-400">¿Cuánto dinero FÍSICO vas a entregar?</label>
-                <input type="number" required step="0.5" min="0" value={efectivoCajon} onChange={e => setEfectivoCajon(e.target.value)} className="w-full bg-[#020617] border border-slate-500 rounded-xl p-4 mt-2 text-3xl text-center font-black text-white
+                <input type="number" required step="0.5" min="0" value={efectivoCajon} onChange={e => setEfectivoCajon(e.target.value)} className="w-full bg-[#020617] border border-slate-500 rounded-xl p-4 mt-2 text-3xl text-center font-black text-white focus:border-red-500 outline-none" placeholder="$0.00" autoFocus />
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setMostrarCierre(false)} className="w-1/3 bg-slate-800 text-white rounded-xl py-4 font-bold hover:bg-slate-700">Cancelar</button>
+                <button type="submit" className="w-2/3 bg-red-600 hover:bg-red-500 text-white rounded-xl py-4 font-bold shadow-lg shadow-red-900/50">Cerrar Caja e Imprimir</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HISTORIAL */}
+      {mostrarHistorial && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40 print:hidden">
+          <div className="bg-[#0f172a] rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-700 flex flex-col max-h-[90vh]">
+            <div className="bg-indigo-900/40 p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-white">Historial de Viajes</h2>
+                <input id="fechaFiltro" type="date" value={fechaFiltro} onChange={(e) => setFechaFiltro(e.target.value)} className="mt-2 bg-[#020617] border border-indigo-500/50 rounded-lg p-2 text-sm text-white font-bold outline-none" />
+              </div>
+              <button onClick={() => setMostrarHistorial(false)} className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-2 rounded-xl font-bold">Volver a Caja</button>
+            </div>
+            <div className="p-2 md:p-6 overflow-y-auto flex-grow bg-[#0f172a]">
+              {cargandoHistorial ? <p className="text-center text-slate-400 py-10 font-bold">Cargando...</p> : ventasDia.length === 0 ? <p className="text-slate-500 text-center py-10 font-bold">No hay ventas registradas.</p> : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-300 min-w-[600px]">
+                    <thead className="border-b border-slate-700 text-slate-400"><tr><th className="pb-3 px-2">Folio</th><th className="pb-3 px-2">Hora</th><th className="pb-3 px-2">Alumno</th><th className="pb-3 px-2">Viajes</th><th className="pb-3 px-2">Monto</th><th className="pb-3 px-2">Acción</th></tr></thead>
+                    <tbody>
+                      {ventasDia.map((venta) => (
+                        <tr key={venta.id} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
+                          <td className="py-4 px-2 font-mono text-amber-400 font-bold">SITE-{String(venta.folio_secuencial || 0).padStart(5, '0')}</td>
+                          <td className="py-4 px-2">{new Date(venta.created_at).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}</td>
+                          <td className="py-4 px-2 font-bold text-white">{venta.alumnos?.nombre_completo}</td>
+                          <td className="py-4 px-2 text-center font-black text-emerald-400">+{venta.cantidad_boletos}</td>
+                          <td className="py-4 px-2 text-right font-bold text-white">${venta.monto_total}</td>
+                          <td className="py-4 px-2 text-center"><button onClick={() => cancelarVenta(venta.id, venta.alumno_id, venta.cantidad_boletos)} className="text-xs bg-red-900/30 hover:bg-red-600 text-red-400 hover:text-white px-3 py-2 rounded-lg font-bold border border-red-800/50 transition-colors">Cancelar</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TICKET EN PANTALLA E IMPRESIÓN */}
+      {ticketActual && (
+        <RenderTicket
+          ticket={ticketActual}
+          estadoTelegram={estadoTelegram}
+          onReenviar={() => enviarReciboTelegram(ticketActual.alumnoId, ticketActual)}
+          onClose={() => {
+            setTicketActual(null)
+            setEstadoTelegram({ tipo: 'idle', texto: '' })
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function BotonesPersonalizados({ onCobrar, precio }: { onCobrar: (cant: number) => void, precio: number }) {
+  const [cant, setCant] = useState(1);
+  return (
+    <div className="flex items-center gap-2 w-full">
+      <input type="number" min="1" value={cant} onChange={(e) => setCant(Math.max(1, parseInt(e.target.value) || 1))} className="w-16 bg-[#020617] rounded-lg p-2 text-center text-sm font-bold text-white border border-slate-600 outline-none" />
+      <button onClick={() => onCobrar(cant)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-3 rounded-lg text-sm transition-colors shadow-lg">Cobrar ${cant * precio}</button>
+    </div>
+  )
+}
+
+function RenderTicket({
+  ticket,
+  onClose,
+  estadoTelegram,
+  onReenviar,
+}: {
+  ticket: any
+  onClose: () => void
+  estadoTelegram?: { tipo: string; texto: string }
+  onReenviar?: () => void
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-[100] p-4 print:p-0 print:bg-white print:block">
+      <style>{`
+        @media print { 
+          @page { margin: 0; size: 80mm auto; } 
+          body { background: white; -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
+        }
+      `}</style>
+      <div className="bg-white text-black p-5 w-full max-w-[320px] print:w-[80mm] print:max-w-[80mm] print:p-2 print:m-0 font-mono shadow-2xl print:shadow-none text-[12px] md:text-[14px] print:text-[12px] flex flex-col rounded-xl print:rounded-none">
+         
+         <div className="flex justify-center mb-3">
+           <img src="/logo negro.png" alt="Logo" className="h-16 w-auto object-contain grayscale" />
+         </div>
+         <div className="text-center font-bold text-lg mb-1">SITE - VIAJES</div>
+
+         {ticket.tipo === 'VENTA' && (
+           <>
+             <div className="text-center mb-4 border-b border-dashed border-gray-400 pb-3">
+                <p className="text-[11px] font-bold uppercase">Comprobante de Viaje</p>
+                <p className="text-[11px]">{ticket.fecha}</p>
+             </div>
+             <div className="space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3">
+                <p><span className="font-bold">Folio:</span> {ticket.folio}</p>
+                <p className="mt-2 font-bold">Alumno:</p>
+                <p className="leading-tight uppercase text-[11px]">{ticket.nombre}</p>
+                <p><span className="font-bold">Matrícula:</span> {ticket.matricula || 'N/A'}</p>
+             </div>
+             <div className="mb-4 border-b border-dashed border-gray-400 pb-3">
+                <div className="flex justify-between font-bold mb-2"><span>CANT / DESC</span><span>IMPORTE</span></div>
+                <div className="flex justify-between">
+                  <span>{ticket.cantidad}x Viaje</span>
+                  <span>${ticket.total}.00</span>
+                </div>
+             </div>
+
+             {ticket.deudaPagada > 0 && (
+               <div className="mb-4 text-[10px] text-center border border-black p-2 bg-gray-100">
+                  <p className="font-bold uppercase">⚠️ Deuda Cubierta</p>
+                  <p>De esta compra, se descontaron</p>
+                  <p className="font-bold">{ticket.deudaPagada} viaje(s)</p>
+                  <p>por concepto de Viajes de Emergencia.</p>
+               </div>
+             )}
+
+             <div className="flex justify-between font-bold mb-4 border-b border-black pb-3 text-base">
+                <span>TOTAL PAGADO:</span><span>${ticket.total}.00</span>
+             </div>
+             <div className="text-center mb-6 space-y-1 text-[11px]">
+                <p className="inline-block border-2 border-black font-black px-3 py-1 mt-2 text-sm">SALDO A FAVOR: {ticket.nuevoSaldo} VIAJES</p>
+                <p className="mt-4 italic">¡Guarde su comprobante!</p>
+             </div>
+           </>
+         )}
+
+         {ticket.tipo === 'RETIRO' && (
+           <>
+             <div className="text-center mb-4 border-b border-black pb-3 mt-4">
+                <p className="font-bold text-lg uppercase">Retiro Efectivo</p>
+                <p className="text-[11px]">{ticket.fecha}</p>
+             </div>
+             <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
+                <p><span className="font-bold">Folio Retiro:</span> {ticket.folio}</p>
+                <p><span className="font-bold">Concepto:</span> {ticket.concepto}</p>
+             </div>
+             <div className="flex justify-between font-bold mb-8 border-b border-black pb-3 text-base">
+                <span>MONTO:</span><span>${ticket.monto.toFixed(2)}</span>
+             </div>
+             <div className="mt-16 border-t border-black pt-2 text-center w-4/5 mx-auto"><p className="text-[10px] uppercase font-bold">Firma de Recibido</p></div>
+             <div className="h-4"></div>
+           </>
+         )}
+
+         {ticket.tipo === 'CIERRE' && (
+           <>
+             <div className="text-center mb-4 border-b border-black pb-3 mt-4"><p className="font-bold text-xl uppercase">Corte de Caja</p></div>
+             <div className="space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3 text-[11px]">
+                <p><span className="font-bold">Apertura:</span><br/>{ticket.fechaApertura}</p>
+                <p><span className="font-bold">Cierre:</span><br/>{ticket.fechaCierre}</p>
+             </div>
+             <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
+                <div className="flex justify-between"><span>Fondo Inicial:</span><span>${ticket.fondo.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>+ Ventas (Viajes):</span><span>${ticket.ventas.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>- Retiros:</span><span>${ticket.retiros.toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold mt-2 pt-2 border-t border-dashed border-gray-400 text-sm"><span>TOTAL ESPERADO:</span><span>${ticket.esperado.toFixed(2)}</span></div>
+             </div>
+             <div className="space-y-2 mb-6 border-b border-black pb-3">
+                <div className="flex justify-between font-black text-sm"><span>EFECTIVO ENTREGADO:</span><span>${ticket.real.toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold text-[13px] mt-2"><span>DIFERENCIA:</span><span>${ticket.diferencia.toFixed(2)}</span></div>
+             </div>
+             <div className="mt-16 border-t border-black pt-2 text-center w-4/5 mx-auto"><p className="text-[10px] uppercase font-bold">Firma de Cajero</p></div>
+             <div className="h-4"></div>
+           </>
+         )}
+         
+         <div className="flex flex-col gap-2 print:hidden mt-6">
+            {ticket.tipo === 'VENTA' ? (
+              <>
+                {estadoTelegram?.texto && (
+                  <div
+                    className={`text-center text-xs font-sans font-bold p-2.5 rounded-lg border ${
+                      estadoTelegram.tipo === 'enviado'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                        : estadoTelegram.tipo === 'error'
+                        ? 'bg-red-50 text-red-700 border-red-300'
+                        : 'bg-indigo-50 text-indigo-700 border-indigo-300'
+                    }`}
+                  >
+                    {estadoTelegram.texto}
+                  </div>
+                )}
+                <button
+                  onClick={onReenviar}
+                  disabled={estadoTelegram?.tipo === 'enviando'}
+                  className="w-full bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white py-3.5 rounded-xl font-sans font-black text-base transition-colors shadow-lg"
+                >
+                  ✈️ REENVIAR RECIBO A TELEGRAM
+                </button>
+              </>
+            ) : (
+              <button onClick={() => window.print()} className="w-full bg-[#10b981] hover:bg-[#059669] text-white py-4 rounded-xl font-sans font-black text-lg transition-colors shadow-lg">
+                🖨️ IMPRIMIR
+              </button>
+            )}
+            <button onClick={onClose} className="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 py-3 rounded-xl font-sans font-bold text-sm transition-colors">
+              Cerrar y Continuar
+            </button>
+         </div>
+      </div>
+    </div>
+  )
+}
