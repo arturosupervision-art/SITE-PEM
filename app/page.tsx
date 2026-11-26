@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
-// Ajusta esta ruta si tu endpoint de Telegram tiene otro nombre (ej. '/api/notificar-telegram')
 const TELEGRAM_API_URL = '/api/telegram'
 
 export default function ModuloCajaViajes() {
@@ -204,43 +203,28 @@ export default function ModuloCajaViajes() {
   // ================= ENVÍO AUTOMÁTICO DE RECIBO A TELEGRAM =================
   const enviarReciboTelegram = async (alumno: any, ticket: any) => {
     try {
-      // Recolecta uno o múltiples chat IDs registrados en el alumno
-      const posiblesCampos = [
-        alumno.telegram_chat_id,
-        alumno.telegram_chat_id_2,
-        alumno.chat_id_telegram,
-        alumno.telegram_tutor_1,
-        alumno.telegram_tutor_2,
-        ...(Array.isArray(alumno.telegram_chat_ids) ? alumno.telegram_chat_ids : [])
-      ]
-
+      // Lee exactamente las dos columnas de Chat ID en Supabase
       const chatIds = Array.from(
         new Set(
-          posiblesCampos
+          [alumno.tutor_chat_id, alumno.tutor_chat_id_2]
             .filter(Boolean)
-            .flatMap((val: any) => String(val).split(',').map((id) => id.trim()))
+            .map((id) => String(id).trim())
             .filter((id) => id.length > 0)
         )
       )
 
       if (chatIds.length === 0) return
 
-      const lineaDeuda = ticket.deudaPagada > 0
-        ? `\n⚠️ *Deuda cubierta:* ${ticket.deudaPagada} viaje(s) de emergencia`
-        : ''
-
-      const mensaje =
-        `🧾 *RECIBO DIGITAL - SITE VIAJES*\n` +
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `📄 *Folio:* ${ticket.folio}\n` +
-        `📅 *Fecha:* ${ticket.fecha}\n` +
-        `🎓 *Alumno:* ${ticket.nombre}\n` +
-        `🆔 *Matrícula:* ${ticket.matricula || 'N/A'}\n` +
-        `🎟️ *Compra:* ${ticket.cantidad} viaje(s)\n` +
-        `💵 *Total pagado:* $${ticket.total}.00 MXN` +
-        `${lineaDeuda}\n` +
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `✅ *Saldo actual:* ${ticket.nuevoSaldo} viaje(s) disponible(s)`
+      const payloadTicket = {
+        folio: ticket.folio,
+        fecha: ticket.fecha,
+        cajero: usuarioAutenticado?.nombre || 'Caja',
+        alumno: ticket.nombre,
+        matricula: ticket.matricula || 'N/A',
+        cantidad: ticket.cantidad,
+        monto: ticket.total,
+        nuevoSaldo: ticket.nuevoSaldo
+      }
 
       await Promise.allSettled(
         chatIds.map((chatId) =>
@@ -248,11 +232,8 @@ export default function ModuloCajaViajes() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              chat_id: chatId,
-              chatId: chatId,
-              message: mensaje,
-              mensaje: mensaje,
-              text: mensaje
+              chatId,
+              ticket: payloadTicket
             })
           })
         )
@@ -296,7 +277,7 @@ export default function ModuloCajaViajes() {
       setAlumnos(alumnos.map(a => a.id === alumno.id ? {...a, boletos_disponibles: nuevoSaldo} : a))
       cargarStatsTurno(turnoActual.id, turnoActual.fecha_apertura)
 
-      // Envía el recibo digital automáticamente a los chats de Telegram vinculados
+      // Envía el recibo digital automáticamente a tutor_chat_id y tutor_chat_id_2
       enviarReciboTelegram(alumno, nuevoTicket)
     }
   }
@@ -329,16 +310,13 @@ export default function ModuloCajaViajes() {
     }
   }
 
-  // GUARDA EL CÓDIGO NFC EN AMBAS COLUMNAS PARA MANTENER COMPATIBILIDAD TOTAL
+  // GUARDA EL CÓDIGO NFC EN LA COLUMNA REAL codigo_qr
   const guardarNuevoNfc = async () => {
     if (!nuevoNfc.trim()) return;
     const val = nuevoNfc.trim();
     const { error } = await supabase
       .from('alumnos')
-      .update({ 
-        codigo_qr_vinculado: val,
-        codigo_qr: val 
-      })
+      .update({ codigo_qr: val })
       .eq('id', alumnoVincular.id);
 
     if (!error) {
@@ -350,23 +328,23 @@ export default function ModuloCajaViajes() {
     }
   }
 
-  // BÚSQUEDA MEJORADA QUE RECONOCE CUALQUIER UID NFC, MATRÍCULA O NOMBRE
+  // BÚSQUEDA POR NOMBRE, MATRÍCULA O TARJETA NFC (codigo_qr / nfc_uid)
   const alumnosFiltrados = alumnos.filter(a => {
     const term = busqueda.trim().toLowerCase();
     if (!term) return true;
 
     const nombre = (a.nombre_completo || '').toLowerCase();
     const matricula = (a.matricula || '').toLowerCase();
-    const nfcVinculado = (a.codigo_qr_vinculado || '').toLowerCase();
     const nfcCodigo = (a.codigo_qr || '').toLowerCase();
+    const nfcUid = (a.nfc_uid || '').toLowerCase();
 
     return (
       nombre.includes(term) || 
       matricula.includes(term) ||
-      nfcVinculado === term ||
       nfcCodigo === term ||
-      nfcVinculado.includes(term) ||
-      nfcCodigo.includes(term)
+      nfcUid === term ||
+      nfcCodigo.includes(term) ||
+      nfcUid.includes(term)
     );
   }).slice(0, 15)
 
@@ -519,7 +497,7 @@ export default function ModuloCajaViajes() {
             ) : (
               alumnosFiltrados.map((alumno) => {
                 const isDeudor = (alumno.boletos_disponibles || 0) < 0;
-                const nfcCodeAlumno = alumno.codigo_qr_vinculado || alumno.codigo_qr;
+                const nfcCodeAlumno = alumno.codigo_qr || alumno.nfc_uid;
 
                 return (
                   <div key={alumno.id} className={`bg-[#020617] p-5 rounded-xl border flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 transition-colors ${isDeudor ? 'border-red-900/50' : 'border-slate-800 hover:border-slate-600'}`}>
