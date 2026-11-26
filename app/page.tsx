@@ -1,485 +1,808 @@
-'use client';
+'use client'
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 
-import React, { useState, useEffect, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-// Conexión a Supabase usando tus variables de entorno
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-const PRECIO_BOLETO = 15; // Ajusta aquí el precio por viaje si es diferente
+// Ajusta esta ruta si tu endpoint de Telegram tiene otro nombre (ej. '/api/notificar-telegram')
+const TELEGRAM_API_URL = '/api/telegram'
 
 export default function ModuloCajaViajes() {
-  // Estados del turno
-  const [turnoActivo, setTurnoActivo] = useState<any>(null);
-  const [cajeroNombre, setCajeroNombre] = useState('');
-  const [fondoInicial, setFondoInicial] = useState('0');
-  const [resumenTurno, setResumenTurno] = useState({ totalVentas: 0, totalBoletos: 0 });
+  // ================= ESTADOS DE AUTENTICACIÓN =================
+  const [usuarioAutenticado, setUsuarioAutenticado] = useState<any>(null)
+  const [loginCorreo, setLoginCorreo] = useState('')
+  const [loginPass, setLoginPass] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const [cargandoLogin, setCargandoLogin] = useState(false)
 
-  // Estados de búsqueda NFC y alumno
-  const [busqueda, setBusqueda] = useState('');
-  const [buscando, setBuscando] = useState(false);
-  const [alumno, setAlumno] = useState<any>(null);
-  const inputNfcRef = useRef<HTMLInputElement>(null);
+  // ================= ESTADOS GENERALES =================
+  const [cargando, setCargando] = useState(false)
+  const [alumnos, setAlumnos] = useState<any[]>([])
+  const [busqueda, setBusqueda] = useState('')
+  const [precioBoleto, setPrecioBoleto] = useState(20)
 
-  // Estados de venta y vinculación NFC
-  const [cantidadBoletos, setCantidadBoletos] = useState(1);
-  const [procesandoVenta, setProcesandoVenta] = useState(false);
-  const [nuevoNfc, setNuevoNfc] = useState('');
-  const [vinculando, setVinculando] = useState(false);
+  // ================= ESTADOS DE CAJA =================
+  const [turnoActual, setTurnoActual] = useState<any>(null)
+  const [fondoApertura, setFondoApertura] = useState<number | string>(0)
+  const [statsTurno, setStatsTurno] = useState({ ventas: 0, retiros: 0, boletos: 0 })
+  
+  // ================= MODALES DE OPERACIÓN =================
+  const [mostrarRetiro, setMostrarRetiro] = useState(false)
+  const [montoRetiro, setMontoRetiro] = useState('')
+  const [conceptoRetiro, setConceptoRetiro] = useState('')
 
-  // Mensajes y último ticket
-  const [mensaje, setMensaje] = useState<{ tipo: 'exito' | 'error'; texto: string } | null>(null);
-  const [ultimoTicket, setUltimoTicket] = useState<any>(null);
+  const [mostrarCierre, setMostrarCierre] = useState(false)
+  const [resumenCierre, setResumenCierre] = useState<any>(null)
+  const [efectivoCajon, setEfectivoCajon] = useState('')
 
-  const mostrarMensaje = (tipo: 'exito' | 'error', texto: string) => {
-    setMensaje({ tipo, texto });
-    setTimeout(() => setMensaje(null), 5000);
-  };
+  const [mostrarHistorial, setMostrarHistorial] = useState(false)
+  const [ventasDia, setVentasDia] = useState<any[]>([])
+  const [fechaFiltro, setFechaFiltro] = useState(new Date().toLocaleDateString('en-CA'))
+  const [cargandoHistorial, setCargandoHistorial] = useState(false)
 
-  // Cargar turno abierto al entrar
+  // ================= ESTADOS NFC =================
+  const [alumnoVincular, setAlumnoVincular] = useState<any>(null)
+  const [nuevoNfc, setNuevoNfc] = useState('')
+
+  // ================= CONTROL DE TICKETS =================
+  const [ticketActual, setTicketActual] = useState<any>(null)
+
+  // ================= EFECTOS =================
   useEffect(() => {
-    verificarTurnoActivo();
-  }, []);
-
-  const verificarTurnoActivo = async () => {
-    const { data } = await supabase
-      .from('turnos_caja')
-      .select('*')
-      .eq('estado', 'abierto')
-      .order('fecha_apertura', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (data) {
-      setTurnoActivo(data);
-      cargarResumenTurno(data.id);
+    if (usuarioAutenticado) {
+      verificarTurnoYAlumnos()
     }
-  };
+  }, [usuarioAutenticado])
 
-  const cargarResumenTurno = async (turnoId: string) => {
-    const { data } = await supabase
-      .from('ventas_boletos')
-      .select('cantidad, monto_total')
-      .eq('turno_id', turnoId);
+  useEffect(() => {
+    if (turnoActual) cargarStatsTurno(turnoActual.id, turnoActual.fecha_apertura)
+  }, [turnoActual])
 
-    if (data) {
-      const totalVentas = data.reduce((acc, v) => acc + Number(v.monto_total || 0), 0);
-      const totalBoletos = data.reduce((acc, v) => acc + Number(v.cantidad || 0), 0);
-      setResumenTurno({ totalVentas, totalBoletos });
-    }
-  };
+  useEffect(() => {
+    if (mostrarHistorial) cargarHistorialVentas()
+  }, [fechaFiltro, mostrarHistorial])
 
-  const abrirTurno = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!cajeroNombre.trim()) {
-      mostrarMensaje('error', 'Escribe el nombre del cajero.');
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from('turnos_caja')
-      .insert({
-        cajero_nombre: cajeroNombre.trim(),
-        fondo_inicial: Number(fondoInicial) || 0,
-        estado: 'abierto',
-        fecha_apertura: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (error) {
-      mostrarMensaje('error', 'Error al abrir turno en Supabase.');
-    } else {
-      setTurnoActivo(data);
-      mostrarMensaje('exito', 'Turno abierto correctamente.');
-      setTimeout(() => inputNfcRef.current?.focus(), 200);
-    }
-  };
-
-  const cerrarTurno = async () => {
-    if (!turnoActivo) return;
-    const confirmar = window.confirm('¿Seguro que deseas cerrar el turno actual?');
-    if (!confirmar) return;
-
-    const { error } = await supabase
-      .from('turnos_caja')
-      .update({
-        estado: 'cerrado',
-        fecha_cierre: new Date().toISOString(),
-        total_ventas: resumenTurno.totalVentas,
-      })
-      .eq('id', turnoActivo.id);
-
-    if (error) {
-      mostrarMensaje('error', 'No se pudo cerrar el turno.');
-    } else {
-      setTurnoActivo(null);
-      setAlumno(null);
-      setUltimoTicket(null);
-      setResumenTurno({ totalVentas: 0, totalBoletos: 0 });
-      mostrarMensaje('exito', 'Turno cerrado correctamente.');
-    }
-  };
-
-  // Búsqueda optimizada para lector físico NFC
-  const handleBuscarAlumno = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const termino = busqueda.trim();
-    if (!termino) return;
-
-    setBuscando(true);
-    setAlumno(null);
+  // ================= FUNCIONES DE AUTENTICACIÓN =================
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoginError('')
+    setCargandoLogin(true)
 
     try {
       const { data, error } = await supabase
-        .from('alumnos')
+        .from('usuarios')
         .select('*')
-        .or(`codigo_qr_vinculado.ilike.${termino},matricula.ilike.%${termino}%,nombre_completo.ilike.%${termino}%`)
-        .limit(1)
-        .maybeSingle();
+        .eq('correo', loginCorreo.trim().toLowerCase())
+        .eq('contrasena', loginPass.trim())
+        .single()
 
-      if (error) {
-        console.error('Error Supabase:', error);
-        mostrarMensaje('error', 'Error al consultar la base de datos.');
-      } else if (!data) {
-        mostrarMensaje('error', 'Tarjeta NFC o alumno no encontrado.');
-      } else {
-        setAlumno(data);
-        setBusqueda('');
+      if (error || !data) {
+        setLoginError('Credenciales incorrectas.')
+        setCargandoLogin(false)
+        return
       }
+
+      const rolUsuario = data.rol ? data.rol.toLowerCase().trim() : ''
+      
+      if (rolUsuario !== 'cajera' && rolUsuario !== 'caja') {
+        setLoginError('Acceso denegado (Solo personal de Caja).')
+      } else {
+        setUsuarioAutenticado(data)
+      }
+
     } catch (err) {
-      mostrarMensaje('error', 'Error de conexión al buscar alumno.');
+      setLoginError('Error de conexión con el servidor.')
     } finally {
-      setBuscando(false);
+      setCargandoLogin(false)
     }
-  };
+  }
 
-  // Enviar ticket digital en automático a Telegram
-  const enviarTicketTelegram = async (ticket: any, chatIdAlumno?: string) => {
-    try {
-      const res = await fetch('/api/telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticket,
-          chatId: chatIdAlumno || null,
-        }),
-      });
-      return res.ok;
-    } catch (error) {
-      console.error('Error enviando ticket a Telegram:', error);
-      return false;
+  const handleLogout = () => {
+    if (turnoActual && turnoActual.estado === 'abierta') {
+      if (!window.confirm('⚠️ Tienes una caja abierta. ¿Seguro que deseas cerrar sesión sin hacer el corte?')) {
+        return
+      }
     }
-  };
+    setUsuarioAutenticado(null)
+    setTurnoActual(null)
+    setLoginCorreo('')
+    setLoginPass('')
+  }
 
-  // Ejecutar venta + envío automático
-  const ejecutarVenta = async () => {
-    if (!alumno || !turnoActivo) return;
-    setProcesandoVenta(true);
-
-    const montoTotal = cantidadBoletos * PRECIO_BOLETO;
-    const nuevoSaldo = (Number(alumno.boletos_disponibles) || 0) + cantidadBoletos;
-
+  // ================= FUNCIONES DE CAJA =================
+  const verificarTurnoYAlumnos = async () => {
+    setCargando(true)
     try {
-      // 1. Actualizar saldo del alumno
-      const { error: errAlumno } = await supabase
-        .from('alumnos')
-        .update({ boletos_disponibles: nuevoSaldo })
-        .eq('id', alumno.id);
-
-      if (errAlumno) throw errAlumno;
-
-      // 2. Registrar la venta
-      const { error: errVenta } = await supabase.from('ventas_boletos').insert({
-        turno_id: turnoActivo.id,
-        alumno_id: alumno.id,
-        cantidad: cantidadBoletos,
-        monto_total: montoTotal,
-        fecha_venta: new Date().toISOString(),
-      });
-
-      if (errVenta) throw errVenta;
-
-      // 3. Armar ticket digital
-      const ticketData = {
-        folio: `VTA-${Date.now().toString().slice(-6)}`,
-        fecha: new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }),
-        alumno: alumno.nombre_completo,
-        matricula: alumno.matricula,
-        cantidad: cantidadBoletos,
-        monto: montoTotal,
-        nuevoSaldo,
-        cajero: turnoActivo.cajero_nombre,
-      };
-
-      setUltimoTicket(ticketData);
-      setAlumno({ ...alumno, boletos_disponibles: nuevoSaldo });
-      await cargarResumenTurno(turnoActivo.id);
-
-      // 4. Enviar a Telegram en automático (sin dar clic en nada)
-      const enviado = await enviarTicketTelegram(ticketData, alumno.telegram_chat_id);
-
-      if (enviado) {
-        mostrarMensaje('exito', `¡Venta exitosa! +${cantidadBoletos} viajes. Ticket enviado a Telegram.`);
+      const { data: turno } = await supabase.from('turnos_caja').select('*').eq('estado', 'abierta').maybeSingle()
+      
+      if (turno) {
+        setTurnoActual(turno)
       } else {
-        mostrarMensaje('exito', `¡Venta exitosa! +${cantidadBoletos} viajes (No se pudo enviar a Telegram).`);
+        const { data: ultimoTurno } = await supabase.from('turnos_caja').select('efectivo_esperado, efectivo_entregado').eq('estado', 'cerrada').order('fecha_cierre', { ascending: false }).limit(1).maybeSingle()
+        if (ultimoTurno) {
+          const remanente = (ultimoTurno.efectivo_esperado || 0) - (ultimoTurno.efectivo_entregado || 0)
+          setFondoApertura(remanente > 0 ? remanente : 0)
+        } else {
+          setFondoApertura(0)
+        }
       }
 
-      setCantidadBoletos(1);
-      setTimeout(() => inputNfcRef.current?.focus(), 200);
+      const { data: alumnosDb } = await supabase.from('alumnos').select('*').order('nombre_completo', { ascending: true })
+      if (alumnosDb) setAlumnos(alumnosDb)
     } catch (error) {
-      console.error(error);
-      mostrarMensaje('error', 'Hubo un error al registrar la venta.');
+      console.error(error)
     } finally {
-      setProcesandoVenta(false);
+      setCargando(false)
     }
-  };
+  }
 
-  // Vincular nueva tarjeta NFC al alumno
-  const vincularNFC = async () => {
-    if (!alumno || !nuevoNfc.trim()) return;
-    setVinculando(true);
+  const cargarStatsTurno = async (turnoId: string, fechaApertura: string) => {
+    const { data: ventas } = await supabase.from('ventas_boletos').select('monto_total, cantidad_boletos').gte('created_at', fechaApertura)
+    const { data: retiros } = await supabase.from('movimientos_caja').select('monto').eq('turno_id', turnoId)
+    
+    const totalVentas = (ventas || []).reduce((acc, v) => acc + v.monto_total, 0)
+    const totalBoletos = (ventas || []).reduce((acc, v) => acc + v.cantidad_boletos, 0)
+    const totalRetiros = (retiros || []).reduce((acc, r) => acc + r.monto, 0)
+    
+    setStatsTurno({ ventas: totalVentas, retiros: totalRetiros, boletos: totalBoletos })
+  }
 
+  const abrirCaja = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const montoInicial = Number(fondoApertura)
+    if (montoInicial < 0) return alert('El fondo no puede ser negativo')
+    const { data, error } = await supabase.from('turnos_caja').insert([{ fondo_inicial: montoInicial }]).select().single()
+    if (error) alert('Error al abrir la caja')
+    else setTurnoActual(data)
+  }
+
+  const realizarRetiro = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!turnoActual) return
+    const monto = parseFloat(montoRetiro)
+    if (monto <= 0 || !conceptoRetiro) return alert('Datos inválidos para el retiro')
+
+    const { error } = await supabase.from('movimientos_caja').insert([{ turno_id: turnoActual.id, monto, concepto: conceptoRetiro }])
+    if (!error) {
+      setTicketActual({ tipo: 'RETIRO', folio: `RET-${Date.now().toString().slice(-5)}`, monto: monto, concepto: conceptoRetiro, fecha: new Date().toLocaleString('es-MX') })
+      setMostrarRetiro(false); setMontoRetiro(''); setConceptoRetiro('')
+      cargarStatsTurno(turnoActual.id, turnoActual.fecha_apertura)
+    } else {
+      alert('Error al registrar retiro')
+    }
+  }
+
+  const prepararCierre = async () => {
+    if (!turnoActual) return
+    setResumenCierre({ 
+      fondo: Number(turnoActual.fondo_inicial), 
+      ventas: statsTurno.ventas, 
+      retiros: statsTurno.retiros, 
+      esperado: Number(turnoActual.fondo_inicial) + statsTurno.ventas - statsTurno.retiros 
+    })
+    setMostrarCierre(true)
+  }
+
+  const procesarCierre = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const efectivoReal = parseFloat(efectivoCajon)
+    if (isNaN(efectivoReal)) return alert('Ingresa un monto válido')
+    const diferencia = efectivoReal - resumenCierre.esperado
+
+    if (!window.confirm(`¿Seguro que deseas cerrar la caja?\n\nEfectivo Entregado: $${efectivoReal}\nDiferencia: $${diferencia}`)) return
+
+    const { error } = await supabase.from('turnos_caja').update({
+      estado: 'cerrada', fecha_cierre: new Date().toISOString(), total_ventas: resumenCierre.ventas, efectivo_esperado: resumenCierre.esperado, efectivo_entregado: efectivoReal, diferencia_corte: diferencia
+    }).eq('id', turnoActual.id)
+
+    if (!error) {
+      setTicketActual({ tipo: 'CIERRE', fechaApertura: new Date(turnoActual.fecha_apertura).toLocaleString('es-MX'), fechaCierre: new Date().toLocaleString('es-MX'), fondo: resumenCierre.fondo, ventas: resumenCierre.ventas, retiros: resumenCierre.retiros, esperado: resumenCierre.esperado, real: efectivoReal, diferencia: diferencia })
+      setTurnoActual(null); setMostrarCierre(false); setEfectivoCajon(''); setStatsTurno({ventas:0, retiros:0, boletos:0})
+    } else {
+      alert('Error al cerrar la caja')
+    }
+  }
+
+  // ================= ENVÍO AUTOMÁTICO DE RECIBO A TELEGRAM =================
+  const enviarReciboTelegram = async (alumno: any, ticket: any) => {
+    try {
+      // Recolecta uno o múltiples chat IDs registrados en el alumno
+      const posiblesCampos = [
+        alumno.telegram_chat_id,
+        alumno.telegram_chat_id_2,
+        alumno.chat_id_telegram,
+        alumno.telegram_tutor_1,
+        alumno.telegram_tutor_2,
+        ...(Array.isArray(alumno.telegram_chat_ids) ? alumno.telegram_chat_ids : [])
+      ]
+
+      const chatIds = Array.from(
+        new Set(
+          posiblesCampos
+            .filter(Boolean)
+            .flatMap((val: any) => String(val).split(',').map((id) => id.trim()))
+            .filter((id) => id.length > 0)
+        )
+      )
+
+      if (chatIds.length === 0) return
+
+      const lineaDeuda = ticket.deudaPagada > 0
+        ? `\n⚠️ *Deuda cubierta:* ${ticket.deudaPagada} viaje(s) de emergencia`
+        : ''
+
+      const mensaje =
+        `🧾 *RECIBO DIGITAL - SITE VIAJES*\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📄 *Folio:* ${ticket.folio}\n` +
+        `📅 *Fecha:* ${ticket.fecha}\n` +
+        `🎓 *Alumno:* ${ticket.nombre}\n` +
+        `🆔 *Matrícula:* ${ticket.matricula || 'N/A'}\n` +
+        `🎟️ *Compra:* ${ticket.cantidad} viaje(s)\n` +
+        `💵 *Total pagado:* $${ticket.total}.00 MXN` +
+        `${lineaDeuda}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `✅ *Saldo actual:* ${ticket.nuevoSaldo} viaje(s) disponible(s)`
+
+      await Promise.allSettled(
+        chatIds.map((chatId) =>
+          fetch(TELEGRAM_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              chatId: chatId,
+              message: mensaje,
+              mensaje: mensaje,
+              text: mensaje
+            })
+          })
+        )
+      )
+    } catch (error) {
+      console.error('Error enviando recibo a Telegram:', error)
+    }
+  }
+
+  // ================= FUNCIONES DE VIAJES Y VENTAS =================
+  const venderBoletos = async (alumno: any, cantidadAgregar: number, concepto: string) => {
+    if (!turnoActual) return alert('Debes abrir la caja primero')
+    if (cantidadAgregar <= 0) return
+
+    const saldoAnterior = alumno.boletos_disponibles || 0
+    const nuevoSaldo = saldoAnterior + cantidadAgregar
+    const totalCobrado = cantidadAgregar * precioBoleto
+    
+    const deudaPagada = saldoAnterior < 0 ? Math.min(Math.abs(saldoAnterior), cantidadAgregar) : 0
+
+    const { error: errAlumno } = await supabase.from('alumnos').update({ boletos_disponibles: nuevoSaldo }).eq('id', alumno.id)
+    const { data: dataVenta, error: errVenta } = await supabase.from('ventas_boletos').insert([{ alumno_id: alumno.id, cantidad_boletos: cantidadAgregar, monto_total: totalCobrado }]).select()
+
+    if (errAlumno || errVenta || !dataVenta) {
+      alert('❌ Error al procesar la venta.')
+    } else {
+      const nuevoTicket = {
+        tipo: 'VENTA', 
+        folio: `SITE-${String(dataVenta[0].folio_secuencial).padStart(5, '0')}`, 
+        nombre: alumno.nombre_completo, 
+        matricula: alumno.matricula, 
+        cantidad: cantidadAgregar, 
+        concepto: concepto, 
+        total: totalCobrado, 
+        nuevoSaldo: nuevoSaldo, 
+        deudaPagada: deudaPagada,
+        fecha: new Date().toLocaleString('es-MX')
+      }
+
+      setTicketActual(nuevoTicket)
+      setAlumnos(alumnos.map(a => a.id === alumno.id ? {...a, boletos_disponibles: nuevoSaldo} : a))
+      cargarStatsTurno(turnoActual.id, turnoActual.fecha_apertura)
+
+      // Envía el recibo digital automáticamente a los chats de Telegram vinculados
+      enviarReciboTelegram(alumno, nuevoTicket)
+    }
+  }
+
+  const cargarHistorialVentas = async () => {
+    setCargandoHistorial(true)
+    const inicioDia = new Date(`${fechaFiltro}T00:00:00.000`).toISOString()
+    const finDia = new Date(`${fechaFiltro}T23:59:59.999`).toISOString()
+
+    const { data, error } = await supabase.from('ventas_boletos').select(`id, created_at, folio_secuencial, cantidad_boletos, monto_total, alumno_id, alumnos ( nombre_completo, matricula )`).gte('created_at', inicioDia).lte('created_at', finDia).order('created_at', { ascending: false })
+    if (!error) setVentasDia(data || [])
+    setCargandoHistorial(false)
+  }
+
+  const cancelarVenta = async (ventaId: string, alumnoId: string, cantidadBoletos: number) => {
+    if (!window.confirm(`⚠️ ¿Seguro de cancelar esta venta?\n\nSe descontarán ${cantidadBoletos} boletos de la cuenta del alumno.`)) return
+    try {
+      const { data: alumno } = await supabase.from('alumnos').select('boletos_disponibles').eq('id', alumnoId).single()
+      const nuevoSaldo = Math.max(0, (alumno?.boletos_disponibles || 0) - cantidadBoletos)
+      
+      await supabase.from('alumnos').update({ boletos_disponibles: nuevoSaldo }).eq('id', alumnoId)
+      await supabase.from('ventas_boletos').delete().eq('id', ventaId)
+
+      alert('✅ Venta cancelada.')
+      cargarHistorialVentas()
+      verificarTurnoYAlumnos()
+      if(turnoActual) cargarStatsTurno(turnoActual.id, turnoActual.fecha_apertura)
+    } catch (error) {
+      alert('❌ Error al cancelar la venta.')
+    }
+  }
+
+  // GUARDA EL CÓDIGO NFC EN AMBAS COLUMNAS PARA MANTENER COMPATIBILIDAD TOTAL
+  const guardarNuevoNfc = async () => {
+    if (!nuevoNfc.trim()) return;
+    const val = nuevoNfc.trim();
     const { error } = await supabase
       .from('alumnos')
-      .update({ codigo_qr_vinculado: nuevoNfc.trim() })
-      .eq('id', alumno.id);
+      .update({ 
+        codigo_qr_vinculado: val,
+        codigo_qr: val 
+      })
+      .eq('id', alumnoVincular.id);
 
-    if (error) {
-      mostrarMensaje('error', 'No se pudo vincular la tarjeta NFC.');
+    if (!error) {
+      alert('✅ Tarjeta NFC vinculada exitosamente');
+      setAlumnoVincular(null); setNuevoNfc('');
+      verificarTurnoYAlumnos(); 
     } else {
-      setAlumno({ ...alumno, codigo_qr_vinculado: nuevoNfc.trim() });
-      setNuevoNfc('');
-      mostrarMensaje('exito', 'Tarjeta NFC vinculada correctamente.');
+      alert('❌ Error al vincular la tarjeta NFC');
     }
-    setVinculando(false);
-  };
+  }
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8">
-      <div className="max-w-5xl mx-auto space-y-6">
-        {/* Encabezado */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900 p-6 rounded-2xl border border-slate-800">
-          <div>
-            <h1 className="text-2xl font-bold text-white">SITE-PEM | Caja de Transporte</h1>
-            <p className="text-slate-400 text-sm">Lector NFC activo • Ticket Digital automático vía Telegram</p>
+  // BÚSQUEDA MEJORADA QUE RECONOCE CUALQUIER UID NFC, MATRÍCULA O NOMBRE
+  const alumnosFiltrados = alumnos.filter(a => {
+    const term = busqueda.trim().toLowerCase();
+    if (!term) return true;
+
+    const nombre = (a.nombre_completo || '').toLowerCase();
+    const matricula = (a.matricula || '').toLowerCase();
+    const nfcVinculado = (a.codigo_qr_vinculado || '').toLowerCase();
+    const nfcCodigo = (a.codigo_qr || '').toLowerCase();
+
+    return (
+      nombre.includes(term) || 
+      matricula.includes(term) ||
+      nfcVinculado === term ||
+      nfcCodigo === term ||
+      nfcVinculado.includes(term) ||
+      nfcCodigo.includes(term)
+    );
+  }).slice(0, 15)
+
+  // ================= PANTALLA: LOGIN =================
+  if (!usuarioAutenticado) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-4">
+        <div className="bg-[#0f172a] p-8 rounded-3xl shadow-2xl border border-slate-800 max-w-md w-full text-center">
+          <div className="bg-white p-3 rounded-2xl inline-block mb-6 shadow-lg shadow-white/5">
+            <img src="/logo negro.png" alt="Logo" className="h-16 object-contain" />
           </div>
-          {turnoActivo && (
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-xs text-slate-400">Cajero: {turnoActivo.cajero_nombre}</p>
-                <p className="text-sm font-semibold text-emerald-400">
-                  Caja: ${resumenTurno.totalVentas}.00 ({resumenTurno.totalBoletos} viajes)
-                </p>
+          <h1 className="text-[#fbbf24] text-2xl font-black mb-1 tracking-wide">MÓDULO DE CAJA</h1>
+          <p className="text-slate-400 mb-8 text-sm">Ingresa tus credenciales para operar</p>
+          
+          <form onSubmit={handleLogin} className="text-left space-y-5">
+            {loginError && (
+              <div className="bg-red-900/30 border border-red-500/50 text-red-400 p-3 rounded-lg text-sm font-bold text-center">
+                {loginError}
               </div>
-              <button
-                onClick={cerrarTurno}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium rounded-xl transition"
-              >
-                Cerrar Turno
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Alertas */}
-        {mensaje && (
-          <div
-            className={`p-4 rounded-xl font-medium text-sm border ${
-              mensaje.tipo === 'exito'
-                ? 'bg-emerald-950/60 border-emerald-700 text-emerald-300'
-                : 'bg-rose-950/60 border-rose-700 text-rose-300'
-            }`}
-          >
-            {mensaje.texto}
-          </div>
-        )}
-
-        {/* Si no hay turno abierto */}
-        {!turnoActivo ? (
-          <form onSubmit={abrirTurno} className="bg-slate-900 p-6 rounded-2xl border border-slate-800 max-w-md mx-auto space-y-4">
-            <h2 className="text-lg font-semibold text-white">Abrir Turno de Caja</h2>
+            )}
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Nombre del Cajero</label>
-              <input
-                type="text"
-                value={cajeroNombre}
-                onChange={(e) => setCajeroNombre(e.target.value)}
-                placeholder="Ej. Juan Pérez"
-                className="w-full p-3 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-indigo-500"
-              />
+              <label className="text-slate-300 font-bold text-sm ml-1 mb-2 block">Correo Electrónico:</label>
+              <input type="email" required value={loginCorreo} onChange={(e) => setLoginCorreo(e.target.value)} className="w-full bg-[#020617] text-white p-4 rounded-xl border border-slate-700 text-center outline-none focus:border-indigo-500 transition-colors" placeholder="cajera@escuela.edu.mx" />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Fondo Inicial ($ MXN)</label>
-              <input
-                type="number"
-                value={fondoInicial}
-                onChange={(e) => setFondoInicial(e.target.value)}
-                className="w-full p-3 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-indigo-500"
-              />
+              <label className="text-slate-300 font-bold text-sm ml-1 mb-2 block">Contraseña:</label>
+              <input type="password" required value={loginPass} onChange={(e) => setLoginPass(e.target.value)} className="w-full bg-[#020617] text-white p-4 rounded-xl border border-slate-700 text-center outline-none focus:border-indigo-500 transition-colors" placeholder="••••••••" />
             </div>
-            <button
-              type="submit"
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition"
-            >
-              Iniciar Turno
+            <button type="submit" disabled={cargandoLogin} className={`w-full text-white font-bold py-4 rounded-xl transition-all text-lg shadow-lg mt-4 ${cargandoLogin ? 'bg-indigo-800 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/50'}`}>
+              {cargandoLogin ? 'Verificando...' : '🔐 Iniciar Sesión'}
             </button>
           </form>
+        </div>
+      </div>
+    )
+  }
+
+  // ================= PANTALLA: CARGANDO DATOS =================
+  if (cargando) return <div className="min-h-screen bg-[#020617] flex justify-center items-center text-indigo-400 font-bold text-xl">Sincronizando Sistema...</div>
+
+  // ================= PANTALLA: APERTURA DE CAJA =================
+  if (!turnoActual) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-4">
+        {ticketActual?.tipo === 'CIERRE' ? (
+          <RenderTicket ticket={ticketActual} onClose={() => setTicketActual(null)} />
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Columna Izquierda: Buscador NFC y Venta */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Buscador NFC */}
-              <form onSubmit={handleBuscarAlumno} className="bg-slate-900 p-6 rounded-2xl border border-slate-800 space-y-3">
-                <label className="block text-sm font-medium text-indigo-400">
-                  Acerca la tarjeta NFC al lector (o escribe matrícula / nombre)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    ref={inputNfcRef}
-                    type="text"
-                    autoFocus
-                    value={busqueda}
-                    onChange={(e) => setBusqueda(e.target.value)}
-                    placeholder="Escanea tarjeta NFC aquí..."
-                    className="flex-1 p-3 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-indigo-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={buscando}
-                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition disabled:opacity-50"
-                  >
-                    {buscando ? 'Buscando...' : 'Buscar'}
-                  </button>
-                </div>
-              </form>
-
-              {/* Tarjeta del Alumno y Venta */}
-              {alumno && (
-                <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 space-y-6">
-                  <div className="flex justify-between items-start border-b border-slate-800 pb-4">
-                    <div>
-                      <h2 className="text-xl font-bold text-white">{alumno.nombre_completo}</h2>
-                      <p className="text-slate-400 text-sm">Matrícula: {alumno.matricula}</p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        NFC vinculado: {alumno.codigo_qr_vinculado || 'Sin tarjeta vinculada'}
-                      </p>
-                    </div>
-                    <div className="text-right bg-slate-950 px-4 py-2 rounded-xl border border-slate-800">
-                      <p className="text-xs text-slate-400">Saldo Actual</p>
-                      <p className="text-2xl font-bold text-emerald-400">{alumno.boletos_disponibles || 0} viajes</p>
-                    </div>
-                  </div>
-
-                  {/* Selector de Boletos */}
-                  <div className="space-y-4">
-                    <label className="block text-sm text-slate-300">Cantidad de viajes a comprar:</label>
-                    <div className="flex flex-wrap gap-2">
-                      {[1, 2, 5, 10, 20].map((num) => (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => setCantidadBoletos(num)}
-                          className={`px-4 py-2 rounded-xl font-semibold transition ${
-                            cantidadBoletos === num
-                              ? 'bg-indigo-600 text-white'
-                              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                          }`}
-                        >
-                          {num} {num === 1 ? 'viaje' : 'viajes'}
-                        </button>
-                      ))}
-                      <input
-                        type="number"
-                        min={1}
-                        value={cantidadBoletos}
-                        onChange={(e) => setCantidadBoletos(Math.max(1, Number(e.target.value)))}
-                        className="w-24 p-2 rounded-xl bg-slate-950 border border-slate-700 text-center text-white"
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between bg-slate-950 p-4 rounded-xl border border-slate-800">
-                      <span className="text-slate-400">Total a cobrar:</span>
-                      <span className="text-2xl font-bold text-white">
-                        ${cantidadBoletos * PRECIO_BOLETO}.00 MXN
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={ejecutarVenta}
-                      disabled={procesandoVenta}
-                      className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-lg rounded-xl transition disabled:opacity-50"
-                    >
-                      {procesandoVenta ? 'Procesando y enviando a Telegram...' : 'Cobrar y Enviar Ticket Digital'}
-                    </button>
-                  </div>
-
-                  {/* Vincular nueva tarjeta NFC */}
-                  <div className="pt-4 border-t border-slate-800">
-                    <p className="text-xs text-slate-400 mb-2">¿Cambiar o vincular tarjeta NFC a este alumno?</p>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={nuevoNfc}
-                        onChange={(e) => setNuevoNfc(e.target.value)}
-                        placeholder="Pasa la nueva tarjeta NFC aquí..."
-                        className="flex-1 p-2 text-sm rounded-xl bg-slate-950 border border-slate-700 text-white"
-                      />
-                      <button
-                        type="button"
-                        onClick={vincularNFC}
-                        disabled={vinculando}
-                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm rounded-xl transition"
-                      >
-                        Vincular NFC
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+          <>
+            <div className="absolute top-4 right-4 print:hidden">
+              <button onClick={handleLogout} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-bold text-sm border border-slate-700 transition-colors">Cerrar Sesión</button>
             </div>
 
-            {/* Columna Derecha: Vista previa del último Ticket Digital */}
-            <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 h-fit">
-              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-                Último Ticket Enviado
-              </h3>
-              {ultimoTicket ? (
-                <pre className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs text-emerald-300 font-mono overflow-x-auto leading-relaxed">
-{`================================
-      PREPARATORIA UDL
-    TRANSPORTE ESCOLAR
-================================
-Folio:  ${ultimoTicket.folio}
-Fecha:  ${ultimoTicket.fecha}
-Cajero: ${ultimoTicket.cajero}
---------------------------------
-ALUMNO:
-${ultimoTicket.alumno}
-Matrícula: ${ultimoTicket.matricula}
---------------------------------
-CONCEPTO
-Viajes / Boletos:  ${ultimoTicket.cantidad} pza(s)
-TOTAL PAGADO:      $${ultimoTicket.monto}.00 MXN
---------------------------------
-SALDO ACTUAL:      ${ultimoTicket.nuevoSaldo} viajes
-================================
-   ¡Gracias por tu compra!
-    Comprobante Digital
-================================`}
-                </pre>
-              ) : (
-                <p className="text-sm text-slate-500 text-center py-8">
-                  Aquí aparecerá el comprobante digital en cuanto realices una venta.
-                </p>
+            <div className="bg-[#0f172a] p-8 rounded-3xl shadow-2xl border border-slate-800 max-w-md w-full text-center mt-auto">
+              <div className="bg-white p-3 rounded-2xl inline-block mb-6"><img src="/logo negro.png" alt="Logo" className="h-16 object-contain" /></div>
+              <h1 className="text-[#fbbf24] text-2xl font-black mb-2">Apertura de Caja</h1>
+              <p className="text-slate-400 mb-8 text-sm px-4">Para comenzar a operar, declara el fondo inicial de la caja.</p>
+              
+              <form onSubmit={abrirCaja} className="text-left">
+                <label className="text-white font-bold text-sm ml-1 mb-2 block">Fondo de Caja (MXN):</label>
+                <input type="number" required min="0" step="0.5" value={fondoApertura} onChange={(e) => setFondoApertura(e.target.value)} className="w-full bg-[#020617] text-white p-4 rounded-xl border border-slate-700 mb-6 text-center text-xl outline-none focus:border-emerald-500 font-bold" />
+                <button type="submit" className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-bold py-4 rounded-xl transition-colors text-lg shadow-lg flex items-center justify-center gap-2">
+                  <span>🔓 Abrir Caja y Comenzar</span>
+                </button>
+              </form>
+            </div>
+            <div className="mt-auto pb-8 pt-10 text-center text-slate-600 text-sm">System by <span className="font-bold text-slate-500">Arturo Díaz</span></div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // ================= PANTALLA: DASHBOARD PRINCIPAL =================
+  const efectivoEsperado = Number(turnoActual.fondo_inicial) + statsTurno.ventas - statsTurno.retiros
+
+  return (
+    <div className="min-h-screen bg-[#020617] text-slate-200 font-sans p-4 md:p-8 flex flex-col">
+      <div className={`max-w-5xl mx-auto w-full flex-grow ${ticketActual ? 'hidden print:hidden' : 'block print:hidden'}`}>
+        
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+          <div className="flex items-center gap-4 bg-[#0f172a] p-4 rounded-2xl border border-slate-800 w-full md:w-fit relative overflow-hidden">
+            <div className="bg-white p-1.5 rounded-lg h-12 w-12 flex items-center justify-center z-10"><img src="/logo negro.png" alt="Logo" className="h-full object-contain" /></div>
+            <div className="z-10">
+              <h1 className="text-[#fbbf24] font-black text-xl tracking-wide">SITE - VIAJES</h1>
+              <p className="text-emerald-400 text-xs font-bold flex items-center gap-1">✅ Caja Abierta • {usuarioAutenticado.nombre}</p>
+            </div>
+          </div>
+          
+          <div className="flex gap-2 w-full md:w-auto flex-wrap md:flex-nowrap">
+            <button onClick={() => setMostrarHistorial(true)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-indigo-500/50"><span>📜 Historial</span></button>
+            <button onClick={() => setMostrarRetiro(true)} className="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-amber-500/50"><span>💸 Retirar</span></button>
+            <button onClick={prepararCierre} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border border-red-500/50"><span>🔒 Cierre</span></button>
+            <button onClick={handleLogout} className="flex-none bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center border border-slate-600 ml-auto md:ml-2"><span>🚪 Salir</span></button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="bg-[#0f172a] p-4 rounded-2xl border border-slate-800 text-center">
+            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Fondo Inicial</p>
+            <p className="text-white font-black text-lg">${Number(turnoActual.fondo_inicial).toFixed(2)}</p>
+          </div>
+          <div className="bg-[#0f172a] p-4 rounded-2xl border border-emerald-900/50 text-center">
+            <p className="text-emerald-400/80 text-xs font-bold uppercase tracking-wider">Ventas ({statsTurno.boletos} bts)</p>
+            <p className="text-emerald-400 font-black text-lg">+ ${statsTurno.ventas.toFixed(2)}</p>
+          </div>
+          <div className="bg-[#0f172a] p-4 rounded-2xl border border-amber-900/50 text-center">
+            <p className="text-amber-400/80 text-xs font-bold uppercase tracking-wider">Retiros</p>
+            <p className="text-amber-400 font-black text-lg">- ${statsTurno.retiros.toFixed(2)}</p>
+          </div>
+          <div className="bg-indigo-900/20 p-4 rounded-2xl border border-indigo-500/30 text-center shadow-inner shadow-indigo-900/20">
+            <p className="text-indigo-300 text-xs font-bold uppercase tracking-wider">Debe Haber en Caja</p>
+            <p className="text-indigo-400 font-black text-2xl">${efectivoEsperado.toFixed(2)}</p>
+          </div>
+        </div>
+
+        <div className="bg-[#0f172a] p-6 rounded-2xl mb-6 border border-slate-800 flex flex-col gap-4 shadow-lg">
+          <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+            <div className="w-full md:w-3/4 flex gap-2">
+              <input 
+                id="input-busqueda-nfc"
+                type="text" 
+                placeholder="Acerca la credencial al lector NFC, o teclea alumno/matrícula..." 
+                value={busqueda} 
+                onChange={(e) => setBusqueda(e.target.value)} 
+                onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
+                className="w-full bg-[#020617] text-white rounded-xl py-3 px-4 border border-slate-700 outline-none focus:border-indigo-500 transition-colors font-mono" 
+                autoFocus 
+              />
+              <button 
+                onClick={() => { setBusqueda(''); document.getElementById('input-busqueda-nfc')?.focus(); }} 
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 rounded-xl flex items-center justify-center shadow-md transition-colors whitespace-nowrap border border-indigo-500/50" 
+                title="Enfocar entrada para Lector Físico NFC"
+              >
+                📡 Lector NFC
+              </button>
+            </div>
+            <div className="flex items-center gap-3 bg-[#020617] px-4 py-2 rounded-xl border border-slate-700 w-full md:w-auto justify-between md:justify-start">
+              <span className="text-slate-400 text-sm font-bold">Tarifa Viaje:</span>
+              <span className="font-black text-[#fbbf24] text-xl">${precioBoleto}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-[#0f172a] p-6 rounded-2xl border border-slate-800 shadow-xl mb-6">
+          <h2 className="font-bold text-lg mb-6 text-white">{busqueda === '' ? 'Alumnos (Últimos registrados)' : `Resultados de Búsqueda`}</h2>
+          
+          <div className="space-y-4">
+            {alumnosFiltrados.length === 0 ? (
+              <p className="text-slate-500 py-4 text-center">No se encontraron alumnos con ese código NFC o nombre.</p>
+            ) : (
+              alumnosFiltrados.map((alumno) => {
+                const isDeudor = (alumno.boletos_disponibles || 0) < 0;
+                const nfcCodeAlumno = alumno.codigo_qr_vinculado || alumno.codigo_qr;
+
+                return (
+                  <div key={alumno.id} className={`bg-[#020617] p-5 rounded-xl border flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 transition-colors ${isDeudor ? 'border-red-900/50' : 'border-slate-800 hover:border-slate-600'}`}>
+                    
+                    <div className="flex-1">
+                      <h3 className="font-bold text-xl uppercase text-slate-100 mb-1">{alumno.nombre_completo}</h3>
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
+                        <p className="text-sm text-slate-400">Matrícula: {alumno.matricula || 'N/A'}</p>
+                        
+                        {/* MUESTRA EL CÓDIGO NFC REAL */}
+                        {nfcCodeAlumno ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs bg-indigo-900/60 text-indigo-300 px-2.5 py-1 rounded-md border border-indigo-500/50 font-mono font-bold flex items-center gap-1">
+                              📡 NFC: {nfcCodeAlumno}
+                            </span>
+                            <button 
+                              onClick={() => { setAlumnoVincular(alumno); setNuevoNfc(nfcCodeAlumno); }} 
+                              className="text-[11px] text-amber-400 hover:text-amber-300 underline font-semibold"
+                            >
+                              Editar NFC
+                            </button>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={() => setAlumnoVincular(alumno)} 
+                            className="text-[11px] bg-slate-800 text-slate-300 px-2.5 py-1 rounded-md border border-slate-600 hover:bg-slate-700 font-bold uppercase tracking-wider"
+                          >
+                            ➕ Vincular NFC
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className={`w-fit px-3 py-1 rounded-lg text-sm font-bold border ${isDeudor ? 'bg-red-900/20 text-red-400 border-red-900 animate-pulse' : 'bg-emerald-900/20 text-emerald-400 border-emerald-900'}`}>
+                        {isDeudor 
+                          ? `⚠️ Deuda Pendiente: ${Math.abs(alumno.boletos_disponibles)} Viaje(s)` 
+                          : `🎟️ Saldo: ${alumno.boletos_disponibles || 0} Viajes`}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 bg-[#0f172a] p-2 rounded-lg border border-slate-800 w-full xl:w-auto">
+                      <button onClick={() => venderBoletos(alumno, 1, '1 Boleto Viaje')} className="flex-1 xl:flex-none bg-slate-800 hover:bg-slate-700 text-white px-4 py-3 rounded-lg font-bold border border-slate-700 transition-colors text-sm">1 Boleto (${1 * precioBoleto})</button>
+                      <button onClick={() => venderBoletos(alumno, 5, 'Paquete 5 Viajes')} className="flex-1 xl:flex-none bg-emerald-900/40 hover:bg-emerald-800 text-emerald-400 border border-emerald-800/50 px-4 py-3 rounded-lg font-bold transition-colors text-sm">📦 5 Viajes</button>
+                      
+                      <div className="flex items-center gap-1 flex-1 xl:flex-none mt-2 xl:mt-0 ml-0 xl:ml-2 pl-0 xl:pl-2 xl:border-l border-slate-700 w-full xl:w-auto">
+                        <BotonesPersonalizados onCobrar={(cant) => venderBoletos(alumno, cant, `${cant} Boletos Viaje`)} precio={precioBoleto} />
+                      </div>
+                    </div>
+
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+      </div>
+      <div className={`text-center pb-4 text-slate-600 text-sm ${ticketActual ? 'hidden print:hidden' : 'block print:hidden'}`}>System by <span className="font-bold text-slate-500">Arturo Díaz</span></div>
+
+      {/* MODAL VINCULAR NFC */}
+      {alumnoVincular && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-40 print:hidden">
+          <div className="bg-[#0f172a] border border-slate-700 p-6 rounded-2xl w-full max-w-md">
+            <h2 className="text-xl font-bold mb-2 text-white">📡 Vincular Tarjeta NFC</h2>
+            <p className="text-sm text-slate-400 mb-6">Alumno: <span className="text-amber-500 font-bold">{alumnoVincular.nombre_completo}</span></p>
+            <div className="mb-6">
+              <p className="text-xs text-indigo-300 mb-2 font-semibold text-center">Acerca la credencial al lector físico NFC:</p>
+              <input 
+                type="text" 
+                autoFocus 
+                value={nuevoNfc} 
+                onChange={(e) => setNuevoNfc(e.target.value)} 
+                onKeyDown={(e) => { if (e.key === 'Enter' && nuevoNfc.trim() !== '') { e.preventDefault(); guardarNuevoNfc(); } }} 
+                placeholder="Esperando lectura NFC..." 
+                className="w-full bg-[#020617] border border-indigo-500/50 rounded-xl px-4 py-3 text-white outline-none mb-3 font-mono focus:border-indigo-400 text-center" 
+              />
+            </div>
+            <div className="flex justify-end gap-3 mt-4 border-t border-slate-800 pt-4">
+              <button onClick={() => { setAlumnoVincular(null); setNuevoNfc(''); }} className="px-4 py-2 rounded-lg font-bold text-slate-400 hover:text-white">Cancelar</button>
+              <button onClick={guardarNuevoNfc} disabled={!nuevoNfc} className={`px-6 py-2 rounded-lg font-bold text-white transition-colors ${nuevoNfc ? 'bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-900' : 'bg-slate-700 cursor-not-allowed opacity-50'}`}>Vincular y Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL RETIRO */}
+      {mostrarRetiro && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40 print:hidden">
+          <div className="bg-[#0f172a] border border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-sm">
+            <h2 className="text-2xl font-black text-amber-500 mb-6 text-center">💸 Retiro de Efectivo</h2>
+            <form onSubmit={realizarRetiro} className="space-y-5">
+              <div>
+                <label className="text-sm font-bold text-slate-400">Monto a retirar ($):</label>
+                <input type="number" required min="1" step="0.5" value={montoRetiro} onChange={e => setMontoRetiro(e.target.value)} className="w-full bg-[#020617] border border-slate-600 rounded-xl p-4 text-white mt-1 text-2xl font-bold text-center outline-none focus:border-amber-500" placeholder="0.00" autoFocus />
+              </div>
+              <div>
+                <label className="text-sm font-bold text-slate-400">Concepto / Entregado a:</label>
+                <input type="text" required value={conceptoRetiro} onChange={e => setConceptoRetiro(e.target.value)} className="w-full bg-[#020617] border border-slate-600 rounded-xl p-3 text-white mt-1 outline-none focus:border-amber-500" placeholder="Ej. Entrega Dirección" />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setMostrarRetiro(false)} className="w-1/3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl py-3 font-bold transition-colors">Cancelar</button>
+                <button type="submit" className="w-2/3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl py-3 font-bold transition-colors shadow-lg">Registrar e Imprimir</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CIERRE */}
+      {mostrarCierre && resumenCierre && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40 print:hidden">
+          <div className="bg-[#0f172a] border border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-md">
+            <h2 className="text-3xl font-black text-red-500 mb-6 text-center">🔒 Cierre de Caja</h2>
+            <div className="bg-[#020617] p-5 rounded-2xl space-y-3 mb-6 border border-slate-800">
+              <div className="flex justify-between text-slate-400 font-medium"><span>Fondo Inicial:</span> <span>${resumenCierre.fondo.toFixed(2)}</span></div>
+              <div className="flex justify-between text-emerald-400 font-medium"><span>+ Ventas de Viajes:</span> <span>${resumenCierre.ventas.toFixed(2)}</span></div>
+              <div className="flex justify-between text-amber-400 font-medium"><span>- Retiros/Entregas:</span> <span>${resumenCierre.retiros.toFixed(2)}</span></div>
+              <div className="border-t border-slate-700 my-2 pt-3 flex justify-between font-black text-xl text-white"><span>Efectivo Esperado:</span> <span>${resumenCierre.esperado.toFixed(2)}</span></div>
+            </div>
+            <form onSubmit={procesarCierre} className="space-y-6">
+              <div className="text-center">
+                <label className="text-sm font-bold text-slate-400">¿Cuánto dinero FÍSICO vas a entregar?</label>
+                <input type="number" required step="0.5" min="0" value={efectivoCajon} onChange={e => setEfectivoCajon(e.target.value)} className="w-full bg-[#020617] border border-slate-500 rounded-xl p-4 mt-2 text-3xl text-center font-black text-white focus:border-red-500 outline-none" placeholder="$0.00" autoFocus />
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setMostrarCierre(false)} className="w-1/3 bg-slate-800 text-white rounded-xl py-4 font-bold hover:bg-slate-700">Cancelar</button>
+                <button type="submit" className="w-2/3 bg-red-600 hover:bg-red-500 text-white rounded-xl py-4 font-bold shadow-lg shadow-red-900/50">Cerrar Caja e Imprimir</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HISTORIAL */}
+      {mostrarHistorial && (
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center p-4 z-40 print:hidden">
+          <div className="bg-[#0f172a] rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-700 flex flex-col max-h-[90vh]">
+            <div className="bg-indigo-900/40 p-6 border-b border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-white">Historial de Viajes</h2>
+                <input id="fechaFiltro" type="date" value={fechaFiltro} onChange={(e) => setFechaFiltro(e.target.value)} className="mt-2 bg-[#020617] border border-indigo-500/50 rounded-lg p-2 text-sm text-white font-bold outline-none" />
+              </div>
+              <button onClick={() => setMostrarHistorial(false)} className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-2 rounded-xl font-bold">Volver a Caja</button>
+            </div>
+            <div className="p-2 md:p-6 overflow-y-auto flex-grow bg-[#0f172a]">
+              {cargandoHistorial ? <p className="text-center text-slate-400 py-10 font-bold">Cargando...</p> : ventasDia.length === 0 ? <p className="text-slate-500 text-center py-10 font-bold">No hay ventas registradas.</p> : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-300 min-w-[600px]">
+                    <thead className="border-b border-slate-700 text-slate-400"><tr><th className="pb-3 px-2">Folio</th><th className="pb-3 px-2">Hora</th><th className="pb-3 px-2">Alumno</th><th className="pb-3 px-2">Viajes</th><th className="pb-3 px-2">Monto</th><th className="pb-3 px-2">Acción</th></tr></thead>
+                    <tbody>
+                      {ventasDia.map((venta) => (
+                        <tr key={venta.id} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
+                          <td className="py-4 px-2 font-mono text-amber-400 font-bold">SITE-{String(venta.folio_secuencial || 0).padStart(5, '0')}</td>
+                          <td className="py-4 px-2">{new Date(venta.created_at).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}</td>
+                          <td className="py-4 px-2 font-bold text-white">{venta.alumnos?.nombre_completo}</td>
+                          <td className="py-4 px-2 text-center font-black text-emerald-400">+{venta.cantidad_boletos}</td>
+                          <td className="py-4 px-2 text-right font-bold text-white">${venta.monto_total}</td>
+                          <td className="py-4 px-2 text-center"><button onClick={() => cancelarVenta(venta.id, venta.alumno_id, venta.cantidad_boletos)} className="text-xs bg-red-900/30 hover:bg-red-600 text-red-400 hover:text-white px-3 py-2 rounded-lg font-bold border border-red-800/50 transition-colors">Cancelar</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* TICKET EN PANTALLA E IMPRESIÓN */}
+      {ticketActual && <RenderTicket ticket={ticketActual} onClose={() => setTicketActual(null)} />}
+    </div>
+  )
+}
+
+function BotonesPersonalizados({ onCobrar, precio }: { onCobrar: (cant: number) => void, precio: number }) {
+  const [cant, setCant] = useState(1);
+  return (
+    <div className="flex items-center gap-2 w-full">
+      <input type="number" min="1" value={cant} onChange={(e) => setCant(Math.max(1, parseInt(e.target.value) || 1))} className="w-16 bg-[#020617] rounded-lg p-2 text-center text-sm font-bold text-white border border-slate-600 outline-none" />
+      <button onClick={() => onCobrar(cant)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-3 rounded-lg text-sm transition-colors shadow-lg">Cobrar ${cant * precio}</button>
+    </div>
+  )
+}
+
+function RenderTicket({ ticket, onClose }: { ticket: any, onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-[100] p-4 print:p-0 print:bg-white print:block">
+      <style>{`
+        @media print { 
+          @page { margin: 0; size: 80mm auto; } 
+          body { background: white; -webkit-print-color-adjust: exact; margin: 0; padding: 0; }
+        }
+      `}</style>
+      <div className="bg-white text-black p-5 w-full max-w-[320px] print:w-[80mm] print:max-w-[80mm] print:p-2 print:m-0 font-mono shadow-2xl print:shadow-none text-[12px] md:text-[14px] print:text-[12px] flex flex-col rounded-xl print:rounded-none">
+         
+         <div className="flex justify-center mb-3">
+           <img src="/logo negro.png" alt="Logo" className="h-16 w-auto object-contain grayscale" />
+         </div>
+         <div className="text-center font-bold text-lg mb-1">SITE - VIAJES</div>
+
+         {ticket.tipo === 'VENTA' && (
+           <>
+             <div className="text-center mb-4 border-b border-dashed border-gray-400 pb-3">
+                <p className="text-[11px] font-bold uppercase">Comprobante de Viaje</p>
+                <p className="text-[11px]">{ticket.fecha}</p>
+             </div>
+             <div className="space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3">
+                <p><span className="font-bold">Folio:</span> {ticket.folio}</p>
+                <p className="mt-2 font-bold">Alumno:</p>
+                <p className="leading-tight uppercase text-[11px]">{ticket.nombre}</p>
+                <p><span className="font-bold">Matrícula:</span> {ticket.matricula || 'N/A'}</p>
+             </div>
+             <div className="mb-4 border-b border-dashed border-gray-400 pb-3">
+                <div className="flex justify-between font-bold mb-2"><span>CANT / DESC</span><span>IMPORTE</span></div>
+                <div className="flex justify-between">
+                  <span>{ticket.cantidad}x Viaje</span>
+                  <span>${ticket.total}.00</span>
+                </div>
+             </div>
+
+             {ticket.deudaPagada > 0 && (
+               <div className="mb-4 text-[10px] text-center border border-black p-2 bg-gray-100">
+                  <p className="font-bold uppercase">⚠️ Deuda Cubierta</p>
+                  <p>De esta compra, se descontaron</p>
+                  <p className="font-bold">{ticket.deudaPagada} viaje(s)</p>
+                  <p>por concepto de Viajes de Emergencia.</p>
+               </div>
+             )}
+
+             <div className="flex justify-between font-bold mb-4 border-b border-black pb-3 text-base">
+                <span>TOTAL PAGADO:</span><span>${ticket.total}.00</span>
+             </div>
+             <div className="text-center mb-6 space-y-1 text-[11px]">
+                <p className="inline-block border-2 border-black font-black px-3 py-1 mt-2 text-sm">SALDO A FAVOR: {ticket.nuevoSaldo} VIAJES</p>
+                <p className="mt-4 italic">¡Guarde su comprobante!</p>
+             </div>
+           </>
+         )}
+
+         {ticket.tipo === 'RETIRO' && (
+           <>
+             <div className="text-center mb-4 border-b border-black pb-3 mt-4">
+                <p className="font-bold text-lg uppercase">Retiro Efectivo</p>
+                <p className="text-[11px]">{ticket.fecha}</p>
+             </div>
+             <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
+                <p><span className="font-bold">Folio Retiro:</span> {ticket.folio}</p>
+                <p><span className="font-bold">Concepto:</span> {ticket.concepto}</p>
+             </div>
+             <div className="flex justify-between font-bold mb-8 border-b border-black pb-3 text-base">
+                <span>MONTO:</span><span>${ticket.monto.toFixed(2)}</span>
+             </div>
+             <div className="mt-16 border-t border-black pt-2 text-center w-4/5 mx-auto"><p className="text-[10px] uppercase font-bold">Firma de Recibido</p></div>
+             <div className="h-4"></div>
+           </>
+         )}
+
+         {ticket.tipo === 'CIERRE' && (
+           <>
+             <div className="text-center mb-4 border-b border-black pb-3 mt-4"><p className="font-bold text-xl uppercase">Corte de Caja</p></div>
+             <div className="space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3 text-[11px]">
+                <p><span className="font-bold">Apertura:</span><br/>{ticket.fechaApertura}</p>
+                <p><span className="font-bold">Cierre:</span><br/>{ticket.fechaCierre}</p>
+             </div>
+             <div className="space-y-2 mb-4 border-b border-dashed border-gray-400 pb-3">
+                <div className="flex justify-between"><span>Fondo Inicial:</span><span>${ticket.fondo.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>+ Ventas (Viajes):</span><span>${ticket.ventas.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>- Retiros:</span><span>${ticket.retiros.toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold mt-2 pt-2 border-t border-dashed border-gray-400 text-sm"><span>TOTAL ESPERADO:</span><span>${ticket.esperado.toFixed(2)}</span></div>
+             </div>
+             <div className="space-y-2 mb-6 border-b border-black pb-3">
+                <div className="flex justify-between font-black text-sm"><span>EFECTIVO ENTREGADO:</span><span>${ticket.real.toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold text-[13px] mt-2"><span>DIFERENCIA:</span><span>${ticket.diferencia.toFixed(2)}</span></div>
+             </div>
+             <div className="mt-16 border-t border-black pt-2 text-center w-4/5 mx-auto"><p className="text-[10px] uppercase font-bold">Firma de Cajero</p></div>
+             <div className="h-4"></div>
+           </>
+         )}
+         
+         <div className="flex flex-col gap-2 print:hidden mt-6">
+            <button onClick={() => window.print()} className="w-full bg-[#10b981] hover:bg-[#059669] text-white py-4 rounded-xl font-sans font-black text-lg transition-colors shadow-lg">🖨️ IMPRIMIR</button>
+            <button onClick={onClose} className="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 py-3 rounded-xl font-sans font-bold text-sm transition-colors">Cerrar y Continuar</button>
+         </div>
       </div>
     </div>
-  );
+  )
 }
