@@ -1,18 +1,34 @@
 import { NextResponse } from 'next/server';
 
+const escapeHtml = (value: unknown) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
 export async function POST(req: Request) {
   try {
-    const { ticket, chatId } = await req.json();
+    const body = await req.json();
+    const { ticket, chatId } = body;
 
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    const destino = chatId || process.env.TELEGRAM_CHAT_ID;
+    if (!ticket) {
+      return NextResponse.json(
+        { error: 'Falta el objeto ticket en la petición' },
+        { status: 400 }
+      );
+    }
+
+    const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+    const destino = (chatId ? String(chatId).trim() : '') || process.env.TELEGRAM_CHAT_ID?.trim();
 
     if (!token || !destino) {
       return NextResponse.json(
-        { error: 'Faltan las claves de Telegram en .env.local' },
+        { error: 'Faltan las claves de Telegram (TELEGRAM_BOT_TOKEN o chat_id)' },
         { status: 500 }
       );
     }
+
+    const montoFormateado = Number(ticket.monto ?? 0).toFixed(2);
 
     const mensaje = `
 <pre>
@@ -20,19 +36,19 @@ export async function POST(req: Request) {
       PREPARATORIA UDL
     TRANSPORTE ESCOLAR
 ================================
-Folio:  ${ticket.folio}
-Fecha:  ${ticket.fecha}
-Cajero: ${ticket.cajero}
+Folio:  ${escapeHtml(ticket.folio)}
+Fecha:  ${escapeHtml(ticket.fecha)}
+Cajero: ${escapeHtml(ticket.cajero)}
 --------------------------------
 ALUMNO:
-${ticket.alumno}
-Matrícula: ${ticket.matricula}
+${escapeHtml(ticket.alumno)}
+Matrícula: ${escapeHtml(ticket.matricula)}
 --------------------------------
 CONCEPTO
-Viajes / Boletos:  ${ticket.cantidad} pza(s)
-TOTAL PAGADO:      $${ticket.monto}.00 MXN
+Viajes / Boletos:  ${escapeHtml(ticket.cantidad)} pza(s)
+TOTAL PAGADO:      $${montoFormateado} MXN
 --------------------------------
-SALDO ACTUAL:      ${ticket.nuevoSaldo} viajes
+SALDO ACTUAL:      ${escapeHtml(ticket.nuevoSaldo)} viajes
 ================================
    ¡Gracias por tu compra!
     Comprobante Digital
@@ -50,13 +66,19 @@ SALDO ACTUAL:      ${ticket.nuevoSaldo} viajes
       }),
     });
 
+    const data = await res.json();
+
     if (!res.ok) {
-      const errData = await res.json();
-      return NextResponse.json({ error: errData }, { status: 400 });
+      console.error('Error de Telegram API:', data);
+      return NextResponse.json({ error: data.description || data }, { status: 400 });
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, messageId: data.result?.message_id });
   } catch (error) {
-    return NextResponse.json({ error: 'Error al enviar a Telegram' }, { status: 500 });
+    console.error('Error interno en /api/telegram:', error);
+    return NextResponse.json(
+      { error: 'Error al enviar a Telegram', details: String(error) },
+      { status: 500 }
+    );
   }
 }
