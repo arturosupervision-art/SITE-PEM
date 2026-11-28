@@ -208,21 +208,22 @@ export default function ModuloCajaViajes() {
   const enviarReciboTelegram = async (alumnoId: string, ticket: any) => {
     setEstadoTelegram({ tipo: 'enviando', texto: '⏳ Enviando recibo a Telegram...' })
     try {
-      // Consulta fresca a Supabase para traer el chat_id recién vinculado
+      // Consulta fresca a Supabase usando las columnas reales de la tabla alumnos
       const { data: alumnoFresco, error: errDb } = await supabase
         .from('alumnos')
-        .select('tutor_chat_id, tutor_chat_id_2')
+        .select('telegram_chat_id, tutor2_telegram_chat_id')
         .eq('id', alumnoId)
-        .single()
+        .maybeSingle()
 
       if (errDb || !alumnoFresco) {
+        console.error('Error consultando Telegram del alumno:', errDb)
         setEstadoTelegram({ tipo: 'error', texto: '❌ No se pudo consultar el Telegram del alumno.' })
         return
       }
 
       const chatIds = Array.from(
         new Set(
-          [alumnoFresco.tutor_chat_id, alumnoFresco.tutor_chat_id_2]
+          [alumnoFresco.telegram_chat_id, alumnoFresco.tutor2_telegram_chat_id]
             .filter(Boolean)
             .map((id) => String(id).trim())
             .filter((id) => id.length > 0)
@@ -230,7 +231,7 @@ export default function ModuloCajaViajes() {
       )
 
       if (chatIds.length === 0) {
-        setEstadoTelegram({ tipo: 'error', texto: '⚠️ Alumno sin Telegram vinculado (tutor_chat_id vacío).' })
+        setEstadoTelegram({ tipo: 'error', texto: '⚠️ Alumno sin Telegram vinculado (telegram_chat_id vacío).' })
         return
       }
 
@@ -307,7 +308,7 @@ export default function ModuloCajaViajes() {
       setAlumnos(alumnos.map(a => a.id === alumno.id ? {...a, boletos_disponibles: nuevoSaldo} : a))
       cargarStatsTurno(turnoActual.id, turnoActual.fecha_apertura)
 
-      // Envía el recibo digital automáticamente a tutor_chat_id y tutor_chat_id_2
+      // Envía el recibo digital automáticamente a telegram_chat_id y tutor2_telegram_chat_id
       enviarReciboTelegram(alumno.id, nuevoTicket)
     }
   }
